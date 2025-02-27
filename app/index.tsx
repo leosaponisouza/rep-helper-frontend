@@ -22,7 +22,7 @@ export default function Index() {
           router.replace('/(panel)/home');
         } else {
           // User doesn't have a republic, go to choice screen
-          router.replace('/(panel)/(republic)/choice');
+          router.replace('/(republic)/choice');
         }
       } else {
         // Not authenticated, go to sign in

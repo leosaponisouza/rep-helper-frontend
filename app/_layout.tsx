@@ -18,6 +18,9 @@ export default function RootLayout() {
           {/* Panel Stack Group */}
           <Stack.Screen name="(panel)" options={{ headerShown: false }} />
 
+          {/* Republic Stack Group */}
+          <Stack.Screen name="(republic)" options={{ headerShown: false }} />
+
           {/* Index (Catch-all) Route */}
           <Stack.Screen name="index" options={{ headerShown: false, presentation: 'modal' }} />
         </Stack>

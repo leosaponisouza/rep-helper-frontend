@@ -96,7 +96,7 @@ const SignUpScreen = () => {
       login(response.data.token, response.data.data.user);
 
       // 4. Navegar para a tela de escolha de república 
-      router.replace('/(panel)/(republic)/choice');
+      router.replace('/(republic)/choice');
 
     } catch (error: any) {
       //Tratamento de erros do firebase

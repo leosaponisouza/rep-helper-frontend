@@ -67,7 +67,7 @@ const LoginScreen = () => {
                     if (user.current_republic_id) {
                         router.replace('/(panel)/home');
                     } else {
-                        router.replace('/(panel)/(republic)/choice');
+                        router.replace('/(republic)/choice');
                     }
                 } catch (error) {
                     console.log("Session validation failed:", error);
@@ -121,7 +121,9 @@ const LoginScreen = () => {
             }
             
             // Backend API authentication
-            const response = await api.post('/users/login', {}, {
+            const response = await api.post('/users/login', {
+
+            }, {
                 headers: { 
                     'Authorization': `Bearer ${firebaseToken}`,
                     'Content-Type': 'application/json'
@@ -140,7 +142,7 @@ const LoginScreen = () => {
                 if (response.data.data.user.current_republic_id) {
                     router.replace('/(panel)/home');
                 } else {
-                    router.replace('/(panel)/(republic)/choice');
+                    router.replace('/(republic)/choice');
                 }
             } else {
                 throw new Error('Resposta inválida do servidor');
