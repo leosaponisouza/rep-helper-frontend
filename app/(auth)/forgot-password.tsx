@@ -1,3 +1,4 @@
+// app/(auth)/forgot-password.tsx
 import React, { useState } from 'react';
 import {
   View,
@@ -8,18 +9,24 @@ import {
   ActivityIndicator,
   Alert,
   Keyboard,
-  TouchableWithoutFeedback, // Para dispensar o teclado
+  TouchableWithoutFeedback,
+  SafeAreaView,
+  StatusBar,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView
 } from 'react-native';
-import { getAuth, sendPasswordResetEmail } from 'firebase/auth'; // Importe sendPasswordResetEmail
-import { auth } from '../../src/utils/firebaseClientConfig'; // Importe a instância 'auth'
+import { sendPasswordResetEmail } from 'firebase/auth';
+import { auth } from '../../src/utils/firebaseClientConfig';
 import { useRouter } from 'expo-router';
-import BackButton from '@/components/BackButton';
+import { Ionicons } from '@expo/vector-icons';
 
 const ForgotPasswordScreen = () => {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState(false); // Estado para mensagem de sucesso
+  const [success, setSuccess] = useState(false);
+  const [emailFocused, setEmailFocused] = useState(false);
 
   const router = useRouter();
 
@@ -31,18 +38,29 @@ const ForgotPasswordScreen = () => {
       return;
     }
 
+    // Email format validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      setError('Por favor, insira um email válido.');
+      return;
+    }
+
     setLoading(true);
     setError('');
 
     try {
-      await sendPasswordResetEmail(auth, email); // Chama a função do Firebase
-      setSuccess(true); // Define o estado de sucesso
+      await sendPasswordResetEmail(auth, email);
+      setSuccess(true);
       Alert.alert(
-          "Sucesso",
-          "Um email de redefinição de senha foi enviado para o seu endereço de email."
+        "Sucesso",
+        "Um email de redefinição de senha foi enviado para o seu endereço de email.",
+        [
+          { 
+            text: "OK", 
+            onPress: () => router.replace("/(auth)/sign-in") 
+          }
+        ]
       );
-      router.replace("/(auth)/sign-in")
-
     } catch (error: any) {
       if (error.code === 'auth/invalid-email') {
         setError('Email inválido.');
@@ -52,100 +70,204 @@ const ForgotPasswordScreen = () => {
         setError('Erro ao enviar email de redefinição. Tente novamente.');
         console.error(error);
       }
-      Alert.alert("Erro", error.message)
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-      <View style={styles.container}>
-      <BackButton />
-        <Text style={styles.title}>Esqueceu sua senha?</Text>
+    <SafeAreaView style={styles.safeArea}>
+      <StatusBar barStyle="light-content" backgroundColor="#222" />
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={styles.keyboardView}
+      >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+          <ScrollView 
+            style={styles.container}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.headerContainer}>
+              <Text style={styles.title}>Esqueceu sua senha?</Text>
+              <Text style={styles.subtitle}>
+                Digite seu email abaixo para receber um link de redefinição de senha.
+              </Text>
+            </View>
 
-        <Text style={styles.subtitle}>
-          Digite seu email abaixo para receber um link de redefinição de senha.
-        </Text>
+            <View style={styles.formContainer}>
+              <View style={[
+                styles.inputContainer, 
+                emailFocused && styles.inputFocused
+              ]}>
+                <Ionicons name="mail" size={20} color="#7B68EE" style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Email"
+                  placeholderTextColor="#aaa"
+                  value={email}
+                  onChangeText={setEmail}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  onFocus={() => setEmailFocused(true)}
+                  onBlur={() => setEmailFocused(false)}
+                />
+              </View>
 
-        <TextInput
-          style={styles.input}
-          placeholder="Email"
-          placeholderTextColor="#aaa"
-          value={email}
-          onChangeText={setEmail}
-          keyboardType="email-address"
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
+              {error ? (
+                <View style={styles.errorContainer}>
+                  <Ionicons name="alert-circle" size={18} color="#FF6347" />
+                  <Text style={styles.errorText}>{error}</Text>
+                </View>
+              ) : null}
 
-        {error ? <Text style={styles.error}>{error}</Text> : null}
+              <TouchableOpacity 
+                style={[styles.button, loading && styles.buttonDisabled]} 
+                onPress={handleResetPassword}
+                disabled={loading}
+                activeOpacity={0.8}
+              >
+                {loading ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <>
+                    <Ionicons name="send" size={20} color="#fff" style={styles.buttonIcon} />
+                    <Text style={styles.buttonText}>Enviar email</Text>
+                  </>
+                )}
+              </TouchableOpacity>
 
-        {loading ? (
-          <ActivityIndicator size="large" color="#7B68EE" />
-        ) : (
-          <TouchableOpacity style={styles.button} onPress={handleResetPassword}>
-            <Text style={styles.buttonText}>Enviar email</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-    </TouchableWithoutFeedback>
+              <TouchableOpacity 
+                style={styles.backToLoginButton}
+                onPress={() => router.back()}
+              >
+                <Text style={styles.backToLoginText}>Voltar para o login</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </TouchableWithoutFeedback>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
+    safeArea: {
+        flex: 1,
+        backgroundColor: '#222',
+    },
+    keyboardView: {
+        flex: 1,
+    },
     container: {
         flex: 1,
-        justifyContent: 'center',
+        backgroundColor: '#222',
+        paddingHorizontal: 24,
+    },
+    scrollContent: {
+        paddingBottom: 40,
+    },
+    headerContainer: {
         alignItems: 'center',
-        padding: 20,
-        backgroundColor: '#333',
+        marginTop: 20,
+        marginBottom: 30,
     },
     title: {
-        fontSize: 24,
+        fontSize: 28,
         fontWeight: 'bold',
-        marginBottom: 16,
         color: '#fff',
-        fontFamily: 'Roboto', // Exemplo, ajuste se necessário
-        textAlign: 'left', // Alinha o título à esquerda
-        width: '100%', // Ocupa toda a largura
+        marginBottom: 12,
+        textAlign: 'center',
     },
     subtitle: {
         fontSize: 16,
-        color: '#aaa', // Cinza mais claro
-        marginBottom: 32,
-        textAlign: 'left', // Alinha o subtítulo à esquerda
+        color: '#aaa',
+        textAlign: 'center',
+        paddingHorizontal: 20,
+        lineHeight: 22,
+    },
+    formContainer: {
         width: '100%',
+    },
+    inputContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#333',
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#444',
+        marginBottom: 16,
+        height: 56,
+        paddingHorizontal: 16,
+    },
+    inputFocused: {
+        borderColor: '#7B68EE',
+        backgroundColor: '#393939',
+    },
+    inputIcon: {
+        marginRight: 12,
     },
     input: {
-        width: '100%',
-        height: 50,
-        borderColor: '#7B68EE',
-        borderWidth: 1,
-        marginBottom: 15,
-        paddingHorizontal: 15,
-        borderRadius: 8,
+        flex: 1,
         color: '#fff',
-        backgroundColor: '#444',
         fontSize: 16,
+        height: '100%',
     },
-    error: {
+    errorContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 16,
+        backgroundColor: 'rgba(255, 99, 71, 0.15)',
+        padding: 12,
+        borderRadius: 8,
+        borderLeftWidth: 3,
+        borderLeftColor: '#FF6347',
+    },
+    errorText: {
         color: '#FF6347',
-        marginBottom: 15,
-        textAlign: 'center',
+        marginLeft: 8,
+        fontSize: 14,
+        flex: 1,
     },
     button: {
         backgroundColor: '#7B68EE',
-        paddingVertical: 12,
-        paddingHorizontal: 30,
-        borderRadius: 8,
-        width: '100%',
+        height: 56,
+        borderRadius: 12,
+        justifyContent: 'center',
         alignItems: 'center',
+        marginVertical: 16,
+        shadowColor: "#7B68EE",
+        shadowOffset: {
+            width: 0,
+            height: 4,
+        },
+        shadowOpacity: 0.3,
+        shadowRadius: 4.65,
+        elevation: 8,
+        flexDirection: 'row',
+    },
+    buttonDisabled: {
+        backgroundColor: '#5a5a5a',
+        shadowOpacity: 0,
+        elevation: 0,
     },
     buttonText: {
         color: '#fff',
         fontSize: 18,
         fontWeight: 'bold',
+    },
+    buttonIcon: {
+        marginRight: 8,
+    },
+    backToLoginButton: {
+        alignItems: 'center',
+        marginTop: 12,
+        padding: 8,
+    },
+    backToLoginText: {
+        color: '#7B68EE',
+        fontSize: 16,
     },
 });
 

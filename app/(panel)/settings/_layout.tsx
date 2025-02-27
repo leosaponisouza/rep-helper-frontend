@@ -1,5 +1,6 @@
 // src/app/(panel)/settings/_layout.tsx - Settings sub-navigation
 import { Stack } from 'expo-router';
+import React from 'react';
 
 export default function SettingsLayout() {
   return (
