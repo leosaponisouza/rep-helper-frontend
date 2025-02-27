@@ -1,5 +1,6 @@
+// app/_layout.tsx
 import { Stack } from 'expo-router';
-import { AuthProvider } from '../context/AuthContext';
+import { AuthProvider } from '../src/context/AuthContext';
 import { StatusBar, View } from 'react-native';
 
 export default function RootLayout() {
@@ -11,14 +12,14 @@ export default function RootLayout() {
           barStyle="light-content"
         />
         <Stack screenOptions={{ headerShown: false }}>
-          {/* Authentication Routes */}
+          {/* Authentication Stack Group */}
           <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-          
-          {/* Main Application Routes (protected) */}
+
+          {/* Panel Stack Group */}
           <Stack.Screen name="(panel)" options={{ headerShown: false }} />
-          
-          {/* Index Route - Entry point handler */}
-          <Stack.Screen name="index" options={{ headerShown: false }} />
+
+          {/* Index (Catch-all) Route */}
+          <Stack.Screen name="index" options={{ headerShown: false, presentation: 'modal' }} />
         </Stack>
       </View>
     </AuthProvider>

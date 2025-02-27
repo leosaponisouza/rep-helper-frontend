@@ -13,12 +13,12 @@ import {
     ScrollView,
     Clipboard // Import Clipboard
 } from 'react-native';
-import api from '../../../services/api';
-import { useAuth } from '../../../context/AuthContext';
+import api from '../../../src/services/api';
+import { useAuth } from '../../../src/context/AuthContext';
 import { useRouter } from 'expo-router';
-import BackButton from '../../../../components/BackButton';
+import BackButton from '../../../components/BackButton';
 import { getAuth, onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
-import { auth } from '../../../utils/firebaseClientConfig';
+import { auth } from '../../../src/utils/firebaseClientConfig';
 
 const CreateRepublicScreen = () => {
     const [name, setName] = useState('');

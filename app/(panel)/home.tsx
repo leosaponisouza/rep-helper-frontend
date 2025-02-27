@@ -11,13 +11,13 @@ import {
   Clipboard,
   Alert,
 } from 'react-native';
-import { useAuth } from '../../context/AuthContext'; // Make sure this path is correct
+import { useAuth } from '../../src/context/AuthContext'; // Make sure this path is correct
 import { Ionicons } from '@expo/vector-icons'; // For icons
 import { LineChart } from 'react-native-chart-kit';
 import { Dimensions } from 'react-native';
-import api from '../../services/api'; // Import your API client
+import api from '../../src/services/api'; // Import your API client
 import { getAuth, onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
-import { auth } from '../../utils/firebaseClientConfig';
+import { auth } from '../../src/utils/firebaseClientConfig';
 
 interface InformationItemProps {
     icon: string;

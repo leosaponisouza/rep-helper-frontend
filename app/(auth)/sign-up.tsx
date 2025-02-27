@@ -11,9 +11,9 @@ import {
   TouchableWithoutFeedback
 } from 'react-native';
 import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth'; // Firebase Auth
-import { auth } from '../../utils/firebaseClientConfig'; // Importe a instância 'auth'
-import api from '../../services/api'; // Sua instância do axios
-import { useAuth } from '../../context/AuthContext';
+import { auth } from '../../src/utils/firebaseClientConfig'; // Importe a instância 'auth'
+import api from '../../src/services/api'; // Sua instância do axios
+import { useAuth } from '../../src/context/AuthContext';
 import { Link, useRouter } from 'expo-router'; // useRouter para navegação
 import { Ionicons } from '@expo/vector-icons';
 import BackButton from '@/components/BackButton';

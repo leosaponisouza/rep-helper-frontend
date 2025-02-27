@@ -11,7 +11,7 @@ import {
   TouchableWithoutFeedback, // Para dispensar o teclado
 } from 'react-native';
 import { getAuth, sendPasswordResetEmail } from 'firebase/auth'; // Importe sendPasswordResetEmail
-import { auth } from '../../utils/firebaseClientConfig'; // Importe a instância 'auth'
+import { auth } from '../../src/utils/firebaseClientConfig'; // Importe a instância 'auth'
 import { useRouter } from 'expo-router';
 import BackButton from '@/components/BackButton';
 

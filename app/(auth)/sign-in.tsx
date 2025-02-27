@@ -16,11 +16,11 @@ import {
 } from 'react-native';
 import { Link, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { auth } from '../../utils/firebaseClientConfig';
+import { auth } from '../../src/utils/firebaseClientConfig';
 import { signInWithEmailAndPassword } from 'firebase/auth';
-import { useAuth } from '../../context/AuthContext';
-import api from '../../services/api';
-import { storeToken, getToken, removeToken, storeData, getData, removeData } from '../../utils/storage';
+import { useAuth } from '../../src/context/AuthContext';
+import api from '../../src/services/api';
+import { storeToken, getToken, removeToken, storeData, getData, removeData } from '../../src/utils/storage';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 const LoginScreen = () => {
