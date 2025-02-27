@@ -34,3 +34,9 @@ yarn-error.*
 
 # typescript
 *.tsbuildinfo
+
+# .gitignore
+.env
+.env.local
+.env.development
+.env.production
