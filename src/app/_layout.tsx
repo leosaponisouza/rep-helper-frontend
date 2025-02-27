@@ -1,4 +1,3 @@
-// app/_layout.tsx
 import { Stack } from 'expo-router';
 import { AuthProvider } from '../context/AuthContext';
 import { StatusBar, View } from 'react-native';
@@ -11,22 +10,17 @@ export default function RootLayout() {
           backgroundColor="#333"
           barStyle="light-content"
         />
-        <Stack screenOptions={{
+        <Stack screenOptions={{ headerShown: false }}>
+          {/* Authentication Routes */}
+          <Stack.Screen name="(auth)" options={{ headerShown: false }} />
           
-        }}>
-        {/* Authentication Stack Group */}
-        <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-
-        {/* Panel Stack Group */}
-        <Stack.Screen name="(panel)" options={{ headerShown: false }} />
-
-         {/* Index (Catch-all) Route */}
-        <Stack.Screen name="index" options={{ headerShown: false, presentation: 'modal' }} />
-
-        {/* Any other screens that are outside of (public) or (auth) or (panel) go here */}
+          {/* Main Application Routes (protected) */}
+          <Stack.Screen name="(panel)" options={{ headerShown: false }} />
+          
+          {/* Index Route - Entry point handler */}
+          <Stack.Screen name="index" options={{ headerShown: false }} />
         </Stack>
       </View>
-      
     </AuthProvider>
   );
 }

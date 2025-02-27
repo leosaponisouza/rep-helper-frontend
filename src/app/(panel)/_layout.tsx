@@ -1,21 +1,20 @@
-// app/(tabs)/_layout.tsx
 import { Tabs } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons'; // Importe o Ionicons ou outro pacote de ícones
+import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet } from 'react-native';
 
-export default function TabLayout() {
+export default function PanelLayout() {
   return (
     <Tabs
       screenOptions={{
-        headerShown: false, // Oculta o header padrão para todas as telas
-        tabBarActiveTintColor: '#7B68EE', // Cor do ícone/texto ativo
-        tabBarInactiveTintColor: 'gray', // Cor do ícone/texto inativo
+        headerShown: false,
+        tabBarActiveTintColor: '#7B68EE',
+        tabBarInactiveTintColor: 'gray',
         tabBarStyle: styles.tabBar,
         tabBarLabelStyle: styles.tabBarLabel,
       }}
     >
       <Tabs.Screen
-        name="home" // Nome da tela (deve corresponder ao nome do arquivo home.tsx)
+        name="home"
         options={{
           tabBarLabel: 'Home',
           tabBarIcon: ({ color, size }) => (
@@ -24,7 +23,7 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="activities" // Nome da tela (deve corresponder ao nome do arquivo activities.tsx)
+        name="activities"
         options={{
           tabBarLabel: 'Atividades',
           tabBarIcon: ({ color, size }) => (
@@ -33,7 +32,7 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="events" // Nome da tela (deve corresponder ao nome do arquivo events.tsx)
+        name="events"
         options={{
           tabBarLabel: 'Eventos',
           tabBarIcon: ({ color, size }) => (
@@ -42,7 +41,22 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="settings" // Nome da tela (deve corresponder ao nome do arquivo settings.tsx)
+        name="profile"
+        options={{
+          tabBarLabel: 'Perfil',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="person-outline" color={color} size={size} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="(republic)"
+        options={{
+          href: null, // Hide this from tab bar
+        }}
+      />
+      <Tabs.Screen
+        name="settings"
         options={{
           tabBarLabel: 'Configurações',
           tabBarIcon: ({ color, size }) => (
@@ -59,11 +73,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#333', // Cor de fundo da barra de navegação
     borderTopColor: '#555',
     borderTopWidth: 1,
-    
   },
   tabBarLabel: {
     fontFamily: 'Roboto', // Defina a família de fontes desejada
     fontSize: 12,
   },
 });
-

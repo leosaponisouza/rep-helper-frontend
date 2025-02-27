@@ -1,12 +1,14 @@
-// app/(public)/_layout.tsx
+// src/app/(panel)/(republic)/_layout.tsx - Republic management layout
 import { Stack } from 'expo-router';
 
-export default function PublicLayout() {
+export default function RepublicLayout() {
   return (
     <Stack screenOptions={{ headerShown: true }}>
-      <Stack.Screen name="choice" options={{ title: 'Escolha o que deseja' }} />
-      <Stack.Screen name="new" options={{ title: 'Nova república' }} />
-      <Stack.Screen name="join" options={{ title: 'Entrar em uma repúblcia' }} />
+      <Stack.Screen name="choice" options={{ title: 'Escolha de República' }} />
+      <Stack.Screen name="new" options={{ title: 'Nova República' }} />
+      <Stack.Screen name="join" options={{ title: 'Entrar em República' }} />
+      <Stack.Screen name="[id]" options={{ title: 'Detalhes da República' }} />
+      <Stack.Screen name="invite" options={{ title: 'Convidar Moradores' }} />
     </Stack>
   );
 }
