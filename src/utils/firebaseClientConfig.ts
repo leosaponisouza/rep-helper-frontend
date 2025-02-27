@@ -1,17 +1,25 @@
 // src/utils/firebaseClientConfig.ts
+import {
+  FIREBASE_API_KEY,
+  FIREBASE_AUTH_DOMAIN,
+  FIREBASE_PROJECT_ID,
+  FIREBASE_STORAGE_BUCKET,
+  FIREBASE_MESSAGING_SENDER_ID,
+  FIREBASE_APP_ID
+} from '@env';
+
 import { initializeApp } from 'firebase/app';
 import * as firebaseAuth from 'firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getReactNativePersistence, initializeAuth } from 'firebase/auth';
-import Config from 'react-native-config';
 
 const firebaseConfig = {
-  apiKey: Config.FIREBASE_API_KEY,
-  authDomain: Config.FIREBASE_AUTH_DOMAIN,
-  projectId: Config.FIREBASE_PROJECT_ID,
-  storageBucket: Config.FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: Config.FIREBASE_MESSAGING_SENDER_ID,
-  appId: Config.FIREBASE_APP_ID
+  apiKey: FIREBASE_API_KEY,
+  authDomain: FIREBASE_AUTH_DOMAIN,
+  projectId: FIREBASE_PROJECT_ID,
+  storageBucket: FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: FIREBASE_MESSAGING_SENDER_ID,
+  appId: FIREBASE_APP_ID
 };
 
 const app = initializeApp(firebaseConfig);
