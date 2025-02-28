@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { StyleSheet } from 'react-native';
 
 export default function PanelLayout() {
@@ -23,11 +23,11 @@ export default function PanelLayout() {
         }}
       />
       <Tabs.Screen
-        name="activities"
+        name="tasks"
         options={{
-          tabBarLabel: 'Atividades',
+          tabBarLabel: 'Tarefas',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="list-outline" color={color} size={size} />
+            <MaterialCommunityIcons name="checkbox-marked-outline" color={color} size={size} />
           ),
         }}
       />
@@ -37,6 +37,15 @@ export default function PanelLayout() {
           tabBarLabel: 'Eventos',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="calendar-outline" color={color} size={size} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="expenses"
+        options={{
+          tabBarLabel: 'Despesas',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialCommunityIcons name="cash" color={color} size={size} />
           ),
         }}
       />
@@ -73,9 +82,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#333', // Cor de fundo da barra de navegação
     borderTopColor: '#555',
     borderTopWidth: 1,
+    height: 60,
+    paddingBottom: 8,
+    paddingTop: 8,
   },
   tabBarLabel: {
-    fontFamily: 'Roboto', // Defina a família de fontes desejada
     fontSize: 12,
+    marginBottom: 4,
   },
 });
