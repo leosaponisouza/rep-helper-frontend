@@ -1,9 +1,23 @@
 // app/_layout.tsx
-import { Stack } from 'expo-router';
+import { Slot } from 'expo-router';
 import { AuthProvider } from '../src/context/AuthContext';
 import { StatusBar, View } from 'react-native';
+import { useEffect } from 'react';
+import * as SplashScreen from 'expo-splash-screen';
+
+// Manter splash screen visível enquanto inicializamos recursos
+SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
+  useEffect(() => {
+    // Esconder a splash screen quando recursos estiverem prontos
+    const hideSplash = async () => {
+      await SplashScreen.hideAsync();
+    };
+    
+    hideSplash();
+  }, []);
+
   return (
     <AuthProvider>
       <View style={{ flex: 1, backgroundColor: '#333' }}>
@@ -11,19 +25,7 @@ export default function RootLayout() {
           backgroundColor="#333"
           barStyle="light-content"
         />
-        <Stack screenOptions={{ headerShown: false }}>
-          {/* Authentication Stack Group */}
-          <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-
-          {/* Panel Stack Group */}
-          <Stack.Screen name="(panel)" options={{ headerShown: false }} />
-
-          {/* Republic Stack Group */}
-          <Stack.Screen name="(republic)" options={{ headerShown: false }} />
-
-          {/* Index (Catch-all) Route */}
-          <Stack.Screen name="index" options={{ headerShown: false, presentation: 'modal' }} />
-        </Stack>
+        <Slot />
       </View>
     </AuthProvider>
   );

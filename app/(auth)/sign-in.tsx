@@ -6,7 +6,6 @@ import {
     TouchableOpacity,
     StyleSheet,
     ActivityIndicator,
-    Alert,
     Keyboard,
     TouchableWithoutFeedback,
     SafeAreaView,
@@ -16,12 +15,13 @@ import {
 } from 'react-native';
 import { Link, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { auth } from '../../src/utils/firebaseClientConfig';
+import { auth, getFreshFirebaseToken } from '../../src/utils/firebaseClientConfig';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { useAuth } from '../../src/context/AuthContext';
 import api from '../../src/services/api';
-import { storeToken, getToken, removeToken, storeData, getData, removeData } from '../../src/utils/storage';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { ErrorHandler } from '../../src/utils/errorHandling';
+import { checkApiConnection } from '../../src/services/api';
 
 const LoginScreen = () => {
     const [email, setEmail] = useState('');
@@ -33,63 +33,28 @@ const LoginScreen = () => {
     const [emailFocused, setEmailFocused] = useState(false);
     const [passwordFocused, setPasswordFocused] = useState(false);
 
-    const { login, logout } = useAuth();
+    const { login } = useAuth();
     const router = useRouter();
 
-    // Check for existing session on component mount
+    // Verificar conectividade na montagem do componente
     useEffect(() => {
-        checkExistingSession();
         checkNetworkConnectivity();
     }, []);
 
     const checkNetworkConnectivity = async () => {
         try {
-            // Simple health check to your API
-            await api.get('/health');
-            setNetworkStatus({ connected: true, checking: false });
+            const isConnected = await checkApiConnection();
+            setNetworkStatus({ connected: isConnected, checking: false });
         } catch (error) {
             setNetworkStatus({ connected: false, checking: false });
-            console.log('API connection check failed:', error);
+            console.log('Falha na verificação de conexão:', error);
         }
-    };
-
-    const checkExistingSession = async () => {
-        try {
-            const storedToken = await getToken();
-            const storedUser = await getData('user');
-            
-            if (storedToken && storedUser) {
-                const user = JSON.parse(storedUser);
-                
-                try {
-                    await login(storedToken, user);
-                    
-                    if (user.current_republic_id) {
-                        router.replace('/(panel)/home');
-                    } else {
-                        router.replace('/(republic)/choice');
-                    }
-                } catch (error) {
-                    console.log("Session validation failed:", error);
-                    await clearSession();
-                }
-            }
-        } catch (error) {
-            console.log("Error checking existing session:", error);
-            await clearSession();
-        }
-    };
-
-    const clearSession = async () => {
-        await removeToken();
-        await removeData("user");
-        logout();
     };
 
     const handleLogin = async () => {
         Keyboard.dismiss();
 
-        // Form validation
+        // Validação de formulário
         if (!email.trim()) {
             setError('Por favor, insira seu email.');
             return;
@@ -100,7 +65,7 @@ const LoginScreen = () => {
             return;
         }
 
-        // Email format validation
+        // Validação de formato de email
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(email)) {
             setError('Por favor, insira um email válido.');
@@ -111,34 +76,49 @@ const LoginScreen = () => {
         setError('');
 
         try {
-            // Firebase Authentication
-            await signInWithEmailAndPassword(auth, email, password);
-            
-            // Get Firebase token
-            const firebaseToken = await auth.currentUser?.getIdToken();
-            if (!firebaseToken) {
-                throw new Error('Não foi possível obter o token de autenticação.');
+            // Verificar conexão com a API antes de tentar login
+            const isConnected = await checkApiConnection();
+            if (!isConnected) {
+                throw new Error('Sem conexão com o servidor. Verifique sua internet.');
             }
-            
-            // Backend API authentication
-            const response = await api.post('/users/login', {
 
-            }, {
-                headers: { 
-                    'Authorization': `Bearer ${firebaseToken}`,
-                    'Content-Type': 'application/json'
+            // Autenticação Firebase
+            const userCredential = await signInWithEmailAndPassword(auth, email, password);
+            
+            // Obter token Firebase
+            const firebaseToken = await getFreshFirebaseToken(true);
+            
+            // Configurar controlador para timeout
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 15000);
+            
+            // Autenticação na API backend
+          // Autenticação na API backend
+            const response = await api.post('/auth/login',
+                {
+                    // Enviar o firebaseToken também no corpo da requisição
+                    firebaseToken: firebaseToken
+                },
+                {
+                    headers: {
+                        'Authorization': `Bearer ${firebaseToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    signal: controller.signal
                 }
-            });
+            );
+            
+            clearTimeout(timeoutId);
             
             if (response.data && response.data.token && response.data.data?.user) {
-                // Store auth data
-                await storeToken(response.data.token);
-                await storeData('user', JSON.stringify(response.data.data.user));
+                // Armazenar dados de autenticação e atualizar contexto
+                await login(
+                    response.data.token, 
+                    response.data.data.user, 
+                    response.data.refreshToken
+                );
                 
-                // Update auth context
-                await login(response.data.token, response.data.data.user);
-                
-                // Navigate to appropriate screen
+                // Navegar para tela apropriada
                 if (response.data.data.user.current_republic_id) {
                     router.replace('/(panel)/home');
                 } else {
@@ -148,61 +128,13 @@ const LoginScreen = () => {
                 throw new Error('Resposta inválida do servidor');
             }
         } catch (error) {
-            handleLoginError(error);
+            // Usar o utilitário de tratamento de erros
+            const parsedError = ErrorHandler.parseError(error);
+            setError(parsedError.message);
+            ErrorHandler.logError(parsedError);
         } finally {
             setLoading(false);
         }
-    };
-    
-    const handleLoginError = (error) => {
-        console.log("Login error:", error);
-        
-        // Firebase auth errors
-        if (error.code) {
-            switch (error.code) {
-                case 'auth/invalid-email':
-                    setError('Email inválido.');
-                    break;
-                case 'auth/user-disabled':
-                    setError('Esta conta foi desativada.');
-                    break;
-                case 'auth/user-not-found':
-                    setError('Usuário não encontrado.');
-                    break;
-                case 'auth/wrong-password':
-                    setError('Senha incorreta.');
-                    break;
-                case 'auth/too-many-requests':
-                    setError('Muitas tentativas. Tente novamente mais tarde.');
-                    break;
-                case 'auth/network-request-failed':
-                    setError('Falha na conexão. Verifique sua internet.');
-                    break;
-                default:
-                    setError('Erro de autenticação. Tente novamente.');
-            }
-            return;
-        }
-        
-        // API response errors
-        if (error.response) {
-            const status = error.response.status;
-            const message = error.response.data?.message || 'Erro do servidor';
-            
-            setError(status === 401 ? 'Credenciais inválidas.' : 
-                     status === 404 ? 'Usuário não encontrado.' : 
-                     `Erro do servidor: ${message}`);
-            return;
-        }
-        
-        // Network errors
-        if (error.request) {
-            setError('Sem resposta do servidor. Verifique sua conexão.');
-            return;
-        }
-        
-        // Default error
-        setError('Ocorreu um erro. Tente novamente.');
     };
 
     const toggleShowPassword = () => {
@@ -249,6 +181,7 @@ const LoginScreen = () => {
                                     autoCorrect={false}
                                     onFocus={() => setEmailFocused(true)}
                                     onBlur={() => setEmailFocused(false)}
+                                    testID="email-input"
                                 />
                             </View>
 
@@ -266,8 +199,13 @@ const LoginScreen = () => {
                                     secureTextEntry={!showPassword}
                                     onFocus={() => setPasswordFocused(true)}
                                     onBlur={() => setPasswordFocused(false)}
+                                    testID="password-input"
                                 />
-                                <TouchableOpacity onPress={toggleShowPassword} style={styles.eyeIcon}>
+                                <TouchableOpacity 
+                                    onPress={toggleShowPassword} 
+                                    style={styles.eyeIcon}
+                                    accessibilityLabel={showPassword ? "Esconder senha" : "Mostrar senha"}
+                                >
                                     <Ionicons name={showPassword ? 'eye-off' : 'eye'} size={20} color="#7B68EE" />
                                 </TouchableOpacity>
                             </View>
@@ -286,6 +224,8 @@ const LoginScreen = () => {
                                 ]} 
                                 onPress={handleLogin}
                                 disabled={!networkStatus.connected || loading}
+                                accessibilityLabel="Entrar"
+                                testID="login-button"
                             >
                                 {loading ? (
                                     <ActivityIndicator size="small" color="#fff" />
@@ -295,7 +235,10 @@ const LoginScreen = () => {
                             </TouchableOpacity>
 
                             <Link href="/(auth)/forgot-password" asChild>
-                                <TouchableOpacity style={styles.forgotPassword}>
+                                <TouchableOpacity 
+                                    style={styles.forgotPassword}
+                                    accessibilityLabel="Esqueceu sua senha?"
+                                >
                                     <Text style={styles.link}>Esqueceu sua senha?</Text>
                                 </TouchableOpacity>
                             </Link>
@@ -304,7 +247,7 @@ const LoginScreen = () => {
                         <View style={styles.footer}>
                             <Text style={styles.signUpText}>Não tem uma conta? </Text>
                             <Link href="/(auth)/sign-up" asChild>
-                                <TouchableOpacity>
+                                <TouchableOpacity accessibilityLabel="Criar agora">
                                     <Text style={styles.signUpLink}>Criar agora</Text>
                                 </TouchableOpacity>
                             </Link>

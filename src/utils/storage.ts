@@ -1,33 +1,43 @@
 // src/utils/storage.ts
 import * as SecureStore from 'expo-secure-store';
 
+// Constantes para as chaves de armazenamento
+const TOKEN_KEY = 'auth_token';
+const REFRESH_TOKEN_KEY = 'refresh_token';
+const USER_KEY = 'user';
+
 /**
- * Stores a value securely using Expo Secure Store.
- * @param key - The key to store the value under.
- * @param value - The value to store.
- * @param options - Additional options for secure storage.
- * @returns A promise that resolves when the value has been stored.
- * @throws Error if there's an issue storing the data.
+ * Armazena um valor de forma segura usando Expo Secure Store.
+ * @param key - A chave para armazenar o valor.
+ * @param value - O valor a ser armazenado.
+ * @param options - Opções adicionais para armazenamento seguro.
+ * @returns Uma promise que é resolvida quando o valor foi armazenado.
+ * @throws Error se houver um problema ao armazenar os dados.
  */
 export const storeData = async (
   key: string,
-  value: string,
+  value: any,
   options?: SecureStore.SecureStoreOptions
 ): Promise<void> => {
   try {
-    await SecureStore.setItemAsync(key, value, options);
+    // Garantir que o valor seja sempre uma string
+    const stringValue = typeof value === 'string' 
+      ? value 
+      : JSON.stringify(value);
+      
+    await SecureStore.setItemAsync(key, stringValue, options);
   } catch (error) {
-    console.error('Error storing data:', error);
-    throw new Error(`Failed to store data for key: ${key}`);
+    console.error('Erro ao armazenar dados:', error);
+    throw new Error(`Falha ao armazenar dados para chave: ${key}`);
   }
 };
 
 /**
- * Retrieves a value securely from Expo Secure Store.
- * @param key - The key of the value to retrieve.
- * @param options - Additional options for secure storage retrieval.
- * @returns A promise that resolves with the stored value, or null if the key is not found.
- * @throws Error if there's an issue retrieving the data.
+ * Recupera um valor de forma segura do Expo Secure Store.
+ * @param key - A chave do valor a ser recuperado.
+ * @param options - Opções adicionais para recuperação de armazenamento seguro.
+ * @returns Uma promise que é resolvida com o valor armazenado, ou null se a chave não for encontrada.
+ * @throws Error se houver um problema ao recuperar os dados.
  */
 export const getData = async (
   key: string,
@@ -37,17 +47,17 @@ export const getData = async (
     const value = await SecureStore.getItemAsync(key, options);
     return value;
   } catch (error) {
-    console.error('Error getting data:', error);
-    throw new Error(`Failed to get data for key: ${key}`);
+    console.error('Erro ao obter dados:', error);
+    throw new Error(`Falha ao obter dados para chave: ${key}`);
   }
 };
 
 /**
- * Removes a value securely from Expo Secure Store.
- * @param key - The key of the value to remove.
- * @param options - Additional options for secure storage removal.
- * @returns A promise that resolves when the value has been removed.
- * @throws Error if there's an issue removing the data.
+ * Remove um valor de forma segura do Expo Secure Store.
+ * @param key - A chave do valor a ser removido.
+ * @param options - Opções adicionais para remoção de armazenamento seguro.
+ * @returns Uma promise que é resolvida quando o valor foi removido.
+ * @throws Error se houver um problema ao remover os dados.
  */
 export const removeData = async (
   key: string,
@@ -56,47 +66,64 @@ export const removeData = async (
   try {
     await SecureStore.deleteItemAsync(key, options);
   } catch (error) {
-    console.error('Error removing data:', error);
-    throw new Error(`Failed to remove data for key: ${key}`);
+    console.error('Erro ao remover dados:', error);
+    throw new Error(`Falha ao remover dados para chave: ${key}`);
   }
 };
 
-// Specific functions for handling tokens (more convenient)
+// Funções específicas para lidar com tokens (mais convenientes)
 
 /**
- * Stores a token securely using Expo Secure Store.
- * @param token - The token to store.
- * @param options - Additional options for secure storage.
- * @returns A promise that resolves when the token has been stored.
- * @throws Error if there's an issue storing the token.
+ * Armazena um token de autenticação de forma segura.
  */
 export const storeToken = async (
-  token: string,
+  token: string | any,
   options?: SecureStore.SecureStoreOptions
 ): Promise<void> => {
-  await storeData('token', token, options);
+  // Garantir que o token seja uma string
+  const tokenString = typeof token === 'string' ? token : String(token);
+  await storeData(TOKEN_KEY, tokenString, options);
 };
 
 /**
- * Retrieves a token securely from Expo Secure Store.
- * @param options - Additional options for secure storage retrieval.
- * @returns A promise that resolves with the stored token, or null if the token is not found.
- * @throws Error if there's an issue retrieving the token.
+ * Recupera o token de autenticação armazenado.
  */
 export const getToken = async (
   options?: SecureStore.SecureStoreOptions
 ): Promise<string | null> => {
-  return await getData('token', options);
+  return await getData(TOKEN_KEY, options);
 };
 
 /**
- * Removes a token securely from Expo Secure Store.
- * @param options - Additional options for secure storage removal.
- * @returns A promise that resolves when the token has been removed.
- * @throws Error if there's an issue removing the token.
+ * Remove o token de autenticação armazenado.
  */
 export const removeToken = async (
   options?: SecureStore.SecureStoreOptions
 ): Promise<void> => {
-  await removeData('token', options);
+  await removeData(TOKEN_KEY, options);
+};
+
+export const storeRefreshToken = async (
+  token: string,
+  options?: SecureStore.SecureStoreOptions
+): Promise<void> => {
+  await storeData('refreshToken', token, options);
+};
+
+export const getRefreshToken = async (
+  options?: SecureStore.SecureStoreOptions
+): Promise<string | null> => {
+  return await getData('refreshToken', options);
+};
+
+export const removeRefreshToken = async (
+  options?: SecureStore.SecureStoreOptions
+): Promise<void> => {
+  await removeData('refreshToken', options);
+};
+
+export const clearAuthData = async (): Promise<void> => {
+  await removeToken();
+  await removeRefreshToken();
+  await removeData('user');
 };

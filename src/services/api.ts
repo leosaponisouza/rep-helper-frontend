@@ -1,7 +1,8 @@
 // src/services/api.ts
 import axios from 'axios';
-import { getToken } from '../utils/storage';
+import { getToken, getRefreshToken, storeToken, storeRefreshToken } from '../utils/storage';
 import Constants from 'expo-constants';
+import { ErrorHandler } from '../utils/errorHandling';
 
 // Obter a URL base da API do Expo Constants
 const extra = Constants.expoConfig?.extra || {};
@@ -15,7 +16,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 10000, // timeout em ms
+  timeout: 15000, // Timeout em ms (15 segundos)
 });
 
 // Interceptor para adicionar o token JWT a todas as requisições
@@ -28,25 +29,71 @@ api.interceptors.request.use(
     return config;
   },
   (error) => {
+    ErrorHandler.logError(ErrorHandler.parseError(error));
     return Promise.reject(error);
   }
 );
 
-// Interceptor para lidar com erros de resposta
+// Interceptor para lidar com erros de resposta e renovação de token
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    // Log do erro para debug - ajuste conforme necessário
-    console.error('API Error:', error.message);
+  async (error) => {
+    const originalRequest = error.config;
     
-    // Se o servidor retornou uma resposta com erro
-    if (error.response) {
-      console.error('Response data:', error.response.data);
-      console.error('Response status:', error.response.status);
+    // Se erro for 401 (Unauthorized) e não tentamos renovar o token ainda
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+      
+      try {
+        // Verificar se temos um refresh token
+        const refreshToken = await getRefreshToken();
+        if (!refreshToken) {
+          throw new Error('Refresh token não disponível');
+        }
+        
+        // Tentar renovar o token
+        const response = await axios.post(`${API_BASE_URL}/auth/refresh`, { 
+          refreshToken 
+        });
+        
+        if (response.data.token) {
+          // Armazenar o novo token
+          await storeToken(response.data.token);
+          
+          // Armazenar novo refresh token, se fornecido
+          if (response.data.refreshToken) {
+            await storeRefreshToken(response.data.refreshToken);
+          }
+          
+          // Atualizar cabeçalho e repetir requisição original
+          api.defaults.headers.common['Authorization'] = `Bearer ${response.data.token}`;
+          originalRequest.headers.Authorization = `Bearer ${response.data.token}`;
+          
+          return axios(originalRequest);
+        }
+      } catch (refreshError) {
+        // Falha na renovação do token
+        console.error('Falha ao renovar token:', refreshError);
+      }
     }
     
+    // Log do erro
+    ErrorHandler.logError(ErrorHandler.parseError(error));
+    
+    // Continuar com o erro original
     return Promise.reject(error);
   }
 );
+
+// Função para checar conectividade
+export const checkApiConnection = async (): Promise<boolean> => {
+  try {
+    await api.get('/health', { timeout: 5000 });
+    return true;
+  } catch (error) {
+    console.error('Falha na verificação de conexão com API:', error);
+    return false;
+  }
+};
 
 export default api;

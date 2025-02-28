@@ -16,12 +16,14 @@ import {
   Platform,
   ScrollView
 } from 'react-native';
-import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '../../src/utils/firebaseClientConfig';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { auth, getFreshFirebaseToken } from '../../src/utils/firebaseClientConfig';
 import api from '../../src/services/api';
 import { useAuth } from '../../src/context/AuthContext';
 import { Link, useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { ErrorHandler } from '../../src/utils/errorHandling';
+import { checkApiConnection } from '../../src/services/api';
 
 const SignUpScreen = () => {
   const [name, setName] = useState('');
@@ -32,8 +34,10 @@ const SignUpScreen = () => {
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [networkStatus, setNetworkStatus] = useState({ connected: true, checking: true });
+  const [debugInfo, setDebugInfo] = useState('Aguardando ação...');
   
-  // Adicionar estados de foco
+  // Estados de foco
   const [nameFocused, setNameFocused] = useState(false);
   const [emailFocused, setEmailFocused] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
@@ -42,41 +46,84 @@ const SignUpScreen = () => {
   const { login } = useAuth();
   const router = useRouter();
 
-  const handleSignUp = async () => {
-    Keyboard.dismiss();
+  // Verificar conectividade ao montar
+  React.useEffect(() => {
+    checkNetworkConnectivity();
+  }, []);
 
-    if (!name || !email || !password || !confirmPassword) {
-      setError('Por favor, preencha todos os campos.');
-      return;
-    }
-
-    // Email format validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      setError('Por favor, insira um email válido.');
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      setError('As senhas não coincidem.');
-      return;
-    }
-
-    if (password.length < 6) {
-      setError('A senha deve ter pelo menos 6 caracteres.');
-      return;
-    }
-
-    setLoading(true);
-    setError('');
-
+  const checkNetworkConnectivity = async () => {
     try {
+      setDebugInfo('Verificando conectividade...');
+      const isConnected = await checkApiConnection();
+      setNetworkStatus({ connected: isConnected, checking: false });
+      setDebugInfo(`Conectividade: ${isConnected ? 'OK' : 'Falha'}`);
+    } catch (error) {
+      setNetworkStatus({ connected: false, checking: false });
+      setDebugInfo(`Erro de conectividade: ${error.message}`);
+      console.log('Falha na verificação de conexão:', error);
+    }
+  };
+
+  const handleSignUp = async () => {
+    try {
+      setDebugInfo('Iniciando cadastro...');
+      Keyboard.dismiss();
+
+      // Validação de campos obrigatórios
+      if (!name || !email || !password || !confirmPassword) {
+        setError('Por favor, preencha todos os campos.');
+        setDebugInfo('Erro: campos incompletos');
+        return;
+      }
+
+      // // Validação de formato de email
+      // const emailRegex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;
+      // if (!emailRegex.test(email)) {
+      //   setError('Por favor, insira um email válido.');
+      //   setDebugInfo('Erro: email inválido');
+      //   return;
+      // }
+
+      // Validação de senhas
+      if (password !== confirmPassword) {
+        setError('As senhas não coincidem.');
+        setDebugInfo('Erro: senhas não coincidem');
+        return;
+      }
+
+      if (password.length < 6) {
+        setError('A senha deve ter pelo menos 6 caracteres.');
+        setDebugInfo('Erro: senha muito curta');
+        return;
+      }
+
+      setLoading(true);
+      setError('');
+      setDebugInfo('Verificando conexão com API...');
+
+      // Verificar conexão com a API antes de tentar cadastro
+      const isConnected = await checkApiConnection();
+      if (!isConnected) {
+        setDebugInfo('Erro: Sem conexão com servidor');
+        throw new Error('Sem conexão com o servidor. Verifique sua internet.');
+      }
+      
+      setDebugInfo('Criando usuário no Firebase...');
+      
       // 1. Criar o usuário no Firebase Auth
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const firebaseUser = userCredential.user;
-      const firebaseToken = await firebaseUser.getIdToken();
+      
+      setDebugInfo('Obtendo token Firebase...');
+      const firebaseToken = await firebaseUser.getIdToken(true);
 
-      // 2. Criar o usuário no backend
+      // 2. Criar o usuário no backend com timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        setDebugInfo('Timeout na requisição ao backend');
+        controller.abort();
+      }, 15000);
+      
       const userData = {
           name,
           email,
@@ -86,43 +133,99 @@ const SignUpScreen = () => {
           status: 'active'
       };
 
-      const response = await api.post('/users', userData, {
-        headers: {
-          Authorization: `Bearer ${firebaseToken}`
+      setDebugInfo('Enviando dados para backend...');
+      
+      try {
+        console.log('URL da API:', api.defaults.baseURL);
+        console.log('Dados enviados:', userData);
+        console.log('Token Firebase:', firebaseToken.substring(0, 20) + '...');
+        
+        const response = await api.post('/users', userData, {
+          headers: {
+            Authorization: `Bearer ${firebaseToken}`,
+            'Content-Type': 'application/json'
+          },
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        setDebugInfo('Resposta do backend recebida');
+        
+        // Debug da resposta
+        console.log('Resposta do backend:', JSON.stringify(response.data, null, 2));
+        console.log('Token tipo:', typeof response.data.token);
+        console.log('Token valor:', response.data.token);
+        console.log('User tipo:', typeof response.data.data.user);
+        
+        // Verificar se os dados necessários existem
+        if (!response.data.token) {
+          setDebugInfo('Token ausente na resposta');
+          throw new Error('Token de autenticação não encontrado na resposta');
         }
-      });
-
-      // 3. Fazer Login (armazenar o token)
-      login(response.data.token, response.data.data.user);
-
-      // 4. Navegar para a tela de escolha de república 
-      router.replace('/(republic)/choice');
-
-    } catch (error: any) {
-      //Tratamento de erros do firebase
-      if (error.code === 'auth/email-already-in-use') {
-        setError('Este email já está em uso.');
-      } else if (error.code === 'auth/invalid-email') {
-        setError('Email inválido.');
-      } else if (error.code === 'auth/weak-password') {
-        setError('A senha deve ter pelo menos 6 caracteres.');
-      } else {
-        setError('Erro ao criar conta. Tente novamente.');
-        console.error(error);
+        
+        if (!response.data.data?.user) {
+          setDebugInfo('Dados do usuário ausentes na resposta');
+          throw new Error('Dados do usuário não encontrados na resposta');
+        }
+        
+        // 3. Login (armazenar o token e dados do usuário)
+        setDebugInfo('Realizando login...');
+        
+        // Converter token para string se não for
+        const tokenString = typeof response.data.token === 'string' 
+          ? response.data.token 
+          : String(response.data.token);
+        
+        // Converter refreshToken para string se existir e não for string
+        const refreshTokenString = response.data.refreshToken && typeof response.data.refreshToken !== 'string'
+          ? String(response.data.refreshToken)
+          : response.data.refreshToken;
+        
+        await login(
+          tokenString,
+          response.data.data.user,
+          refreshTokenString
+        );
+        
+        setDebugInfo('Redirecionando...');
+        // 4. Navegar para a tela de escolha de república 
+        router.replace('/(republic)/choice');
+      } catch (apiError) {
+        setDebugInfo(`Erro na API: ${apiError.message}`);
+        console.error('Erro na API:', apiError);
+        
+        // Se o usuário foi criado no Firebase, mas falhou no backend
+        // Podemos tentar excluir o usuário do Firebase
+        try {
+          if (firebaseUser) {
+            setDebugInfo('Tentando excluir usuário Firebase após falha');
+            await firebaseUser.delete();
+          }
+        } catch (deleteError) {
+          setDebugInfo(`Erro ao excluir usuário Firebase: ${deleteError.message}`);
+          console.error('Erro ao excluir usuário Firebase após falha no backend:', deleteError);
+        }
+        
+        throw apiError;
       }
-      Alert.alert("Erro", error.message);
+    } catch (error) {
+      const parsedError = ErrorHandler.parseError(error);
+      setError(parsedError.message);
+      setDebugInfo(`Erro final: ${parsedError.message} (${parsedError.type})`);
+      ErrorHandler.logError(parsedError);
+      Alert.alert("Erro no cadastro", `${parsedError.message}\n\nTipo: ${parsedError.type}`);
     } finally {
       setLoading(false);
     }
   };
 
-    const toggleShowPassword = () => {
-        setShowPassword(!showPassword);
-    };
+  const toggleShowPassword = () => {
+    setShowPassword(!showPassword);
+  };
 
-    const toggleShowConfirmPassword = () => {
-      setShowConfirmPassword(!showConfirmPassword);
-    };
+  const toggleShowConfirmPassword = () => {
+    setShowConfirmPassword(!showConfirmPassword);
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -142,6 +245,15 @@ const SignUpScreen = () => {
               <Text style={styles.subtitle}>Preencha os campos abaixo para se cadastrar</Text>
             </View>
 
+            {!networkStatus.connected && !networkStatus.checking && (
+              <View style={styles.networkAlert}>
+                <MaterialCommunityIcons name="wifi-off" size={18} color="white" />
+                <Text style={styles.networkAlertText}>
+                  Sem conexão com o servidor
+                </Text>
+              </View>
+            )}
+
             <View style={styles.formContainer}>
               <View style={[
                 styles.inputContainer, 
@@ -157,6 +269,7 @@ const SignUpScreen = () => {
                   autoCapitalize="words"
                   onFocus={() => setNameFocused(true)}
                   onBlur={() => setNameFocused(false)}
+                  testID="name-input"
                 />
               </View>
 
@@ -176,6 +289,7 @@ const SignUpScreen = () => {
                   autoCorrect={false}
                   onFocus={() => setEmailFocused(true)}
                   onBlur={() => setEmailFocused(false)}
+                  testID="email-input"
                 />
               </View>
 
@@ -193,6 +307,7 @@ const SignUpScreen = () => {
                   secureTextEntry={!showPassword}
                   onFocus={() => setPasswordFocused(true)}
                   onBlur={() => setPasswordFocused(false)}
+                  testID="password-input"
                 />
                 <TouchableOpacity onPress={toggleShowPassword} style={styles.eyeIcon}>
                   <Ionicons name={showPassword ? 'eye-off' : 'eye'} size={20} color="#7B68EE" />
@@ -213,6 +328,7 @@ const SignUpScreen = () => {
                   secureTextEntry={!showConfirmPassword}
                   onFocus={() => setConfirmPasswordFocused(true)}
                   onBlur={() => setConfirmPasswordFocused(false)}
+                  testID="confirm-password-input"
                 />
                 <TouchableOpacity onPress={toggleShowConfirmPassword} style={styles.eyeIcon}>
                   <Ionicons name={showConfirmPassword ? 'eye-off' : 'eye'} size={20} color="#7B68EE" />
@@ -226,11 +342,20 @@ const SignUpScreen = () => {
                 </View>
               ) : null}
 
+              {/* Info de debug - remova quando não for mais necessário */}
+              <View style={styles.debugContainer}>
+                <Text style={styles.debugText}>Status: {debugInfo}</Text>
+              </View>
+
               <TouchableOpacity 
-                style={[styles.button, loading && styles.buttonDisabled]} 
+                style={[
+                  styles.button, 
+                  (loading) && styles.buttonDisabled
+                ]} 
                 onPress={handleSignUp}
                 disabled={loading}
                 activeOpacity={0.8}
+                testID="signup-button"
               >
                 {loading ? (
                   <ActivityIndicator size="small" color="#fff" />
@@ -274,7 +399,7 @@ const styles = StyleSheet.create({
     headerContainer: {
         alignItems: 'center',
         marginTop: 20,
-        marginBottom: 30,
+        marginBottom: 24,
     },
     title: {
         fontSize: 28,
@@ -374,6 +499,34 @@ const styles = StyleSheet.create({
         color: '#7B68EE',
         fontSize: 16,
     },
+    networkAlert: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: '#FF4757',
+      paddingVertical: 10,
+      paddingHorizontal: 16,
+      borderRadius: 8,
+      marginBottom: 20,
+      width: '100%',
+    },
+    networkAlertText: {
+      color: 'white',
+      marginLeft: 8,
+      fontWeight: '500',
+    },
+    // Estilos para debug
+    debugContainer: {
+      padding: 10,
+      backgroundColor: '#333',
+      borderRadius: 8,
+      marginBottom: 16,
+      borderLeftWidth: 3,
+      borderLeftColor: '#7B68EE',
+    },
+    debugText: {
+      color: '#aaa',
+      fontSize: 12,
+    }
 });
 
 export default SignUpScreen;
