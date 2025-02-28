@@ -1,5 +1,4 @@
-// app/(republic)/new.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
     View,
     Text,
@@ -9,115 +8,94 @@ import {
     ActivityIndicator,
     Alert,
     ScrollView,
-    Platform,
+    Keyboard,
     SafeAreaView,
     StatusBar,
     Clipboard,
     KeyboardAvoidingView,
+    Platform
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
+import * as Haptics from 'expo-haptics';
+import { Controller, useForm } from 'react-hook-form';
+import { z } from 'zod';
+import { zodResolver } from '@hookform/resolvers/zod';
 import api from '../../src/services/api';
 import { useAuth } from '../../src/context/AuthContext';
-import { useRouter } from 'expo-router';
+import { router, useNavigation } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
-import { auth } from '../../src/utils/firebaseClientConfig';
 
-// Interface simples para os campos do formulário
-type FormData = {
-    name: string;
-    street: string;
-    number: string;
-    complement: string;
-    neighborhood: string;
-    city: string;
-    state: string;
-    zip_code: string;
-};
+// Validation Schema
+const republicSchema = z.object({
+    name: z.string().min(3, { message: "Nome da república é obrigatório" }),
+    street: z.string().min(1, { message: "Rua é obrigatória" }),
+    number: z.string().min(1, { message: "Número é obrigatório" }),
+    complement: z.string().optional(),
+    neighborhood: z.string().min(1, { message: "Bairro é obrigatório" }),
+    city: z.string().min(1, { message: "Cidade é obrigatória" }),
+    state: z.string().length(2, { message: "Estado deve ter 2 letras" }),
+    zip_code: z.string().regex(/^\d{5}-\d{3}$/, { message: "CEP inválido" })
+});
 
-const CreateRepublicScreen = () => {
-    // Estado inicial simplificado
-    const [formData, setFormData] = useState<FormData>({
-        name: '',
-        street: '',
-        number: '',
-        complement: '',
-        neighborhood: '',
-        city: '',
-        state: '',
-        zip_code: '',
+type RepublicFormData = z.infer<typeof republicSchema>;
+
+const CreateRepublicScreen: React.FC = () => {
+    const navigation = useNavigation();
+    const { user } = useAuth();
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    const { 
+        control, 
+        handleSubmit, 
+        formState: { errors }, 
+        reset 
+    } = useForm<RepublicFormData>({
+        resolver: zodResolver(republicSchema),
+        mode: 'onBlur'
     });
-    
-    // Estado para campo com foco atual (para destacar visualmente)
-    const [focusedField, setFocusedField] = useState<string | null>(null);
-    
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState('');
-    const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
 
-    const { user, login } = useAuth();
-    const router = useRouter();
+    // Reset form when screen comes into focus
+    useFocusEffect(
+        useCallback(() => {
+            reset();
+        }, [reset])
+    );
 
-    // Monitorar autenticação do Firebase
-    useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, (user) => {
-            setFirebaseUser(user);
-        });
-        return () => unsubscribe();
-    }, []);
-
-    // Função simplificada para atualizar os campos
-    const handleChange = (field: keyof FormData, value: string) => {
-        setFormData(prev => ({ ...prev, [field]: value }));
-    };
-
-    const handleCreateRepublic = async () => {
-        // Validação de campos obrigatórios
-        const requiredFields: Array<keyof FormData> = ['name', 'street', 'number', 'neighborhood', 'city', 'state', 'zip_code'];
-        const missingFields = requiredFields.filter(field => !formData[field].trim());
-
-        if (missingFields.length > 0) {
-            setError('Por favor, preencha todos os campos obrigatórios.');
-            return;
-        }
-
-        setLoading(true);
-        setError('');
+    const onSubmit = async (data: RepublicFormData) => {
+        Keyboard.dismiss();
+        setIsSubmitting(true);
 
         try {
-            if (!firebaseUser) {
-                throw new Error('Usuário não autenticado.');
+            // Haptic feedback on submission
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+            if (!user) {
+                throw new Error('Usuário não autenticado');
             }
 
-            if (user) {
-                const republicData = {
-                    ...formData,
-                    owner_id: user.uid,
-                };
+            const republicData = {
+                ...data,
+                owner_id: user.uid,
+            };
 
-                const firebaseToken = await firebaseUser.getIdToken();
-                const response = await api.post('/republics', republicData, {
-                    headers: {
-                        Authorization: `Bearer ${firebaseToken}`,
-                    },
-                });
+            const response = await api.post('/republics', republicData);
+            const republicCode = response.data.data.republic?.code;
 
-                login(response.data.token, response.data.data.user);
-                
-                // Se tiver um código da república, mostre o diálogo
-                if (response.data.data.republic?.code) {
-                    showRepublicCodeDialog(response.data.data.republic.code);
-                } else {
-                    router.replace('/(panel)/home');
-                }
+            if (republicCode) {
+                showRepublicCodeDialog(republicCode);
             } else {
-                throw new Error("Usuário não encontrado no contexto de autenticação.");
+                router.replace('/(panel)/home');
             }
         } catch (error: any) {
-            setError(error.message || 'Erro ao criar república. Tente novamente.');
-            console.error(error);
-            Alert.alert("Erro", error.message);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+            
+            const errorMessage = error.response?.data?.message 
+                || error.message 
+                || 'Erro ao criar república';
+
+            Alert.alert('Erro', errorMessage);
         } finally {
-            setLoading(false);
+            setIsSubmitting(false);
         }
     };
 
@@ -130,190 +108,205 @@ const CreateRepublicScreen = () => {
                     text: 'Copiar Código',
                     onPress: () => {
                         Clipboard.setString(code);
+                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                         Alert.alert('', 'Código copiado para a área de transferência!');
                         router.replace('/(panel)/home');
                     },
                 },
                 {
                     text: 'OK',
-                    onPress: () => {
-                        router.replace('/(panel)/home');
-                    },
+                    onPress: () => router.replace('/(panel)/home'),
                 },
             ],
             { cancelable: false }
         );
     };
 
-    // Componente de campo de formulário simplificado
-    const FormField = ({ 
+    const FormInput = ({ 
+        control, 
+        name, 
         label, 
-        field, 
-        placeholder,
-        keyboardType = 'default',
-        autoCapitalize = 'none',
-        maxLength,
-        required = false,
-        icon,
-    }: { 
+        icon, 
+        rules = {}, 
+        ...inputProps 
+    }: {
+        control: any;
+        name: keyof RepublicFormData;
         label: string;
-        field: keyof FormData;
-        placeholder: string;
-        keyboardType?: 'default' | 'number-pad' | 'email-address';
-        autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
-        maxLength?: number;
-        required?: boolean;
         icon: string;
-    }) => (
-        <View style={styles.fieldContainer}>
-            <Text style={styles.fieldLabel}>
-                {label} {required && <Text style={styles.requiredIndicator}>*</Text>}
-            </Text>
-            <View style={[
-                styles.inputContainer,
-                focusedField === field && styles.inputFocused
-            ]}>
-                <Ionicons name={icon} size={20} color="#7B68EE" style={styles.inputIcon} />
-                <TextInput
-                    style={styles.input}
-                    value={formData[field]}
-                    onChangeText={(value) => handleChange(field, value)}
-                    onFocus={() => setFocusedField(field)}
-                    onBlur={() => setFocusedField(null)}
-                    placeholder={placeholder}
-                    placeholderTextColor="#aaa"
-                    keyboardType={keyboardType}
-                    autoCapitalize={autoCapitalize}
-                    maxLength={maxLength}
-                    returnKeyType={field === 'zip_code' ? 'done' : 'next'}
+        rules?: object;
+        inputProps?: any;
+    }) => {
+        return (
+            <View style={styles.fieldContainer}>
+                <Text style={styles.fieldLabel}>
+                    {label} {rules.required && <Text style={styles.requiredIndicator}>*</Text>}
+                </Text>
+                <Controller
+                    control={control}
+                    name={name}
+                    rules={rules}
+                    render={({ field: { onChange, value, onBlur } }) => (
+                        <View style={[
+                            styles.inputContainer,
+                            errors[name] && styles.inputError
+                        ]}>
+                            <Ionicons 
+                                name={icon} 
+                                size={20} 
+                                color={errors[name] ? "#FF6347" : "#7B68EE"} 
+                                style={styles.inputIcon} 
+                            />
+                            <TextInput
+                                style={styles.input}
+                                onChangeText={onChange}
+                                onBlur={onBlur}
+                                value={value}
+                                placeholderTextColor="#aaa"
+                                {...inputProps}
+                            />
+                        </View>
+                    )}
                 />
+                {errors[name] && (
+                    <Text style={styles.errorText}>
+                        {errors[name]?.message as string}
+                    </Text>
+                )}
             </View>
-        </View>
-    );
+        );
+    };
 
     return (
         <SafeAreaView style={styles.safeArea}>
             <StatusBar barStyle="light-content" backgroundColor="#222" />
-            
-            {/* Abordagem simplificada com KeyboardAvoidingView fora do ScrollView */}
             <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                style={styles.container}
-                keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+                style={{ flex: 1 }}
+                behavior={Platform.OS === "ios" ? "padding" : "height"}
+                keyboardVerticalOffset={Platform.OS === "ios" ? 64 : 0}
             >
                 <ScrollView
                     style={styles.scrollView}
                     contentContainerStyle={styles.scrollContent}
                     keyboardShouldPersistTaps="handled"
-                    showsVerticalScrollIndicator={true}
+                    showsVerticalScrollIndicator={false}
                 >
                     <View style={styles.header}>
                         <Text style={styles.title}>Criar uma nova república</Text>
                         <Text style={styles.subtitle}>
-                            Preencha as informações abaixo para criar sua república. Os campos com * são obrigatórios.
+                            Preencha as informações abaixo para criar sua república. 
+                            Os campos com * são obrigatórios.
                         </Text>
                     </View>
 
                     <View style={styles.form}>
-                        <FormField 
-                            label="Nome da República" 
-                            field="name"
+                        <FormInput
+                            control={control}
+                            name="name"
+                            label="Nome da República"
+                            icon="home"
                             placeholder="Ex: República dos Estudantes"
                             autoCapitalize="words"
-                            required={true}
-                            icon="home"
+                            rules={{ required: true }}
                         />
-                        
+
                         <Text style={styles.sectionTitle}>Endereço</Text>
-                        
-                        <FormField 
-                            label="Rua" 
-                            field="street"
+
+                        <FormInput
+                            control={control}
+                            name="street"
+                            label="Rua"
+                            icon="location"
                             placeholder="Nome da rua"
                             autoCapitalize="words"
-                            required={true}
-                            icon="location"
+                            rules={{ required: true }}
                         />
-                        
-                        <FormField 
-                            label="Número" 
-                            field="number"
+
+                        <FormInput
+                            control={control}
+                            name="number"
+                            label="Número"
+                            icon="pin"
                             placeholder="Número"
                             keyboardType="number-pad"
-                            required={true}
-                            icon="pin"
+                            rules={{ required: true }}
                         />
-                        
-                        <FormField 
-                            label="Complemento" 
-                            field="complement"
+
+                        <FormInput
+                            control={control}
+                            name="complement"
+                            label="Complemento"
+                            icon="information-circle"
                             placeholder="Apartamento, bloco, etc. (opcional)"
                             autoCapitalize="words"
-                            icon="information-circle"
                         />
-                        
-                        <FormField 
-                            label="Bairro" 
-                            field="neighborhood"
+
+                        <FormInput
+                            control={control}
+                            name="neighborhood"
+                            label="Bairro"
+                            icon="map"
                             placeholder="Nome do bairro"
                             autoCapitalize="words"
-                            required={true}
-                            icon="map"
+                            rules={{ required: true }}
                         />
-                        
-                        <FormField 
-                            label="Cidade" 
-                            field="city"
+
+                        <FormInput
+                            control={control}
+                            name="city"
+                            label="Cidade"
+                            icon="business"
                             placeholder="Nome da cidade"
                             autoCapitalize="words"
-                            required={true}
-                            icon="business"
+                            rules={{ required: true }}
                         />
-                        
-                        <FormField 
-                            label="Estado (UF)" 
-                            field="state"
+
+                        <FormInput
+                            control={control}
+                            name="state"
+                            label="Estado (UF)"
+                            icon="flag"
                             placeholder="UF"
                             autoCapitalize="characters"
                             maxLength={2}
-                            required={true}
-                            icon="flag"
+                            rules={{ required: true }}
                         />
-                        
-                        <FormField 
-                            label="CEP" 
-                            field="zip_code"
+
+                        <FormInput
+                            control={control}
+                            name="zip_code"
+                            label="CEP"
+                            icon="mail"
                             placeholder="00000-000"
                             keyboardType="number-pad"
-                            required={true}
-                            icon="mail"
+                            rules={{ required: true }}
                         />
 
-                        {error ? (
-                            <View style={styles.errorContainer}>
-                                <Ionicons name="alert-circle" size={18} color="#FF6347" />
-                                <Text style={styles.errorText}>{error}</Text>
-                            </View>
-                        ) : null}
-
-                        <TouchableOpacity 
-                            style={[styles.button, loading && styles.buttonDisabled]} 
-                            onPress={handleCreateRepublic}
-                            disabled={loading}
+                        <TouchableOpacity
+                            style={[
+                                styles.button, 
+                                isSubmitting && styles.buttonDisabled
+                            ]}
+                            onPress={handleSubmit(onSubmit)}
+                            disabled={isSubmitting}
                             activeOpacity={0.8}
                         >
-                            {loading ? (
+                            {isSubmitting ? (
                                 <ActivityIndicator size="small" color="#fff" />
                             ) : (
                                 <>
-                                    <Ionicons name="add-circle" size={20} color="#fff" style={styles.buttonIcon} />
-                                    <Text style={styles.buttonText}>Criar República</Text>
+                                    <Ionicons 
+                                        name="add-circle" 
+                                        size={20} 
+                                        color="#fff" 
+                                        style={styles.buttonIcon} 
+                                    />
+                                    <Text style={styles.buttonText}>
+                                        Criar República
+                                    </Text>
                                 </>
                             )}
                         </TouchableOpacity>
-                        
-                        {/* Espaço adicional no final */}
-                        <View style={styles.bottomSpacer} />
                     </View>
                 </ScrollView>
             </KeyboardAvoidingView>
@@ -321,21 +314,19 @@ const CreateRepublicScreen = () => {
     );
 };
 
-// Estilos simplificados e melhorados
 const styles = StyleSheet.create({
+    // Styles remain largely the same as the original
     safeArea: {
         flex: 1,
         backgroundColor: '#222',
     },
-    container: {
-        flex: 1,
-    },
     scrollView: {
         flex: 1,
+        backgroundColor: '#222',
     },
     scrollContent: {
         paddingHorizontal: 20,
-        paddingBottom: 100, // Espaço extra no fim do formulário
+        paddingBottom: 40,
     },
     header: {
         marginTop: 20,
@@ -384,9 +375,9 @@ const styles = StyleSheet.create({
         height: 56,
         paddingHorizontal: 16,
     },
-    inputFocused: {
-        borderColor: '#7B68EE',
-        backgroundColor: '#393939',
+    inputError: {
+        borderColor: '#FF6347',
+        backgroundColor: 'rgba(255, 99, 71, 0.1)',
     },
     inputIcon: {
         marginRight: 12,
@@ -397,21 +388,11 @@ const styles = StyleSheet.create({
         fontSize: 16,
         padding: 8,
     },
-    errorContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: 'rgba(255, 99, 71, 0.15)',
-        padding: 12,
-        borderRadius: 8,
-        marginVertical: 16,
-        borderLeftWidth: 3,
-        borderLeftColor: '#FF6347',
-    },
     errorText: {
         color: '#FF6347',
-        marginLeft: 8,
-        fontSize: 14,
-        flex: 1,
+        fontSize: 12,
+        marginTop: 4,
+        marginLeft: 4,
     },
     button: {
         backgroundColor: '#7B68EE',
@@ -443,9 +424,6 @@ const styles = StyleSheet.create({
     buttonIcon: {
         marginRight: 8,
     },
-    bottomSpacer: {
-        height: 60,
-    }
 });
 
 export default CreateRepublicScreen;
