@@ -79,7 +79,7 @@ export default function Index() {
   // Se o usuário estiver autenticado e não estiver carregando
   if (isAuthenticated && canRedirect) {
     // Verificar se usuário tem uma república
-    if (user?.current_republic_id) {
+    if (user?.currentRepublicId) {
       return <Redirect href="/(panel)/home" />;
     } else {
       return <Redirect href="/(republic)/choice" />;

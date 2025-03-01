@@ -47,7 +47,7 @@ const RepublicChoiceScreen = () => {
     const checkNetworkConnectivity = async () => {
         try {
             // Simple health check to your API
-            await api.get('/health');
+            await api.get('api/v1/health');
             setNetworkStatus({ connected: true, checking: false });
         } catch (error) {
             setNetworkStatus({ connected: false, checking: false });
@@ -69,12 +69,12 @@ const RepublicChoiceScreen = () => {
             }
             const firebaseToken = await firebaseUser.getIdToken();
             const response = await api.post(
-                `/republics/join/${joinCode}`,
-                {},
+                'api/v1/republics/join',
+                {code : joinCode},
                 { headers: { Authorization: `Bearer ${firebaseToken}` } }
             );
 
-            login(response.data.token, response.data.data.user);
+            login(response.data.token, response.data.user);
             Alert.alert("Sucesso", "Você entrou na república com sucesso!")
             router.replace('/(panel)/home'); 
         } catch (err: any) {

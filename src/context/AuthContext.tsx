@@ -25,9 +25,7 @@ interface AuthContextProps {
 }
 
 interface GetMeResponse {
-  data: {
-    user: User
-  }
+  user: User;
 }
 
 interface LoginResponse {
@@ -85,16 +83,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-          const response: AxiosResponse<GetMeResponse> = await api.get('/users/me', {
+          const response: AxiosResponse<GetMeResponse> = await api.get('api/v1/users/me', {
             signal: controller.signal
           });
 
           clearTimeout(timeoutId);
 
-          if (response.data?.data?.user) {
-            setUser(response.data.data.user);
+          if (response.data.user) {
+            setUser(response.data.user);
             // Atualizar cache
-            await storeData('user', JSON.stringify(response.data.data.user));
+            await storeData('user', JSON.stringify(response.data.user));
             setError(null);
           }
         } catch (error) {
@@ -168,7 +166,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       await login(token, data.user, refreshToken);
       
       // Navegar para tela principal
-      if (data.user.current_republic_id) {
+      if (data.user.currentRepublicId) {
         router.replace('/(panel)/home');
       } else {
         router.replace('/(republic)/choice');

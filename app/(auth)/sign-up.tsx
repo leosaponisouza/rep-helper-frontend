@@ -127,9 +127,9 @@ const SignUpScreen = () => {
       const userData = {
           name,
           email,
-          firebase_uid: firebaseUser.uid,
-          provider: 'email',
-          role: 'user',
+          firebaseUid: firebaseUser.uid,
+          provider: 'EMAIL',
+          isAdmin: true,
           status: 'active'
       };
 
@@ -140,7 +140,7 @@ const SignUpScreen = () => {
         console.log('Dados enviados:', userData);
         console.log('Token Firebase:', firebaseToken.substring(0, 20) + '...');
         
-        const response = await api.post('/users', userData, {
+        const response = await api.post('api/v1/auth/signup', userData, {
           headers: {
             Authorization: `Bearer ${firebaseToken}`,
             'Content-Type': 'application/json'
@@ -155,7 +155,7 @@ const SignUpScreen = () => {
         console.log('Resposta do backend:', JSON.stringify(response.data, null, 2));
         console.log('Token tipo:', typeof response.data.token);
         console.log('Token valor:', response.data.token);
-        console.log('User tipo:', typeof response.data.data.user);
+        console.log('User tipo:', typeof response.data.user);
         
         // Verificar se os dados necessários existem
         if (!response.data.token) {
@@ -163,7 +163,7 @@ const SignUpScreen = () => {
           throw new Error('Token de autenticação não encontrado na resposta');
         }
         
-        if (!response.data.data?.user) {
+        if (!response.data.user) {
           setDebugInfo('Dados do usuário ausentes na resposta');
           throw new Error('Dados do usuário não encontrados na resposta');
         }
@@ -183,7 +183,7 @@ const SignUpScreen = () => {
         
         await login(
           tokenString,
-          response.data.data.user,
+          response.data.user,
           refreshTokenString
         );
         

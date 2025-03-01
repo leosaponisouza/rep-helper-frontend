@@ -78,8 +78,8 @@ const CreateRepublicScreen: React.FC = () => {
                 owner_id: user.uid,
             };
 
-            const response = await api.post('/republics', republicData);
-            const republicCode = response.data.data.republic?.code;
+            const response = await api.post('api/v1/republics', republicData);
+            const republicCode = response.data.republic?.code;
 
             if (republicCode) {
                 showRepublicCodeDialog(republicCode);

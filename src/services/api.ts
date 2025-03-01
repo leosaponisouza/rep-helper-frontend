@@ -6,7 +6,7 @@ import { ErrorHandler } from '../utils/errorHandling';
 
 // Obter a URL base da API do Expo Constants
 const extra = Constants.expoConfig?.extra || {};
-const API_BASE_URL = extra.apiBaseUrl || 'http://192.168.100.6:3000/api/v1';
+const API_BASE_URL = 'http://192.168.100.6:3000/api/v1';
 
 // Log para debug - remova em produção
 console.log('API Base URL:', API_BASE_URL);
@@ -52,7 +52,7 @@ api.interceptors.response.use(
         }
         
         // Tentar renovar o token
-        const response = await axios.post(`${API_BASE_URL}/auth/refresh`, { 
+        const response = await axios.post(`/api/v1/auth/refresh`, { 
           refreshToken 
         });
         
@@ -88,7 +88,7 @@ api.interceptors.response.use(
 // Função para checar conectividade
 export const checkApiConnection = async (): Promise<boolean> => {
   try {
-    await api.get('/health', { timeout: 5000 });
+    await api.get('/api/v1/health', { timeout: 5000 });
     return true;
   } catch (error) {
     console.error('Falha na verificação de conexão com API:', error);

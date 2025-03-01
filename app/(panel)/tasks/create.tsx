@@ -63,11 +63,19 @@ const CreateTaskScreen = () => {
   useEffect(() => {
     const fetchRepublicUsers = async () => {
       try {
-        const response = await api.get('/republics/users');
-        setAvailableUsers(response.data.data);
+        console.log(user)
+        if (user?.currentRepublicId) { // Verifica se o ID existe antes de fazer a requisição
+          const republicId = user.currentRepublicId;
+          const response = await api.get(`api/v1/republics/${republicId}/members`); // Usa template literal
+          setAvailableUsers(response.data);
+        } else {
+          console.warn("current_republic_id não encontrado para o usuário.");
+          // Você pode adicionar um tratamento de erro ou uma mensagem para o usuário aqui.
+        }
       } catch (error) {
         ErrorHandler.handle(error);
       }
+
     };
 
     fetchRepublicUsers();
@@ -88,6 +96,7 @@ const CreateTaskScreen = () => {
       const taskData: CreateTaskDTO = {
         ...data,
         assigned_users: selectedUsers,
+        republicId: user?.currentRepublicId? user?.currentRepublicId : '',
         due_date: data.due_date ? data.due_date.toISOString() : undefined
       };
 

@@ -8,7 +8,7 @@ export interface User {
     email: string;
     phone_number?: string | null; // Opcional
     profile_picture_url?: string | null; // Opcional
-    current_republic_id?: string | null; // Opcional (pode não ter república ainda)
+    currentRepublicId?: string | null; // Opcional (pode não ter república ainda)
     is_admin?: boolean;
     created_at?: string; // Pode ser string, se você estiver recebendo a data como string do backend.
     last_login?: string;  // Pode ser string

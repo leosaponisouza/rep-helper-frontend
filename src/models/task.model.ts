@@ -18,6 +18,7 @@ export interface Task {
     description?: string;
     due_date?: string;
     category?: string;
+    republicId: string,
     assigned_users?: string[];
   }
   

@@ -94,7 +94,7 @@ const LoginScreen = () => {
             
             // Autenticação na API backend
           // Autenticação na API backend
-            const response = await api.post('/auth/login',
+            const response = await api.post('/api/v1/auth/login',
                 {
                     // Enviar o firebaseToken também no corpo da requisição
                     firebaseToken: firebaseToken
@@ -107,19 +107,19 @@ const LoginScreen = () => {
                     signal: controller.signal
                 }
             );
-            
+            console.log(response);
             clearTimeout(timeoutId);
-            
-            if (response.data && response.data.token && response.data.data?.user) {
+    
+            // Correct access to token and user
+            if (response.data.token && response.data.user) {
                 // Armazenar dados de autenticação e atualizar contexto
                 await login(
-                    response.data.token, 
-                    response.data.data.user, 
-                    response.data.refreshToken
+                    response.data.token,  // Direct access to token
+                    response.data.user,   // Direct access to user object  // No refresh token in this response
                 );
-                
+    
                 // Navegar para tela apropriada
-                if (response.data.data.user.current_republic_id) {
+                if (response.data.user.currentRepublicId) {
                     router.replace('/(panel)/home');
                 } else {
                     router.replace('/(republic)/choice');
