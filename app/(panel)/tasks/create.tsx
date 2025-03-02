@@ -51,7 +51,7 @@ const CreateTaskScreen = () => {
   const [isDatePickerVisible, setDatePickerVisibility] = useState(false);
   const [datePickerMode, setDatePickerMode] = useState<'date' | 'time'>('date');
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
-  const [availableUsers, setAvailableUsers] = useState<{id: string, name: string, email: string, profilePictureUrl?: string}[]>([]);
+  const [availableUsers, setAvailableUsers] = useState<{uid: string, name: string, email: string, profilePictureUrl?: string}[]>([]);
   const [isUserModalVisible, setUserModalVisible] = useState(false);
   const [isCategoryModalVisible, setCategoryModalVisible] = useState(false);
   const [customCategory, setCustomCategory] = useState('');
@@ -112,11 +112,16 @@ const CreateTaskScreen = () => {
   }, []);
 
   const toggleUserSelection = (userId: string) => {
-    setSelectedUsers(prev => 
-      prev.includes(userId)
-        ? prev.filter(id => id !== userId)
-        : [...prev, userId]
-    );
+    // Verificar se o usuário está atualmente selecionado
+    const isSelected = selectedUsers.includes(userId);
+    
+    if (isSelected) {
+      // Se já estiver selecionado, remova-o da lista
+      setSelectedUsers(prev => prev.filter(id => id !== userId));
+    } else {
+      // Se não estiver selecionado, adicione-o à lista
+      setSelectedUsers(prev => [...prev, userId]);
+    }
   };
 
   const selectCategory = (category: string) => {
@@ -233,35 +238,47 @@ const CreateTaskScreen = () => {
           </View>
           
           <ScrollView style={styles.modalScrollView}>
-            {availableUsers.map(user => (
+            {availableUsers.map(availableUser => (
               <TouchableOpacity
-                key={user.id}
+                key={availableUser.uid}
                 style={[
                   styles.userSelectItem,
-                  selectedUsers.includes(user.id) && styles.selectedUserItem
+                  selectedUsers.includes(availableUser.uid) && styles.selectedUserItem,
+                  availableUser.uid === user?.uid && styles.currentUserItem
                 ]}
-                onPress={() => toggleUserSelection(user.id)}
+                onPress={() => toggleUserSelection(availableUser.uid)}
               >
                 <View style={styles.userSelectLeftContent}>
-                  {user.profilePictureUrl ? (
+                  {availableUser.profilePictureUrl ? (
                     <Image 
-                      source={{ uri: user.profilePictureUrl }} 
+                      source={{ uri: availableUser.profilePictureUrl }} 
                       style={styles.userAvatar}
                     />
                   ) : (
-                    <View style={styles.userAvatarPlaceholder}>
+                    <View style={[
+                      styles.userAvatarPlaceholder,
+                      availableUser.uid === user?.uid && styles.currentUserAvatarPlaceholder
+                    ]}>
                       <Text style={styles.userInitials}>
-                        {user.name.split(' ').map(n => n[0]).join('').toUpperCase()}
+                        {availableUser.name.split(' ').map(n => n[0]).join('').toUpperCase()}
                       </Text>
                     </View>
                   )}
+                  {availableUser.uid === user?.uid && (
+                    <View style={styles.currentUserIndicator} />
+                  )}
                   <View style={styles.userInfo}>
-                    <Text style={styles.userName}>{user.name}</Text>
-                    <Text style={styles.userEmail}>{user.email}</Text>
+                    <Text style={[
+                      styles.userName,
+                      availableUser.uid === user?.uid && styles.currentUserName
+                    ]}>
+                      {availableUser.name} {availableUser.uid === user?.uid ? ' (Você)' : ''}
+                    </Text>
+                    <Text style={styles.userEmail}>{availableUser.email}</Text>
                   </View>
                 </View>
                 
-                {selectedUsers.includes(user.id) ? (
+                {selectedUsers.includes(availableUser.uid) ? (
                   <View style={styles.userSelectedCheckmark}>
                     <Ionicons name="checkmark-circle" size={24} color="#7B68EE" />
                   </View>
@@ -295,7 +312,6 @@ const CreateTaskScreen = () => {
       </View>
     </Modal>
   );
-
   const renderCategoryModal = () => (
     <Modal
       animationType="slide"
@@ -468,11 +484,11 @@ const CreateTaskScreen = () => {
               {selectedUsers.length > 0 && (
                 <View style={styles.selectedUsersPreview}>
                   {availableUsers
-                    .filter(user => selectedUsers.includes(user.id))
+                    .filter(user => selectedUsers.includes(user.uid))
                     .slice(0, 3)
                     .map((user, index) => (
                       <View 
-                        key={user.id} 
+                        key={user.uid} 
                         style={[
                           styles.userAvatarSmall, 
                           { marginLeft: index > 0 ? -10 : 0, zIndex: 10 - index }
@@ -990,6 +1006,27 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  currentUserItem: {
+    backgroundColor: 'rgba(123, 104, 238, 0.1)',
+  },
+  currentUserAvatarPlaceholder: {
+    backgroundColor: '#7B68EE',
+  },
+  currentUserName: {
+    color: '#7B68EE',
+    fontWeight: 'bold',
+  },
+  currentUserIndicator: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#7B68EE',
+    borderWidth: 2,
+    borderColor: '#333',
   },
 });
 
