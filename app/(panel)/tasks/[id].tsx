@@ -600,7 +600,7 @@ const TaskDetailsScreen = () => {
                     styles.assigneeName,
                     assignee.id === user?.uid && styles.currentUserName
                   ]}>
-                    {assignee.name} {assignee.id === user?.uid ? '(Você)' : ''}
+                    {assignee.nickname || assignee.name} {assignee.id === user?.uid ? '(Você)' : ''}
                   </Text>
                   <Text style={styles.assigneeEmail}>
                     {assignee.email}

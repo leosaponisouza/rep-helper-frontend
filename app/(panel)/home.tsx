@@ -22,6 +22,7 @@ import { Task } from '../../src/hooks/useTasks';
 import { format, isToday, isTomorrow, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useFocusEffect } from '@react-navigation/native';
+import { getDisplayName } from '@/src/utils/userUtils';
 
 // Tipos para melhor tipagem
 interface QuickAction {
@@ -373,7 +374,7 @@ const HomeScreen = () => {
         {/* Cabeçalho */}
         <View style={styles.headerContainer}>
           <View>
-            <Text style={styles.greeting}>Olá, {user?.name?.split(' ')[0]}!</Text>
+          <Text style={styles.greeting}>Olá, {getDisplayName(user, true)}!</Text>
             <Text style={styles.republicName}>
               {stats?.republicName || 'Sua República'}
             </Text>

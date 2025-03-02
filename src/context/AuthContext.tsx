@@ -151,6 +151,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 // Dentro do componente AuthProvider
+// Trecho completo para substituir a função updateStoredUser no AuthContext.tsx
+
 const updateStoredUser = useCallback(async (userData: Partial<User>) => {
   try {
     // Recuperar usuário atual armazenado
@@ -160,10 +162,23 @@ const updateStoredUser = useCallback(async (userData: Partial<User>) => {
       // Parse do usuário atual
       const currentUser = JSON.parse(currentUserString);
       
+      // Tratar o campo nickname como caso especial
+      const processedUserData = { ...userData };
+      
+      // Se nickname for string vazia, converter para null
+      if ('nickname' in processedUserData) {
+        if (!processedUserData.nickname || processedUserData.nickname.trim() === '') {
+          processedUserData.nickname = null;
+        } else {
+          // Garantir que é uma string limpa
+          processedUserData.nickname = processedUserData.nickname.trim();
+        }
+      }
+      
       // Mesclar dados do usuário
       const updatedUser = {
         ...currentUser,
-        ...userData
+        ...processedUserData
       };
       
       // Armazenar usuário atualizado

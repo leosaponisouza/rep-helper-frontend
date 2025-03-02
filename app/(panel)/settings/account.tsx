@@ -30,6 +30,7 @@ const AccountScreen = () => {
   const { user, login, updateStoredUser } = useAuth();
   
   const [name, setName] = useState(user?.name || '');
+  const [nickname, setNickname] = useState(user?.nickname || '');
   const [email, setEmail] = useState(user?.email || '');
   const [phone, setPhone] = useState(user?.phoneNumber || '');
   const [profileImage, setProfileImage] = useState<string | null>(user?.profile_picture_url || null);
@@ -38,7 +39,9 @@ const AccountScreen = () => {
 
   // Estados de foco para inputs
   const [nameFocused, setNameFocused] = useState(false);
+  const [nicknameFocused, setNicknameFocused] = useState(false);
   const [phoneFocused, setPhoneFocused] = useState(false);
+  
   // Função para salvar alterações no perfil
   const handleSaveProfile = async () => {
     Keyboard.dismiss();
@@ -54,6 +57,7 @@ const AccountScreen = () => {
 
       const userData = {
         name,
+        nickname: nickname.trim() || null, // Garante que seja null se estiver vazio
         phoneNumber: phone
       };
 
@@ -232,7 +236,9 @@ const AccountScreen = () => {
               </View>
             </View>
             
-            <Text style={styles.userName}>{name}</Text>
+            <Text style={styles.userName}>
+              {nickname || name}
+            </Text>
             <Text style={styles.userEmail}>{email}</Text>
           </View>
 
@@ -257,6 +263,28 @@ const AccountScreen = () => {
                     onBlur={() => setNameFocused(false)}
                   />
                 </View>
+              </View>
+              
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Apelido (opcional)</Text>
+                <View style={[
+                  styles.inputContainer,
+                  nicknameFocused && styles.inputFocused
+                ]}>
+                  <Ionicons name="at" size={20} color="#7B68EE" style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.input}
+                    value={nickname}
+                    onChangeText={setNickname}
+                    placeholder="Como você gostaria de ser chamado"
+                    placeholderTextColor="#aaa"
+                    onFocus={() => setNicknameFocused(true)}
+                    onBlur={() => setNicknameFocused(false)}
+                  />
+                </View>
+                <Text style={styles.helperText}>
+                  Se definido, será usado em vez do seu nome em toda a aplicação
+                </Text>
               </View>
               
               <View style={styles.inputGroup}>
@@ -460,6 +488,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 4,
     fontStyle: 'italic',
+  },
+  helperText: {
+    color: '#aaa',
+    fontSize: 12,
+    marginTop: 4,
   },
   securitySection: {
     marginBottom: 24,

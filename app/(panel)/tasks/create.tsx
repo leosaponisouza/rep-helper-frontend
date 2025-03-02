@@ -51,7 +51,7 @@ const CreateTaskScreen = () => {
   const [isDatePickerVisible, setDatePickerVisibility] = useState(false);
   const [datePickerMode, setDatePickerMode] = useState<'date' | 'time'>('date');
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
-  const [availableUsers, setAvailableUsers] = useState<{uid: string, name: string, email: string, profilePictureUrl?: string}[]>([]);
+  const [availableUsers, setAvailableUsers] = useState<{uid: string, name: string, nickname:string, email: string, profilePictureUrl?: string}[]>([]);
   const [isUserModalVisible, setUserModalVisible] = useState(false);
   const [isCategoryModalVisible, setCategoryModalVisible] = useState(false);
   const [customCategory, setCustomCategory] = useState('');
@@ -272,7 +272,7 @@ const CreateTaskScreen = () => {
                       styles.userName,
                       availableUser.uid === user?.uid && styles.currentUserName
                     ]}>
-                      {availableUser.name} {availableUser.uid === user?.uid ? ' (Você)' : ''}
+                      {availableUser.nickname || availableUser.name} {availableUser.uid === user?.uid ? '(Você)' : ''}
                     </Text>
                     <Text style={styles.userEmail}>{availableUser.email}</Text>
                   </View>

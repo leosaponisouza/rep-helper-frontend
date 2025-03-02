@@ -209,9 +209,11 @@ const TaskItem: React.FC<TaskItemProps> = ({
                         style={styles.avatarImage}
                       />
                     ) : (
-                      <Text style={styles.avatarInitial}>
-                        {assignee.name?.charAt(0).toUpperCase() || '?'}
-                      </Text>
+                        <Text style={styles.avatarInitial}>
+                          {assignee.nickname
+                            ? assignee.nickname.charAt(0).toUpperCase()
+                            : assignee.name?.charAt(0).toUpperCase() || '?'}
+                        </Text>
                     )}
                     {assignee.id === currentUserId && (
                       <View style={styles.currentUserIndicator} />
