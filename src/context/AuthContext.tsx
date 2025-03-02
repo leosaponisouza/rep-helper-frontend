@@ -1,4 +1,4 @@
-import React, { createContext, useState, useEffect, useContext, ReactNode } from 'react';
+import React, { createContext, useState, useEffect, useContext, ReactNode, useCallback } from 'react';
 import { User } from '../models/user.model';
 import { 
   getToken, storeToken, removeToken, 
@@ -21,6 +21,7 @@ interface AuthContextProps {
   refreshToken: () => Promise<boolean>;
   isAuthenticated: boolean;
   error: string | null;
+  updateStoredUser: (userData: Partial<User>) => Promise<User | null>;
   clearError: () => void;
 }
 
@@ -45,6 +46,7 @@ const AuthContext = createContext<AuthContextProps>({
   refreshToken: async () => false,
   isAuthenticated: false,
   error: null,
+  updateStoredUser: async () => null,
   clearError: () => {}
 });
 
@@ -148,6 +150,39 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       throw error;
     }
   };
+// Dentro do componente AuthProvider
+const updateStoredUser = useCallback(async (userData: Partial<User>) => {
+  try {
+    // Recuperar usuário atual armazenado
+    const currentUserString = await getData('user');
+    
+    if (currentUserString) {
+      // Parse do usuário atual
+      const currentUser = JSON.parse(currentUserString);
+      
+      // Mesclar dados do usuário
+      const updatedUser = {
+        ...currentUser,
+        ...userData
+      };
+      
+      // Armazenar usuário atualizado
+      await storeData('user', JSON.stringify(updatedUser));
+      
+      // Atualizar estado do contexto
+      setUser(updatedUser);
+      
+      console.log('Usuário atualizado no contexto e storage:', updatedUser);
+      
+      return updatedUser;
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Erro ao atualizar usuário armazenado:', error);
+    return null;
+  }
+}, []);
 
   const loginWithCredentials = async (email: string, password: string): Promise<void> => {
     try {
@@ -259,6 +294,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       refreshToken,
       isAuthenticated: !!user, 
       error,
+      updateStoredUser,
       clearError
     }}>
       {children}

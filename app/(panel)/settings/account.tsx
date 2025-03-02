@@ -1,5 +1,5 @@
 // app/(panel)/settings/account.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -16,17 +16,18 @@ import {
   Platform,
   Keyboard
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useAuth } from '../../../src/context/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../../../src/services/api';
 import { ErrorHandler } from '../../../src/utils/errorHandling';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
+import { updateCurrentUser } from 'firebase/auth';
 
 const AccountScreen = () => {
   const router = useRouter();
-  const { user, login } = useAuth();
+  const { user, login, updateStoredUser } = useAuth();
   
   const [name, setName] = useState(user?.name || '');
   const [email, setEmail] = useState(user?.email || '');
@@ -38,7 +39,6 @@ const AccountScreen = () => {
   // Estados de foco para inputs
   const [nameFocused, setNameFocused] = useState(false);
   const [phoneFocused, setPhoneFocused] = useState(false);
-
   // Função para salvar alterações no perfil
   const handleSaveProfile = async () => {
     Keyboard.dismiss();
@@ -48,7 +48,7 @@ const AccountScreen = () => {
       Alert.alert('Erro', 'O nome é obrigatório');
       return;
     }
-
+   
     try {
       setLoading(true);
 
@@ -59,9 +59,8 @@ const AccountScreen = () => {
 
       const response = await api.put(`/api/v1/users/${user?.uid}`, userData);
       
-      if (response.data && response.data.user) {
-        // Atualizar os dados do usuário no contexto de autenticação
-        login(response.data.token, response.data.user);
+      if (response.data) {
+        await updateStoredUser(response.data);
         
         Alert.alert('Sucesso', 'Perfil atualizado com sucesso!');
       }
