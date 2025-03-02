@@ -1,4 +1,7 @@
 // app/(panel)/tasks/[id].tsx
+// Atualização da tela de detalhes de tarefa para destacar quando a tarefa está atribuída ao usuário atual
+// e melhorar a visualização de tarefas atribuídas ao usuário
+
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -22,6 +25,7 @@ import { useAuth } from '../../../src/context/AuthContext';
 import { format, formatDistance, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
+// Componente de crachá de status animado
 const AnimatedStatusBadge = ({ status }: { status: string }) => {
   const fadeAnim = React.useRef(new Animated.Value(0)).current;
   const statusColors = {
@@ -72,6 +76,18 @@ const AnimatedStatusBadge = ({ status }: { status: string }) => {
   );
 };
 
+// Banner de tarefas atribuídas ao usuário
+const UserAssignmentBanner = ({ isAssignedToCurrentUser }: { isAssignedToCurrentUser: boolean }) => {
+  if (!isAssignedToCurrentUser) return null;
+
+  return (
+    <View style={styles.userAssignmentBanner}>
+      <Ionicons name="person" size={18} color="#fff" />
+      <Text style={styles.userAssignmentText}>Você está atribuído a esta tarefa</Text>
+    </View>
+  );
+};
+
 const TaskDetailsScreen = () => {
   const router = useRouter();
   const { user } = useAuth();
@@ -82,6 +98,8 @@ const TaskDetailsScreen = () => {
   const [isStatusChanging, setIsStatusChanging] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  console.log('User Object:', JSON.stringify(user, null, 2));
+  console.log('User UID:', user?.uid);
   // Busca detalhes da tarefa
   useEffect(() => {
     const fetchTaskDetails = async () => {
@@ -100,8 +118,11 @@ const TaskDetailsScreen = () => {
     fetchTaskDetails();
   }, [id]);
 
+  // Verificar se usuário atual está atribuído à tarefa
+  const isAssignedToCurrentUser = task?.assignedUsers?.some(assignedUser => assignedUser.id === user?.uid);
+
   // Verificar se usuário atual pode editar
-  const canEditTask = task?.assignedUsers?.some(assignedUser => assignedUser.id === user?.uid);
+  const canEditTask = isAssignedToCurrentUser;
   const isUserAdmin = user?.isAdmin === true; // Assumindo que seu objeto de usuário tem este campo
   const canModifyTask = canEditTask || isUserAdmin;
 
@@ -146,6 +167,7 @@ const TaskDetailsScreen = () => {
       setIsStatusChanging(false);
     }
   };
+
   const handleCancelTask = async () => {
     if (!task || isCancelling) return;
 
@@ -326,6 +348,11 @@ const TaskDetailsScreen = () => {
         )}
       </View>
 
+      {/* Banner de tarefa atribuída ao usuário corrente */}
+      {isAssignedToCurrentUser && (
+        <UserAssignmentBanner isAssignedToCurrentUser={isAssignedToCurrentUser} />
+      )}
+
       <ScrollView
         style={styles.container}
         contentContainerStyle={styles.contentContainer}
@@ -499,16 +526,17 @@ const TaskDetailsScreen = () => {
         <View style={styles.sectionContainer}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Responsáveis</Text>
-            {canModifyTask && (
-              <TouchableOpacity onPress={() => {/* Add navigation to edit assignees */ }}>
-                <Text style={styles.sectionAction}>Editar</Text>
-              </TouchableOpacity>
-            )}
           </View>
 
           {task.assignedUsers && task.assignedUsers.length > 0 ? (
             task.assignedUsers.map(assignee => (
-              <View key={assignee.id} style={styles.assigneeRow}>
+              <View
+                key={assignee.id}
+                style={[
+                  styles.assigneeRow,
+                  assignee.id === user?.uid && styles.currentUserAssigneeRow
+                ]}
+              >
                 <View style={styles.assigneeAvatarContainer}>
                   {assignee.profilePictureUrl ? (
                     <Image
@@ -516,7 +544,10 @@ const TaskDetailsScreen = () => {
                       style={styles.assigneeAvatar}
                     />
                   ) : (
-                    <View style={styles.assigneeAvatarPlaceholder}>
+                    <View style={[
+                      styles.assigneeAvatarPlaceholder,
+                      assignee.id === user?.uid && styles.currentUserAvatarPlaceholder
+                    ]}>
                       <Text style={styles.assigneeInitials}>
                         {assignee.name.split(' ').map(n => n[0]).join('').toUpperCase()}
                       </Text>
@@ -529,7 +560,10 @@ const TaskDetailsScreen = () => {
                 </View>
 
                 <View style={styles.assigneeInfo}>
-                  <Text style={styles.assigneeName}>
+                  <Text style={[
+                    styles.assigneeName,
+                    assignee.id === user?.uid && styles.currentUserName
+                  ]}>
                     {assignee.name} {assignee.id === user?.uid ? '(Você)' : ''}
                   </Text>
                   <Text style={styles.assigneeEmail}>
@@ -546,11 +580,10 @@ const TaskDetailsScreen = () => {
         </View>
       </ScrollView>
 
-      {/* Edit Float Button for Admin/Owner */}
       {canModifyTask && (
         <TouchableOpacity
           style={styles.editButton}
-          onPress={() => {/* Navigate to edit screen */ }}
+          onPress={() => router.push(`/tasks/edit?id=${task.id}`)}
         >
           <Feather name="edit-2" size={20} color="#fff" />
         </TouchableOpacity>
@@ -605,6 +638,20 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     paddingBottom: 40,
+  },
+  userAssignmentBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#7B68EE',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    justifyContent: 'center',
+  },
+  userAssignmentText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginLeft: 8,
   },
   taskHeaderSection: {
     backgroundColor: '#333',
@@ -684,6 +731,9 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginLeft: 8,
   },
+  actionButtonDisabled: {
+    opacity: 0.7,
+  },
   sectionContainer: {
     backgroundColor: '#333',
     margin: 12,
@@ -759,6 +809,9 @@ const styles = StyleSheet.create({
     borderBottomColor: '#444',
     alignItems: 'center',
   },
+  currentUserAssigneeRow: {
+    backgroundColor: 'rgba(123, 104, 238, 0.1)',
+  },
   assigneeAvatarContainer: {
     position: 'relative',
     marginRight: 16,
@@ -775,6 +828,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#555',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  currentUserAvatarPlaceholder: {
+    backgroundColor: '#7B68EE',
   },
   assigneeInitials: {
     color: '#fff',
@@ -800,6 +856,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
   },
+  currentUserName: {
+    color: '#7B68EE',
+    fontWeight: 'bold',
+  },
   assigneeEmail: {
     color: '#aaa',
     fontSize: 14,
@@ -808,9 +868,6 @@ const styles = StyleSheet.create({
     color: '#aaa',
     padding: 16,
     fontStyle: 'italic',
-  },
-  actionButtonDisabled: {
-    opacity: 0.7,
   },
   editButton: {
     position: 'absolute',

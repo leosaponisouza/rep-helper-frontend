@@ -1,4 +1,4 @@
-// app/(panel)/tasks/create.tsx
+// app/(panel)/tasks/edit.tsx
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -17,7 +17,7 @@ import {
   Image
 } from 'react-native';
 import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -45,18 +45,20 @@ const taskSchema = z.object({
   category: z.string().optional(),
 });
 
-const CreateTaskScreen = () => {
+const EditTaskScreen = () => {
   const router = useRouter();
+  const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
   const [isDatePickerVisible, setDatePickerVisibility] = useState(false);
   const [datePickerMode, setDatePickerMode] = useState<'date' | 'time'>('date');
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
-  const [availableUsers, setAvailableUsers] = useState<{id: string, name: string, email: string, profilePictureUrl?: string}[]>([]);
+  const [availableUsers, setAvailableUsers] = useState<{uid: string, name: string, email: string, profilePictureUrl?: string}[]>([]);
   const [isUserModalVisible, setUserModalVisible] = useState(false);
   const [isCategoryModalVisible, setCategoryModalVisible] = useState(false);
   const [customCategory, setCustomCategory] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const { createTask, assignMultipleUsers } = useTasks();
+  const [isFetchingTask, setIsFetchingTask] = useState(true);
+  const { updateTask, assignMultipleUsers } = useTasks();
 
   const { 
     control, 
@@ -74,19 +76,44 @@ const CreateTaskScreen = () => {
       category: ''
     }
   });
+
+  // Fetch task data
   useEffect(() => {
-    return () => {
-      // Limpar o formulário quando a tela for desmontada
-      reset({
-        title: '',
-        description: '',
-        dueDate: undefined,
-        category: ''
-      });
-      setSelectedUsers([]);
-      // Limpar quaisquer outros estados relevantes
+    const fetchTaskDetails = async () => {
+      if (!id) return;
+      
+      try {
+        setIsFetchingTask(true);
+        const response = await api.get(`/api/v1/tasks/${id}`);
+        const task = response.data;
+        
+        // Populate form with task data
+        setValue('title', task.title);
+        setValue('description', task.description || '');
+        setValue('category', task.category || '');
+        
+        if (task.dueDate) {
+          setValue('dueDate', new Date(task.dueDate));
+        }
+        
+        // Set selected users - garantindo que os IDs sejam strings
+        if (task.assignedUsers && task.assignedUsers.length > 0) {
+            console.log(task.assignedUsers)
+          const userIds = task.assignedUsers.map((user: { id: any; }) => String(user.id));
+          setSelectedUsers(userIds);
+          console.log('Usuários atribuídos carregados:', userIds);
+        }
+      } catch (error) {
+        ErrorHandler.handle(error);
+        router.back();
+      } finally {
+        setIsFetchingTask(false);
+      }
     };
-  }, [reset]);
+  
+    fetchTaskDetails();
+  }, [id, setValue]);
+
   // Fetch republic users
   useEffect(() => {
     const fetchRepublicUsers = async () => {
@@ -95,11 +122,6 @@ const CreateTaskScreen = () => {
           const republicId = user.currentRepublicId;
           const response = await api.get(`/api/v1/republics/${republicId}/members`);
           setAvailableUsers(response.data);
-          
-          // Auto-select current user
-          if (user.uid) {
-            setSelectedUsers([user.uid]);
-          }
         } else {
           console.warn("current_republic_id não encontrado para o usuário.");
         }
@@ -110,15 +132,14 @@ const CreateTaskScreen = () => {
 
     fetchRepublicUsers();
   }, []);
-
   const toggleUserSelection = (userId: string) => {
+    const userIdStr = String(userId); // Garantir que é string
     setSelectedUsers(prev => 
-      prev.includes(userId)
-        ? prev.filter(id => id !== userId)
-        : [...prev, userId]
+      prev.includes(userIdStr)
+        ? prev.filter(id => id !== userIdStr)
+        : [...prev, userIdStr]
     );
   };
-
   const selectCategory = (category: string) => {
     setValue('category', category);
     setCategoryModalVisible(false);
@@ -190,112 +211,142 @@ const CreateTaskScreen = () => {
       const taskData = {
         title: data.title,
         description: data.description || '',
-        republicId: user?.currentRepublicId || '',
         dueDate: data.dueDate ? data.dueDate.toISOString() : undefined,
         category: data.category
       };
   
-      const createdTask = await createTask(taskData);
+      // Update the task
+      await updateTask(Number(id), taskData);
       
-      if (createdTask && createdTask.id) {
-        // Assign all selected users at once
-        await assignMultipleUsers(createdTask.id, selectedUsers);
-        
-        Alert.alert(
-          'Sucesso', 
-          'Tarefa criada com sucesso!', 
-          [{ 
-            text: 'OK', 
-            onPress: () => router.replace('/(panel)/tasks') // Isso vai direto para a lista de tarefas
-          }]
-        );
-      }
+      // Update assigned users
+      await assignMultipleUsers(Number(id), selectedUsers);
+      
+      Alert.alert(
+        'Sucesso', 
+        'Tarefa atualizada com sucesso!', 
+        [{ 
+          text: 'OK', 
+          onPress: () => router.replace('/(panel)/tasks') 
+        }]
+      );
     } catch (error) {
       ErrorHandler.handle(error);
     } finally {
       setIsLoading(false);
     }
   };
-  const renderUserSelectionModal = () => (
-    <Modal
-      animationType="slide"
-      transparent={true}
-      visible={isUserModalVisible}
-      onRequestClose={() => setUserModalVisible(false)}
-    >
-      <View style={styles.modalContainer}>
-        <View style={styles.modalContent}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Selecionar Responsáveis</Text>
-            <Text style={styles.modalSubtitle}>
-              Selecione os usuários responsáveis pela tarefa
-            </Text>
-          </View>
-          
-          <ScrollView style={styles.modalScrollView}>
-            {availableUsers.map(user => (
-              <TouchableOpacity
-                key={user.id}
-                style={[
-                  styles.userSelectItem,
-                  selectedUsers.includes(user.id) && styles.selectedUserItem
-                ]}
-                onPress={() => toggleUserSelection(user.id)}
-              >
-                <View style={styles.userSelectLeftContent}>
-                  {user.profilePictureUrl ? (
-                    <Image 
-                      source={{ uri: user.profilePictureUrl }} 
-                      style={styles.userAvatar}
-                    />
-                  ) : (
-                    <View style={styles.userAvatarPlaceholder}>
-                      <Text style={styles.userInitials}>
-                        {user.name.split(' ').map(n => n[0]).join('').toUpperCase()}
-                      </Text>
-                    </View>
-                  )}
-                  <View style={styles.userInfo}>
-                    <Text style={styles.userName}>{user.name}</Text>
-                    <Text style={styles.userEmail}>{user.email}</Text>
-                  </View>
-                </View>
-                
-                {selectedUsers.includes(user.id) ? (
-                  <View style={styles.userSelectedCheckmark}>
-                    <Ionicons name="checkmark-circle" size={24} color="#7B68EE" />
-                  </View>
-                ) : (
-                  <View style={styles.userUnselectedCheckmark}>
-                    <Ionicons name="ellipse-outline" size={24} color="#aaa" />
-                  </View>
-                )}
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-          
-          <View style={styles.modalFooter}>
-            <TouchableOpacity
-              style={styles.modalCancelButton}
-              onPress={() => setUserModalVisible(false)}
-            >
-              <Text style={styles.modalCancelButtonText}>Cancelar</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={styles.modalConfirmButton}
-              onPress={() => setUserModalVisible(false)}
-            >
-              <Text style={styles.modalConfirmButtonText}>
-                Confirmar ({selectedUsers.length})
+
+  const renderUserSelectionModal = () => {
+    console.log("User ID logado:", user?.uid); // Para depuração
+    
+    return (
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={isUserModalVisible}
+        onRequestClose={() => setUserModalVisible(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Selecionar Responsáveis</Text>
+              <Text style={styles.modalSubtitle}>
+                Selecione os usuários responsáveis pela tarefa
               </Text>
-            </TouchableOpacity>
+            </View>
+            
+            <ScrollView style={styles.modalScrollView}>
+              {availableUsers.map(availableUser => {
+                // Convertendo IDs para string para garantir comparação correta
+                const userId = String(availableUser.uid);
+                const isSelected = selectedUsers.includes(userId);
+                
+                // Verificação CORRETA do usuário atual - compare o ID do usuário disponível 
+                // com o ID do usuário logado no contexto de autenticação
+                const isCurrentUser = user && userId === String(user.uid);
+                
+                console.log(`Usuário ${availableUser.name}: ID=${userId}, isCurrentUser=${isCurrentUser}`);
+                
+                return (
+                  <TouchableOpacity
+                    key={userId}
+                    style={[
+                      styles.userSelectItem,
+                      isSelected && styles.selectedUserItem,
+                      isCurrentUser && styles.currentUserItem
+                    ]}
+                    onPress={() => toggleUserSelection(userId)}
+                  >
+                    <View style={styles.userSelectLeftContent}>
+                      {availableUser.profilePictureUrl ? (
+                        <Image 
+                          source={{ uri: availableUser.profilePictureUrl }} 
+                          style={styles.userAvatar}
+                        />
+                      ) : (
+                        <View style={[
+                          styles.userAvatarPlaceholder,
+                          isCurrentUser && styles.currentUserAvatarPlaceholder
+                        ]}>
+                          <Text style={styles.userInitials}>
+                            {availableUser.name.split(' ').map(n => n[0]).join('').toUpperCase()}
+                          </Text>
+                        </View>
+                      )}
+                      
+                      {isCurrentUser && (
+                        <View style={styles.currentUserIndicator} />
+                      )}
+                      
+                      <View style={styles.userInfo}>
+                        <Text style={[
+                          styles.userName,
+                          isCurrentUser && styles.currentUserName
+                        ]}>
+                          {availableUser.name} {isCurrentUser ? '(Você)' : ''}
+                        </Text>
+                        <Text style={styles.userEmail}>
+                          {availableUser.email}
+                        </Text>
+                      </View>
+                    </View>
+                    
+                    {isSelected ? (
+                      <View style={styles.userSelectedCheckmark}>
+                        <Ionicons name="checkmark-circle" size={24} color="#7B68EE" />
+                      </View>
+                    ) : (
+                      <View style={styles.userUnselectedCheckmark}>
+                        <Ionicons name="ellipse-outline" size={24} color="#aaa" />
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+            
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={styles.modalCancelButton}
+                onPress={() => setUserModalVisible(false)}
+              >
+                <Text style={styles.modalCancelButtonText}>Cancelar</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={styles.modalConfirmButton}
+                onPress={() => setUserModalVisible(false)}
+              >
+                <Text style={styles.modalConfirmButtonText}>
+                  Confirmar ({selectedUsers.length})
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
-      </View>
-    </Modal>
-  );
-
+      </Modal>
+    );
+  };
   const renderCategoryModal = () => (
     <Modal
       animationType="slide"
@@ -387,6 +438,18 @@ const CreateTaskScreen = () => {
     });
   };
 
+  if (isFetchingTask) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar barStyle="light-content" backgroundColor="#222" />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#7B68EE" />
+          <Text style={styles.loadingText}>Carregando tarefa...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" backgroundColor="#222" />
@@ -396,10 +459,10 @@ const CreateTaskScreen = () => {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         <View style={styles.headerContainer}>
-          <TouchableOpacity onPress={() =>{router.replace('/(panel)/tasks');}} style={styles.backButton}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color="#7B68EE" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Criar Tarefa</Text>
+          <Text style={styles.headerTitle}>Editar Tarefa</Text>
         </View>
 
         <ScrollView 
@@ -468,11 +531,11 @@ const CreateTaskScreen = () => {
               {selectedUsers.length > 0 && (
                 <View style={styles.selectedUsersPreview}>
                   {availableUsers
-                    .filter(user => selectedUsers.includes(user.id))
+                    .filter(user => selectedUsers.includes(user.uid))
                     .slice(0, 3)
                     .map((user, index) => (
                       <View 
-                        key={user.id} 
+                        key={user.uid} 
                         style={[
                           styles.userAvatarSmall, 
                           { marginLeft: index > 0 ? -10 : 0, zIndex: 10 - index }
@@ -502,7 +565,7 @@ const CreateTaskScreen = () => {
           </View>
 
           <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>Prazo (opcional)</Text>
+            <Text style={styles.inputLabel}>Data e Hora (opcional)</Text>
             <View style={styles.dateTimeContainer}>
               <TouchableOpacity 
                 style={styles.dateButton}
@@ -584,8 +647,8 @@ const CreateTaskScreen = () => {
               <ActivityIndicator size="small" color="#fff" />
             ) : (
               <>
-                <Ionicons name="add-circle" size={20} color="#fff" style={styles.submitButtonIcon} />
-                <Text style={styles.submitButtonText}>Criar Tarefa</Text>
+                <Ionicons name="save-outline" size={20} color="#fff" style={styles.submitButtonIcon} />
+                <Text style={styles.submitButtonText}>Salvar Alterações</Text>
               </>
             )}
           </TouchableOpacity>
@@ -627,6 +690,16 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#222',
     paddingHorizontal: 20,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    color: '#fff',
+    marginTop: 16,
+    fontSize: 16,
   },
   inputContainer: {
     marginTop: 20,
@@ -836,11 +909,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#444',
   },
-  userSelectLeftContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
   userAvatar: {
     width: 40,
     height: 40,
@@ -991,6 +1059,34 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
+  currentUserItem: {
+    backgroundColor: 'rgba(123, 104, 238, 0.1)',
+  },
+  currentUserName: {
+    color: '#7B68EE',
+    fontWeight: 'bold',
+  },
+  currentUserAvatarPlaceholder: {
+    backgroundColor: '#7B68EE',
+  },
+  currentUserIndicator: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#7B68EE',
+    borderWidth: 2,
+    borderColor: '#333',
+    zIndex: 1,
+  },
+  userSelectLeftContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    position: 'relative',
+  },
 });
 
-export default CreateTaskScreen;
+export default EditTaskScreen;

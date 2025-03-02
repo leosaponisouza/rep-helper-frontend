@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+// app/(panel)/home.tsx - Versão atualizada com recarga automática
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, 
   Text, 
@@ -7,15 +8,20 @@ import {
   TouchableOpacity, 
   RefreshControl,
   Dimensions,
+  ActivityIndicator,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../src/context/AuthContext';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { LineChart, LineChartData } from 'react-native-chart-kit';
+import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 import api from '../../src/services/api';
 import { ErrorHandler } from '../../src/utils/errorHandling';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'react-native';
+import { Task } from '../../src/hooks/useTasks';
+import { format, isToday, isTomorrow, parseISO } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+import { useFocusEffect } from '@react-navigation/native';
 
 // Tipos para melhor tipagem
 interface QuickAction {
@@ -33,19 +39,9 @@ interface HomeStats {
   republicName: string;
 }
 
-interface RecentActivity {
-  id: string;
-  type: 'task' | 'expense' | 'event';
-  title: string;
-  description: string;
-  timestamp: string;
-}
-
-interface ChartDataResponse {
-  labels: string[];
-  datasets: Array<{
-    data: number[];
-  }>;
+// Nova interface para tarefas do usuário
+interface UserTask extends Task {
+  isOverdue?: boolean;
 }
 
 const HomeScreen = () => {
@@ -53,47 +49,154 @@ const HomeScreen = () => {
   const { user, logout } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
   const [stats, setStats] = useState<HomeStats | null>(null);
-  const [recentActivities, setRecentActivities] = useState<RecentActivity[]>([]);
-  const [chartData, setChartData] = useState<LineChartData | null>(null);
+  const [userTasks, setUserTasks] = useState<UserTask[]>([]);
+  const [loadingTasks, setLoadingTasks] = useState(true);
+  const [taskError, setTaskError] = useState<string | null>(null);
+  const [lastRefresh, setLastRefresh] = useState(Date.now());
 
   // Buscar dados da home
   const fetchHomeData = async () => {
     try {
       setRefreshing(true);
-      const [statsResponse, activitiesResponse, chartResponse] = await Promise.all([
-        api.get('/home/stats'),
-        api.get('/home/recent-activities'),
-        api.get('/home/expense-chart')
-      ]);
-
-      setStats(statsResponse.data.data);
-      setRecentActivities(activitiesResponse.data.data);
+      console.log("Iniciando fetchHomeData");
       
-      // Mapear dados do gráfico para o formato do LineChart
-      const chartResponseData = chartResponse.data.data;
-      const formattedChartData: LineChartData = {
-        labels: Array.isArray(chartResponseData?.labels) ? chartResponseData.labels : [],
-        datasets: Array.isArray(chartResponseData?.datasets) 
-          ? chartResponseData.datasets.map(dataset => ({
-              data: Array.isArray(dataset.data) 
-                ? dataset.data.map(value => Number(value) || 0) 
-                : []
-            }))
-          : [],
-        legend: ['Despesas']
-      };
-
-      setChartData(formattedChartData);
+      // Carregar estatísticas
+      try {
+        const statsResponse = await api.get('/home/stats');
+        if (statsResponse?.data?.data) {
+          setStats(statsResponse.data.data);
+          console.log("Estatísticas carregadas com sucesso");
+        }
+      } catch (statsError) {
+        console.error("Erro ao carregar estatísticas:", statsError);
+      }
+      
+      // Buscar tarefas do usuário
+      await fetchUserTasks();
+      
+      // Atualizar timestamp da última atualização
+      setLastRefresh(Date.now());
     } catch (error) {
+      console.error("Erro em fetchHomeData:", error);
       ErrorHandler.handle(error);
     } finally {
       setRefreshing(false);
+      console.log("Finalizando fetchHomeData");
+    }
+  };
+  
+  // Função atualizada para buscar tarefas do usuário
+  const fetchUserTasks = async () => {
+    try {
+      setLoadingTasks(true);
+      setTaskError(null);
+      console.log("Iniciando fetchUserTasks");
+      
+      // Chamar o endpoint com tratamento completo de erros
+      console.log("Chamando API /api/v1/tasks/assigned");
+      const response = await api.get('/api/v1/tasks/assigned');
+      console.log("Resposta de API recebida:", response.status);
+      
+      // Verificar se o formato da resposta é um array
+      if (!response || !response.data) {
+        console.error("Resposta da API inválida");
+        setTaskError("Resposta da API inválida");
+        setUserTasks([]);
+        return;
+      }
+      
+      const tasks = response.data;
+      console.log(`Recebidas ${Array.isArray(tasks) ? tasks.length : 'não é array'} tarefas`);
+      
+      // Garantir que temos um array
+      if (!Array.isArray(tasks)) {
+        console.error("Dados retornados não são um array:", tasks);
+        setTaskError("Formato de dados inválido");
+        setUserTasks([]);
+        return;
+      }
+      
+      // Filtrar apenas tarefas ativas (não completas ou canceladas)
+      const activeTasks = tasks.filter(task => 
+        task && task.status && ['PENDING', 'IN_PROGRESS', 'OVERDUE'].includes(task.status)
+      );
+      console.log(`Tarefas ativas: ${activeTasks.length}`);
+      
+      // Adicionar informação de atraso
+      const tasksWithOverdueInfo = activeTasks.map(task => {
+        try {
+          let isOverdue = false;
+          
+          if (task.dueDate) {
+            const dueDate = parseISO(task.dueDate);
+            const now = new Date();
+            isOverdue = dueDate < now;
+          }
+          
+          return {
+            ...task,
+            isOverdue
+          };
+        } catch (error) {
+          console.error("Erro ao processar tarefa:", error);
+          return task;
+        }
+      });
+      
+      // Ordenar com segurança
+      const sortedTasks = [...tasksWithOverdueInfo].sort((a, b) => {
+        try {
+          // Prioridade para tarefas atrasadas
+          if (a.isOverdue && !b.isOverdue) return -1;
+          if (!a.isOverdue && b.isOverdue) return 1;
+          
+          // Se ambas têm data de vencimento, ordenar por data (mais próximas primeiro)
+          if (a.dueDate && b.dueDate) {
+            return parseISO(a.dueDate).getTime() - parseISO(b.dueDate).getTime();
+          }
+          
+          // Tarefas sem data de vencimento vão por último
+          if (!a.dueDate && b.dueDate) return 1;
+          if (a.dueDate && !b.dueDate) return -1;
+          
+          return 0;
+        } catch (error) {
+          console.error("Erro ao ordenar tarefas:", error);
+          return 0;
+        }
+      });
+      
+      console.log(`Atualizando estado com ${Math.min(5, sortedTasks.length)} tarefas`);
+      setUserTasks(sortedTasks.slice(0, 5)); // Mostrar apenas as 5 primeiras tarefas
+    } catch (error) {
+      console.error("Erro em fetchUserTasks:", error);
+      setTaskError(error.message || "Erro ao buscar tarefas");
+      setUserTasks([]);
+    } finally {
+      setLoadingTasks(false);
+      console.log("Finalizando fetchUserTasks");
     }
   };
 
+  // Carregar quando montar o componente
   useEffect(() => {
+    console.log("Efeito inicial - montando componente");
     fetchHomeData();
   }, []);
+  
+  // Recarregar sempre que a tela receber foco
+  useFocusEffect(
+    useCallback(() => {
+      console.log('Tela Home recebeu foco, recarregando dados...');
+      // Recarregar dados sempre que a tela receber foco
+      fetchHomeData();
+      
+      return () => {
+        // Cleanup se necessário
+        console.log('Tela Home perdeu foco');
+      };
+    }, [])
+  );
 
   // Ações rápidas
   const quickActions: QuickAction[] = [
@@ -102,21 +205,41 @@ const HomeScreen = () => {
       title: 'Nova Tarefa',
       icon: 'plus-circle-outline',
       color: '#7B68EE',
-      onPress: () => router.push('/(panel)/tasks/create')
+      onPress: () => {
+        // Ir para a tab de tarefas primeiro, depois para a tela de criação
+        router.push('/(panel)/tasks');
+        
+        // Pequeno delay para garantir que a navegação para a tab ocorra primeiro
+        setTimeout(() => {
+          router.push('/(panel)/tasks/create');
+        }, 100);
+      }
     },
     {
       id: 'new-expense',
       title: 'Registrar Despesa',
       icon: 'cash-plus',
       color: '#7B68EE',
-      onPress: () => router.push('/(panel)/expenses/create')
+      onPress: () => {
+        // Mesmo padrão para despesas
+        router.push('/(panel)/expenses');
+        setTimeout(() => {
+          router.push('/(panel)/expenses/create');
+        }, 100);
+      }
     },
     {
       id: 'new-event',
       title: 'Novo Evento',
       icon: 'calendar-plus',
       color: '#7B68EE',
-      onPress: () => router.push('/(panel)/events/create')
+      onPress: () => {
+        // Mesmo padrão para eventos
+        router.push('/(panel)/events');
+        setTimeout(() => {
+          router.push('/(panel)/events/create');
+        }, 100);
+      }
     }
   ];
 
@@ -136,35 +259,101 @@ const HomeScreen = () => {
       </Text>
     </TouchableOpacity>
   );
-
-  // Renderizar atividade recente
-  const RecentActivityItem = ({ activity }: { activity: RecentActivity }) => {
-    const getIconAndColor = () => {
-      switch (activity.type) {
-        case 'task':
-          return { icon: 'checklist', color: '#7B68EE' };
-        case 'expense':
-          return { icon: 'cash', color: '#7B68EE' };
-        case 'event':
-          return { icon: 'calendar', color: '#7B68EE' };
-        default:
-          return { icon: 'information-outline', color: '#9E9E9E' };
+  
+  // Formatador de datas para tarefas
+  const formatTaskDueDate = (dateString?: string) => {
+    if (!dateString) return null;
+    
+    try {
+      const dueDate = parseISO(dateString);
+      
+      if (isToday(dueDate)) {
+        return { text: 'Hoje', color: '#FF9800' };
+      } else if (isTomorrow(dueDate)) {
+        return { text: 'Amanhã', color: '#FF9800' };
+      } else {
+        const formattedDate = format(dueDate, 'dd/MM', { locale: ptBR });
+        const now = new Date();
+        return { 
+          text: formattedDate, 
+          color: dueDate < now ? '#F44336' : '#7B68EE' 
+        };
       }
-    };
-
-    const { icon, color } = getIconAndColor();
-
+    } catch (error) {
+      console.error("Erro ao formatar data:", error, dateString);
+      return { text: 'Data inválida', color: '#9E9E9E' };
+    }
+  };
+  
+  // Renderizador de item de tarefa
+  const TaskItem = ({ task }: { task: UserTask }) => {
+    const dueDate = formatTaskDueDate(task.dueDate);
+    
     return (
-      <View style={styles.activityItem}>
-        <View style={[styles.activityIconContainer, { backgroundColor: color + '15' }]}>
-          <MaterialCommunityIcons name={icon} size={24} color={color} />
+      <TouchableOpacity 
+        style={[
+          styles.taskItem, 
+          task.isOverdue && styles.overdueTaskItem
+        ]}
+        onPress={() => {
+          
+          router.push(`/(panel)/tasks/${task.id}`)}}
+      >
+        <View style={styles.taskItemHeader}>
+          <Text style={styles.taskTitle} numberOfLines={1}>
+            {task.title}
+          </Text>
+          
+          {task.category && (
+            <View style={styles.categoryChip}>
+              <FontAwesome5 name="tag" size={12} color="#7B68EE" />
+              <Text style={styles.categoryText}>{task.category}</Text>
+            </View>
+          )}
         </View>
-        <View style={styles.activityDetails}>
-          <Text style={styles.activityTitle}>{activity.title}</Text>
-          <Text style={styles.activityDescription}>{activity.description}</Text>
+        
+        <View style={styles.taskItemFooter}>
+          {dueDate && (
+            <View style={styles.dueDateContainer}>
+              <Ionicons 
+                name="calendar" 
+                size={14} 
+                color={dueDate.color} 
+              />
+              <Text style={[styles.dueDateText, { color: dueDate.color }]}>
+                {dueDate.text}
+              </Text>
+            </View>
+          )}
+          
+          <TouchableOpacity 
+            style={styles.completeTaskButton}
+            onPress={() => {
+              router.push('/(panel)/tasks');
+                  
+              // Pequeno delay para garantir que a navegação para a tab ocorra primeiro
+              setTimeout(() => {
+                router.push(`/(panel)/tasks/${task.id}`);
+              }, 100);
+            }}
+          >
+            <Text style={styles.completeTaskText}>Concluir</Text>
+          </TouchableOpacity>
         </View>
-      </View>
+      </TouchableOpacity>
     );
+  };
+
+  // Função para chamar a função fetchUserTasks diretamente
+  const retryLoadingTasks = () => {
+    console.log("Tentando recarregar tarefas");
+    fetchUserTasks();
+  };
+  
+  // Função forçar recarga total
+  const forceRefresh = () => {
+    console.log("Forçando recarga completa");
+    fetchHomeData();
   };
 
   return (
@@ -175,7 +364,7 @@ const HomeScreen = () => {
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={fetchHomeData}
+            onRefresh={forceRefresh}
             colors={['#7B68EE']}
             tintColor={'#7B68EE'}
           />
@@ -219,34 +408,66 @@ const HomeScreen = () => {
           </View>
         </View>
 
-        {/* Gráfico de Despesas */}
-        {chartData && (
-          <View style={styles.sectionContainer}>
-            <Text style={styles.sectionTitle}>Resumo de Despesas</Text>
-            <LineChart
-              data={chartData}
-              width={Dimensions.get('window').width - 40}
-              height={220}
-              yAxisLabel="R$ "
-              chartConfig={{
-                backgroundColor: '#333',
-                backgroundGradientFrom: '#333',
-                backgroundGradientTo: '#333',
-                decimalPlaces: 2,
-                color: (opacity = 1) => `rgba(123, 104, 238, ${opacity})`,
-                labelColor: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
-                style: { borderRadius: 16 },
-                propsForDots: {
-                  r: "6",
-                  strokeWidth: "2",
-                  stroke: "#7B68EE"
-                }
-              }}
-              bezier
-              style={styles.chart}
-            />
+        {/* Seção de Tarefas do Usuário */}
+        <View style={styles.sectionContainer}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Minhas Tarefas</Text>
+            <TouchableOpacity 
+              onPress={() => router.push('/(panel)/tasks/?filter=my-tasks')}
+              style={styles.viewAllButton}
+            >
+              <Text style={styles.viewAllText}>Ver todas</Text>
+              <Ionicons name="arrow-forward" size={16} color="#7B68EE" />
+            </TouchableOpacity>
           </View>
-        )}
+          
+          {loadingTasks ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="small" color="#7B68EE" />
+              <Text style={styles.loadingText}>Carregando tarefas...</Text>
+            </View>
+          ) : taskError ? (
+            <View style={styles.errorContainer}>
+              <Ionicons name="alert-circle" size={40} color="#FF6347" />
+              <Text style={styles.errorText}>{taskError}</Text>
+              <TouchableOpacity 
+                style={styles.retryButton}
+                onPress={retryLoadingTasks}
+              >
+                <Text style={styles.retryButtonText}>Tentar novamente</Text>
+              </TouchableOpacity>
+            </View>
+          ) : userTasks.length > 0 ? (
+            <View style={styles.tasksContainer}>
+              {userTasks.map(task => (
+                <TaskItem key={task.id?.toString()} task={task} />
+              ))}
+            </View>
+          ) : (
+            <View style={styles.emptyTasksContainer}>
+              <MaterialCommunityIcons 
+                name="checkbox-marked-circle-outline" 
+                size={40} 
+                color="#7B68EE" 
+              />
+              <Text style={styles.emptyTasksText}>
+                Você não tem tarefas atribuídas.
+              </Text>
+              <TouchableOpacity 
+                style={styles.createTaskButton}
+                onPress={() => {  // Ir para a tab de tarefas primeiro, depois para a tela de criação
+                  router.push('/(panel)/tasks');
+                  
+                  // Pequeno delay para garantir que a navegação para a tab ocorra primeiro
+                  setTimeout(() => {
+                    router.push('/(panel)/tasks/create');
+                  }, 100);}}
+              >
+                <Text style={styles.createTaskText}>Criar uma tarefa</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
 
         {/* Ações Rápidas */}
         <View style={styles.sectionContainer}>
@@ -260,21 +481,6 @@ const HomeScreen = () => {
               <QuickActionButton key={action.id} action={action} />
             ))}
           </ScrollView>
-        </View>
-
-        {/* Atividades Recentes */}
-        <View style={styles.sectionContainer}>
-          <Text style={styles.sectionTitle}>Atividades Recentes</Text>
-          {recentActivities.length > 0 ? (
-            recentActivities.map(activity => (
-              <RecentActivityItem 
-                key={activity.id} 
-                activity={activity} 
-              />
-            ))
-          ) : (
-            <Text style={styles.emptyStateText}>Nenhuma atividade recente</Text>
-          )}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -338,11 +544,137 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#444',
   },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 15,
     color: '#fff',
+  },
+  viewAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  viewAllText: {
+    color: '#7B68EE',
+    marginRight: 4,
+    fontSize: 14,
+  },
+  loadingContainer: {
+    padding: 20,
+    alignItems: 'center',
+  },
+  loadingText: {
+    color: '#aaa',
+    marginTop: 10,
+  },
+  errorContainer: {
+    padding: 20,
+    alignItems: 'center',
+  },
+  errorText: {
+    color: '#FF6347',
+    marginTop: 10,
+    textAlign: 'center',
+    marginBottom: 15,
+  },
+  retryButton: {
+    backgroundColor: '#333',
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#7B68EE',
+  },
+  retryButtonText: {
+    color: '#7B68EE',
+    fontWeight: 'bold',
+  },
+  tasksContainer: {
+    marginBottom: 10,
+  },
+  taskItem: {
+    backgroundColor: '#444',
+    borderRadius: 10,
+    padding: 15,
+    marginBottom: 10,
+  },
+  overdueTaskItem: {
+    borderLeftWidth: 3,
+    borderLeftColor: '#F44336',
+  },
+  taskItemHeader: {
+    marginBottom: 10,
+  },
+  taskTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 5,
+  },
+  categoryChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(123, 104, 238, 0.15)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+  },
+  categoryText: {
+    color: '#7B68EE',
+    fontSize: 12,
+    marginLeft: 4,
+  },
+  taskItemFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  dueDateContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  dueDateText: {
+    fontSize: 13,
+    marginLeft: 5,
+  },
+  completeTaskButton: {
+    backgroundColor: '#7B68EE',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 15,
+  },
+  completeTaskText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  emptyTasksContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  emptyTasksText: {
+    color: '#aaa',
+    marginVertical: 10,
+    textAlign: 'center',
+  },
+  createTaskButton: {
+    backgroundColor: '#7B68EE',
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginTop: 10,
+  },
+  createTaskText: {
+    color: '#fff',
+    fontWeight: 'bold',
   },
   quickActionsScroll: {
     flexDirection: 'row',
@@ -360,44 +692,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#fff',
   },
-  chart: {
-    marginVertical: 8,
-    borderRadius: 16,
-  },
-  activityItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 15,
-    backgroundColor: '#444',
-    padding: 15,
-    borderRadius: 10,
-  },
-  activityIconContainer: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 15,
-  },
-  activityDetails: {
-    flex: 1,
-  },
-  activityTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#fff',
-  },
-  activityDescription: {
-    fontSize: 14,
-    color: '#aaa',
-    marginTop: 5,
-  },
-  emptyStateText: {
-    textAlign: 'center',
-    color: '#aaa',
-    fontStyle: 'italic',
-  },
 });
 
-export default HomeScreen
+export default HomeScreen;

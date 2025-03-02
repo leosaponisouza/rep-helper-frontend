@@ -31,6 +31,13 @@ export default function TasksLayout() {
         }} 
       />
       <Stack.Screen 
+        name="edit" 
+        options={{ 
+          title: 'Editar Tarefa',
+          headerShown: false 
+        }} 
+      />
+      <Stack.Screen 
         name="[id]" 
         options={{ 
           title: 'Detalhes da Tarefa',
