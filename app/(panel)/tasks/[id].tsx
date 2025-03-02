@@ -128,14 +128,25 @@ const TaskDetailsScreen = () => {
 
   const handleToggleStatus = async () => {
     if (!task || isStatusChanging) return;
-
+  
     try {
       setIsStatusChanging(true);
-
-      // Atualização otimista da UI
-      const newStatus = task.status === 'COMPLETED' ? 'PENDING' : 'COMPLETED';
+  
+      // Determinamos o novo status com base no status atual
+      let newStatus: "PENDING" | "IN_PROGRESS" | "COMPLETED" | "OVERDUE" | "CANCELLED";
+      
+      if (task.status === 'COMPLETED') {
+        newStatus = 'PENDING';
+      } else if (task.status === 'PENDING') {
+        newStatus = 'IN_PROGRESS';
+      } else if (task.status === 'IN_PROGRESS') {
+        newStatus = 'COMPLETED';
+      } else {
+        newStatus = task.status; // Mantém o status atual se for um dos outros tipos
+      }
+      
       const newCompletedAt = newStatus === 'COMPLETED' ? new Date().toISOString() : null;
-
+  
       // Atualiza o estado local imediatamente
       setTask(prev => {
         if (!prev) return null;
@@ -145,11 +156,13 @@ const TaskDetailsScreen = () => {
           completedAt: newCompletedAt
         };
       });
-
-      // Requisição ao backend em segundo plano
+  
+      // Requisição ao backend
       if (task.status === 'COMPLETED') {
-        await updateTask(task.id, { status: 'PENDING' });
-      } else {
+        await updateTask(task.id, { ...task, status: 'PENDING' });
+      } else if (task.status === 'PENDING') {
+        await updateTask(task.id, { ...task, status: 'IN_PROGRESS' });
+      } else if (task.status === 'IN_PROGRESS') {
         await completeTask(task.id);
       }
     } catch (error) {
@@ -167,7 +180,6 @@ const TaskDetailsScreen = () => {
       setIsStatusChanging(false);
     }
   };
-
   const handleCancelTask = async () => {
     if (!task || isCancelling) return;
 
@@ -379,48 +391,73 @@ const TaskDetailsScreen = () => {
         </View>
 
         {/* Action Buttons */}
-        {isTaskActive && canModifyTask && (
-          <View style={styles.actionButtonsContainer}>
-            <TouchableOpacity
-              style={[
-                styles.actionButton,
-                styles.primaryButton,
-                isStatusChanging && styles.actionButtonDisabled
-              ]}
-              onPress={handleToggleStatus}
-              disabled={isStatusChanging}
-            >
-              {isStatusChanging ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <>
-                  <Ionicons name="checkmark-circle" size={18} color="#fff" />
-                  <Text style={styles.primaryButtonText}>Concluir Tarefa</Text>
-                </>
-              )}
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.actionButton,
-                styles.secondaryButton,
-                isCancelling && styles.actionButtonDisabled
-              ]}
-              onPress={confirmCancelTask}
-              disabled={isCancelling}
-            >
-              {isCancelling ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <>
-                  <Ionicons name="close-circle" size={18} color="#fff" />
-                  <Text style={styles.secondaryButtonText}>Cancelar</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          </View>
+{/* Action Buttons */}
+{isTaskActive && canModifyTask && (
+  <View style={styles.actionButtonsContainer}>
+    {task.status === 'PENDING' && (
+      <TouchableOpacity
+        style={[
+          styles.actionButton,
+          styles.primaryButton,
+          isStatusChanging && styles.actionButtonDisabled
+        ]}
+        onPress={handleToggleStatus}
+        disabled={isStatusChanging}
+      >
+        {isStatusChanging ? (
+          <ActivityIndicator size="small" color="#fff" />
+        ) : (
+          <>
+            <Ionicons name="play-circle" size={18} color="#fff" />
+            <Text style={styles.primaryButtonText}>Iniciar Tarefa</Text>
+          </>
         )}
-
+      </TouchableOpacity>
+    )}
+    
+    {task.status === 'IN_PROGRESS' && (
+      <TouchableOpacity
+        style={[
+          styles.actionButton,
+          styles.primaryButton,
+          isStatusChanging && styles.actionButtonDisabled
+        ]}
+        onPress={handleToggleStatus}
+        disabled={isStatusChanging}
+      >
+        {isStatusChanging ? (
+          <ActivityIndicator size="small" color="#fff" />
+        ) : (
+          <>
+            <Ionicons name="checkmark-circle" size={18} color="#fff" />
+            <Text style={styles.primaryButtonText}>Concluir Tarefa</Text>
+          </>
+        )}
+      </TouchableOpacity>
+    )}
+    
+    <View style={styles.buttonSpacer} />
+    
+    <TouchableOpacity
+      style={[
+        styles.actionButton,
+        styles.secondaryButton,
+        isCancelling && styles.actionButtonDisabled
+      ]}
+      onPress={confirmCancelTask}
+      disabled={isCancelling}
+    >
+      {isCancelling ? (
+        <ActivityIndicator size="small" color="#fff" />
+      ) : (
+        <>
+          <Ionicons name="close-circle" size={18} color="#fff" />
+          <Text style={styles.secondaryButtonText}>Cancelar</Text>
+        </>
+      )}
+    </TouchableOpacity>
+  </View>
+)}
         {/* Botão para reabrir tarefas concluídas */}
         {isTaskCompleted && canModifyTask && (
           <View style={styles.actionButtonsContainer}>
@@ -444,7 +481,6 @@ const TaskDetailsScreen = () => {
             </TouchableOpacity>
           </View>
         )}
-
         {/* Description */}
         <View style={styles.sectionContainer}>
           <View style={styles.sectionHeader}>
@@ -698,6 +734,7 @@ const styles = StyleSheet.create({
   actionButtonsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 16,
     backgroundColor: '#2A2A2A',
@@ -709,17 +746,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 8,
-    paddingVertical: 10,
+    paddingVertical: 12,
     paddingHorizontal: 16,
+    flex: 1,
   },
   primaryButton: {
     backgroundColor: '#7B68EE',
-    flex: 1,
-    marginRight: 10,
+    maxWidth: '60%', // Limita a largura para não ficar muito próximo do outro botão
   },
   secondaryButton: {
     backgroundColor: '#555',
-    flex: 0.6,
+    maxWidth: '35%', // Menor que o botão principal
+  },
+  buttonSpacer: {
+    width: 12, // Espaço entre os botões
   },
   primaryButtonText: {
     color: '#fff',
