@@ -378,9 +378,6 @@ const HomeScreen = () => {
               {stats?.republicName || 'Sua República'}
             </Text>
           </View>
-          <TouchableOpacity onPress={logout}>
-            <Ionicons name="log-out-outline" size={28} color="#7B68EE" />
-          </TouchableOpacity>
         </View>
 
         {/* Estatísticas Rápidas */}

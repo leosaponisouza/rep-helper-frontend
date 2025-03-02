@@ -23,7 +23,11 @@ export default function SettingsLayout() {
       }}
     >
       <Stack.Screen name="index" options={{ headerShown: false }} />
-      <Stack.Screen name="account" options={{ title: 'Conta' }} />
+      <Stack.Screen name="account" options={{ 
+        headerTitle: '',
+        headerBackVisible: true,
+        headerLeft: undefined 
+      }} />
       <Stack.Screen name="notifications" options={{ title: 'Notificações' }} />
       <Stack.Screen name="theme" options={{ title: 'Tema' }} />
       <Stack.Screen name="about" options={{ title: 'Sobre' }} />
