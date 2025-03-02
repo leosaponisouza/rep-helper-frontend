@@ -11,6 +11,7 @@ export interface Task {
   republicId: string;
   republicName: string;
   assignedUsers: {
+    nickname: string;
     id: string;
     name: string;
     email: string;
