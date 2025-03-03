@@ -31,6 +31,13 @@ export default function EventsLayout() {
         }} 
       />
       <Stack.Screen 
+        name="calendar" 
+        options={{ 
+          title: 'Calendário',
+          headerShown: false 
+        }} 
+      />
+      <Stack.Screen 
         name="create" 
         options={{ 
           title: 'Criar Evento',

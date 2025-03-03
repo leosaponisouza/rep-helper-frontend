@@ -7,28 +7,130 @@ import {
   FlatList, 
   TouchableOpacity, 
   RefreshControl,
-  SafeAreaView,
-  StatusBar,
   Alert,
-  ActivityIndicator,
   Image,
-  ScrollView
+  ActivityIndicator
 } from 'react-native';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import TaskFilter, { FilterOption } from '../../../components/TaskFilter';
 import { useEvents, Event } from '../../../src/hooks/useEvents';
 import { useAuth } from '../../../src/context/AuthContext';
-import { format, parseISO, isToday, isTomorrow, isPast, isFuture, isAfter } from 'date-fns';
+import { format, parseISO, isToday, isTomorrow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { useFocusEffect } from '@react-navigation/native';
 
-interface EventFilterProps {
-  activeFilter: string;
-  onFilterChange: (filter: string) => void;
+// Interface de tipos para as propriedades do EventItem
+interface EventItemProps {
+  item: Event;
+  currentUserId?: string;
 }
 
-// Componente de filtro para eventos
-const EventFilter: React.FC<EventFilterProps> = ({ activeFilter, onFilterChange }) => {
-  const filters = [
+const EventItem: React.FC<EventItemProps> = ({ 
+  item, 
+  currentUserId
+}) => {
+  const router = useRouter();
+  const isAssignedToCurrentUser = item.invitations?.some(user => user.userId === currentUserId);
+  
+  const getStatusColor = (event: Event) => {
+    if (event.isFinished) return '#9E9E9E';
+    if (event.isHappening) return '#4CAF50';
+    return '#7B68EE';
+  };
+
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return null;
+    
+    const date = new Date(dateString);
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    const isEventToday = date.toDateString() === today.toDateString();
+    const isEventTomorrow = date.toDateString() === tomorrow.toDateString();
+    
+    const formattedDate = format(date, "dd/MM", { locale: ptBR });
+    const formattedTime = format(date, "HH:mm", { locale: ptBR });
+    
+    if (isEventToday) return { text: `Hoje, ${formattedTime}`, isSpecial: true, isOverdue: false };
+    if (isEventTomorrow) return { text: `Amanhã, ${formattedTime}`, isSpecial: true, isOverdue: false };
+    
+    return { 
+      text: `${formattedDate}, ${formattedTime}`, 
+      isSpecial: false, 
+      isOverdue: false 
+    };
+  };
+  
+  // Formata a data para exibição
+  const formattedDate = formatDate(item.startDate);
+  
+  // Get confirmed invitations count safely
+  const confirmedCount = item.invitations 
+    ? item.invitations.filter(inv => inv.status === 'CONFIRMED').length 
+    : 0;
+  
+  return (
+    <TouchableOpacity
+      style={[
+        styles.eventItem, 
+        { borderLeftColor: getStatusColor(item) }
+      ]}
+      onPress={() => router.push(`/(panel)/events/${item.id}`)}
+    >
+      <View style={styles.eventContent}>
+        <View style={styles.eventMainContent}>
+          <Text style={styles.eventTitle} numberOfLines={1}>
+            {item.title}
+          </Text>
+          
+          <View style={styles.eventDateTimeContainer}>
+            <View style={styles.dateTimeRow}>
+              <Ionicons name="time-outline" size={16} color="#7B68EE" style={styles.eventIcon} />
+              <Text style={[
+                styles.eventDateTime,
+                formattedDate?.isSpecial && styles.specialDateText
+              ]}>
+                {formattedDate?.text}
+              </Text>
+            </View>
+            
+            {item.location && (
+              <View style={styles.locationContainer}>
+                <Ionicons name="location-outline" size={16} color="#aaa" style={styles.eventIcon} />
+                <Text style={styles.eventLocation} numberOfLines={1}>{item.location}</Text>
+              </View>
+            )}
+          </View>
+          
+          <View style={styles.eventFooter}>
+            <View style={styles.participantsContainer}>
+              <Ionicons name="people-outline" size={16} color="#aaa" style={styles.eventIcon} />
+              <Text style={styles.participantsText}>
+                {confirmedCount} confirmados
+              </Text>
+            </View>
+            
+            {item.creatorId === currentUserId && (
+              <View style={styles.creatorBadge}>
+                <Text style={styles.creatorText}>Criador</Text>
+              </View>
+            )}
+          </View>
+        </View>
+        
+        <Ionicons name="chevron-forward" size={20} color="#7B68EE" />
+      </View>
+    </TouchableOpacity>
+  );
+};
+const EventsListScreen = () => {
+  const router = useRouter();
+  const { user } = useAuth();
+  const [filter, setFilter] = useState<string>('all');
+
+  const eventFilters: FilterOption[] = [
     { key: 'all', label: 'Todos' },
     { key: 'upcoming', label: 'Próximos' },
     { key: 'today', label: 'Hoje' },
@@ -37,145 +139,31 @@ const EventFilter: React.FC<EventFilterProps> = ({ activeFilter, onFilterChange 
     { key: 'past', label: 'Passados' }
   ];
 
-  return (
-    <View style={styles.filterContainer}>
-      <ScrollView 
-        horizontal 
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.filterScrollContent}
-      >
-        {filters.map(filter => (
-          <TouchableOpacity
-            key={filter.key}
-            style={[
-              styles.filterButton,
-              activeFilter === filter.key && styles.activeFilterButton
-            ]}
-            onPress={() => onFilterChange(filter.key)}
-          >
-            <Text 
-              style={[
-                styles.filterButtonText,
-                activeFilter === filter.key && styles.activeFilterButtonText
-              ]}
-            >
-              {filter.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-    </View>
-  );
-};
-
-const EventItem: React.FC<{ event: Event }> = ({ event }) => {
-  const router = useRouter();
-  const { user } = useAuth();
-  const { getCurrentUserEventStatus } = useEvents();
-  
-  // Adicionando verificação de segurança
-  if (!event || !event.invitations) {
-    // Retornar um componente de fallback ou null
-    return (
-      <View style={styles.eventItemError}>
-        <Text style={styles.eventItemErrorText}>Informações do evento indisponíveis</Text>
-      </View>
-    );
-  }
-  
-  // Verificar status do usuário no evento - com verificação de segurança
-  const userStatus = getCurrentUserEventStatus ? getCurrentUserEventStatus(event) : null;
-  
-  // Verificar se evento está acontecendo agora
-  const isHappening = event.isHappening;
-  
-  // Verificar se evento já passou
-  const isFinished = event.isFinished;
-  
-  // Formatar data
-  const formatEventDate = (dateString: string) => {
-    try {
-      const date = parseISO(dateString);
-      
-      if (isToday(date)) {
-        return `Hoje, ${format(date, "HH:mm", { locale: ptBR })}`;
-      } else if (isTomorrow(date)) {
-        return `Amanhã, ${format(date, "HH:mm", { locale: ptBR })}`;
-      } else {
-        return format(date, "dd/MM, HH:mm", { locale: ptBR });
-      }
-    } catch (error) {
-      return dateString;
-    }
-  };
-
-  // Verificar se o usuário é o criador
-  const isCreator = user?.uid === event.creatorId;
-
-  // Estado de cor para o evento
-  const getEventStatusColor = () => {
-    if (isFinished) {
-      return '#9E9E9E'; // Cinza para eventos passados
-    } else if (isHappening) {
-      return '#4CAF50'; // Verde para eventos acontecendo
-    } else if (userStatus === 'CONFIRMED') {
-      return '#7B68EE'; // Roxo para eventos confirmados
-    } else if (userStatus === 'INVITED') {
-      return '#FFC107'; // Amarelo para convites pendentes
-    } else {
-      return '#7B68EE'; // Roxo padrão
-    }
-  };
-
-  const statusColor = getEventStatusColor();
-  
-  // Contagem de participantes confirmados - com verificação de segurança
-  const confirmedCount = event.invitations ? 
-    event.invitations.filter(inv => inv.status === 'CONFIRMED').length : 0;
-
-  return (
-    <TouchableOpacity 
-      style={[
-        styles.eventItem,
-        { borderLeftColor: statusColor }
-      ]}
-      onPress={() => router.push({
-        pathname: "/(panel)/events/[id]",
-        params: { id: event.id.toString() }
-      })}
-      activeOpacity={0.7}
-    >
-      {/* O restante do componente permanece o mesmo */}
-    </TouchableOpacity>
-  );
-};
-
-// Componente de listagem de eventos
-const EventsListScreen: React.FC = () => {
-  const router = useRouter();
-  const { filter: urlFilter } = useLocalSearchParams<{ filter?: string }>();
-  const { user } = useAuth();
-  
   const {
     events,
     loading,
-    error,
     fetchEvents,
     fetchUpcomingEvents,
     fetchInvitedEvents,
     fetchConfirmedEvents,
     applyFilter,
     filterType
-  } = useEvents({ initialFilter: urlFilter || 'all' });
+  } = useEvents();
 
-  // Função para mudar filtro 
+  // Recarregar eventos quando a tela receber foco
+  useFocusEffect(
+    useCallback(() => {
+      refreshEvents();
+    }, [])
+  );
+
+  // Função para mudar filtro localmente
   const handleFilterChange = useCallback((newFilter: string) => {
+    setFilter(newFilter);
     applyFilter(newFilter);
-  }, [applyFilter]);
-
-  // Função para recarregar eventos
-  const refreshEvents = useCallback(() => {
-    switch (filterType) {
+    
+    // Se o filtro for específico, faça a chamada API correspondente
+    switch (newFilter) {
       case 'upcoming':
         fetchUpcomingEvents();
         break;
@@ -189,24 +177,43 @@ const EventsListScreen: React.FC = () => {
         fetchEvents();
         break;
     }
-  }, [fetchEvents, fetchUpcomingEvents, fetchInvitedEvents, fetchConfirmedEvents, filterType]);
+  }, [applyFilter, fetchUpcomingEvents, fetchInvitedEvents, fetchConfirmedEvents, fetchEvents]);
+
+  // Função de atualização para o componente
+  const refreshEvents = useCallback(() => {
+    switch (filter) {
+      case 'upcoming':
+        fetchUpcomingEvents();
+        break;
+      case 'invited':
+        fetchInvitedEvents();
+        break;
+      case 'confirmed':
+        fetchConfirmedEvents();
+        break;
+      default:
+        fetchEvents();
+        break;
+    }
+  }, [fetchUpcomingEvents, fetchInvitedEvents, fetchConfirmedEvents, fetchEvents, filter]);
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="light-content" backgroundColor="#222" />
-      
-      <View style={styles.headerContainer}>
-        <Text style={styles.headerTitle}>Eventos</Text>
-        <EventFilter 
-          activeFilter={filterType}
-          onFilterChange={handleFilterChange}
-        />
-      </View>
+    <View style={styles.container}>
+      <TaskFilter 
+        filters={eventFilters}
+        activeFilter={filter}
+        onFilterChange={handleFilterChange}
+      />
 
       <FlatList
         data={events}
         keyExtractor={(item) => item.id?.toString() || ''}
-        renderItem={({ item }) => <EventItem event={item} />}
+        renderItem={({ item }) => (
+          <EventItem 
+            item={item}
+            currentUserId={user?.uid}
+          />
+        )}
         ListEmptyComponent={() => (
           <View style={styles.emptyStateContainer}>
             <MaterialCommunityIcons 
@@ -216,16 +223,16 @@ const EventsListScreen: React.FC = () => {
             />
             <Text style={styles.emptyStateText}>
               {loading ? 'Carregando eventos...' : 
-               filterType === 'invited' ? 'Nenhum convite pendente' : 
-               filterType === 'confirmed' ? 'Nenhum evento confirmado' :
-               filterType === 'today' ? 'Nenhum evento para hoje' :
-               filterType === 'upcoming' ? 'Nenhum evento próximo' :
-               filterType === 'past' ? 'Nenhum evento passado' :
-               'Nenhum evento encontrado'}
+              filter === 'invited' ? 'Nenhum convite pendente' : 
+              filter === 'confirmed' ? 'Nenhum evento confirmado' :
+              filter === 'today' ? 'Nenhum evento para hoje' :
+              filter === 'upcoming' ? 'Nenhum evento próximo' :
+              filter === 'past' ? 'Nenhum evento passado' :
+              'Nenhum evento encontrado'}
             </Text>
             <Text style={styles.emptyStateSubtext}>
               {!loading && (
-                filterType === 'all' ? 'Crie seu primeiro evento clicando no botão "+' : 
+                filter === 'all' ? 'Crie seu primeiro evento clicando no botão "+' : 
                 'Ajuste os filtros ou crie um novo evento'
               )}
             </Text>
@@ -244,62 +251,14 @@ const EventsListScreen: React.FC = () => {
           events.length === 0 && { flex: 1, justifyContent: 'center' }
         ]}
       />
-
-      <TouchableOpacity 
-        style={styles.addButton} 
-        onPress={() => router.push('/(panel)/events/create')}
-      >
-        <Ionicons name="add" size={24} color="white" />
-      </TouchableOpacity>
-    </SafeAreaView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  safeArea: {
+  container: {
     flex: 1,
     backgroundColor: '#222',
-  },
-  headerContainer: {
-    backgroundColor: '#333',
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#444',
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 15,
-  },
-  filterContainer: {
-    marginBottom: 10,
-  },
-  filterScrollContent: {
-    paddingRight: 20,
-  },
-  filterButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    marginRight: 10,
-    borderRadius: 20,
-    backgroundColor: '#444',
-    borderWidth: 1,
-    borderColor: '#555',
-  },
-  activeFilterButton: {
-    backgroundColor: '#7B68EE',
-    borderColor: '#7B68EE',
-  },
-  filterButtonText: {
-    color: '#ccc',
-    fontSize: 14,
-  },
-  activeFilterButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
   },
   listContainer: {
     flexGrow: 1,
@@ -313,36 +272,24 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginBottom: 12,
     borderLeftWidth: 4,
-    borderLeftColor: '#7B68EE',
     overflow: 'hidden',
   },
   eventContent: {
     padding: 16,
-  },
-  eventHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
+  },
+  eventMainContent: {
+    flex: 1,
   },
   eventTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#fff',
-    flex: 1,
-    marginRight: 10,
-  },
-  statusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: 'bold',
+    marginBottom: 8,
   },
   eventDateTimeContainer: {
-    marginBottom: 10,
+    marginBottom: 8,
   },
   dateTimeRow: {
     flexDirection: 'row',
@@ -356,10 +303,13 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 14,
   },
+  specialDateText: {
+    color: '#7B68EE',
+    fontWeight: 'bold',
+  },
   locationContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 10,
   },
   eventLocation: {
     color: '#ccc',
@@ -390,22 +340,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: 'bold',
   },
-  addButton: {
-    position: 'absolute',
-    bottom: 20,
-    right: 20,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#7B68EE',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#7B68EE',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4.65,
-    elevation: 8,
-  },
   emptyStateContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -423,20 +357,6 @@ const styles = StyleSheet.create({
     color: '#aaa',
     marginTop: 10,
     textAlign: 'center',
-  },
-   
-  eventItemError: {
-    backgroundColor: '#333',
-    borderRadius: 10,
-    marginBottom: 12,
-    padding: 16,
-    borderLeftWidth: 4,
-    borderLeftColor: '#FF6347', // Vermelho para indicar erro
-  },
-  eventItemErrorText: {
-    color: '#FF6347',
-    fontSize: 14,
-    fontStyle: 'italic',
   },
 });
 
