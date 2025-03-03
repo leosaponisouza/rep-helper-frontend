@@ -23,21 +23,23 @@ const HomeContainer: React.FC<HomeContainerProps> = ({
   onRefresh 
 }) => {
   return (
-    <SafeAreaView 
-      style={styles.safeArea} 
-      edges={['top', 'right', 'left']}
-    >
-      <StatusBar barStyle="light-content" backgroundColor="#7B68EE" />
-      
-      {/* Gradiente de fundo que se estende até o topo */}
-      <View style={styles.headerBackground}>
-        <LinearGradient
-          colors={['#7B68EE', '#6A5ACD']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.gradient}
-        />
-      </View>
+<SafeAreaView style={styles.safeArea} edges={['top', 'bottom', 'right', 'left']}>
+<StatusBar
+    barStyle="light-content" 
+    backgroundColor="#7B68EE" // Mesma cor do header
+  />
+
+<View style={styles.headerBackground}>
+    <LinearGradient
+      // Se quiser o mesmo roxo em todo o topo, use a mesma cor
+      // colors={['#7B68EE', '#7B68EE']}
+      // Ou mantenha seu degradê:
+      colors={['#7B68EE', '#6A5ACD']}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={styles.gradient}
+    />
+  </View>
       
       <ScrollView 
         style={styles.scrollView}
@@ -61,14 +63,16 @@ const HomeContainer: React.FC<HomeContainerProps> = ({
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#7B68EE',
+    // Deixe como transparente, pois o gradiente já cuida do fundo
+    backgroundColor: 'transparent'
   },
   headerBackground: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    height: 200, // Altura do gradiente
+    // Ajuste essa altura para cobrir a StatusBar + parte do header
+    height: 200,
     zIndex: 0,
   },
   gradient: {
@@ -79,13 +83,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   scrollContent: {
-    paddingBottom: 30,
+    // Aumente este paddingTop para ficar abaixo do gradiente
+    paddingTop: 200,
     backgroundColor: '#1a1a1a',
-    borderTopLeftRadius: 0,
-    borderTopRightRadius: 0,
-    // Padding para começar abaixo do header roxo
-    paddingTop: 120,
-  }
+    paddingBottom: 30,
+  },
 });
 
 export default HomeContainer;

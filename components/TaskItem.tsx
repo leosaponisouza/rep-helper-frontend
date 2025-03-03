@@ -236,7 +236,7 @@ const EnhancedTaskItem: React.FC<TaskItemProps> = ({
 const styles = StyleSheet.create({
   taskItem: {
     backgroundColor: '#333',
-    borderRadius: 10,
+    borderRadius: 12,
     marginBottom: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
