@@ -1,5 +1,5 @@
 // app/(panel)/events/index.tsx
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   View, 
   Text, 
@@ -7,7 +7,10 @@ import {
   TouchableOpacity, 
   SafeAreaView, 
   StatusBar, 
-  ActivityIndicator 
+  ActivityIndicator,
+  ScrollView,
+  Dimensions,
+  Animated
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,45 +19,56 @@ import CalendarScreen from './calendar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 
-// Chave para armazenar a tab ativa
+// Constantes para armazenamento
 const EVENTS_ACTIVE_TAB_KEY = 'events_active_tab';
+const EVENTS_ACTIVE_FILTER_KEY = 'events_active_filter';
+
+// Definição dos filtros
+const EVENT_FILTERS = [
+  { key: 'all', label: 'Todos' },
+  { key: 'upcoming', label: 'Próximos' },
+  { key: 'today', label: 'Hoje' },
+  { key: 'confirmed', label: 'Confirmados' },
+  { key: 'invited', label: 'Convites' },
+  { key: 'past', label: 'Passados' }
+];
 
 const EventsTabsScreen = () => {
-  const [activeTab, setActiveTab] = useState('list'); // 'list' ou 'calendar'
+  const [activeTab, setActiveTab] = useState('list');
+  const [activeFilter, setActiveFilter] = useState('all');
   const [initialLoading, setInitialLoading] = useState(true);
   const router = useRouter();
+  const scrollViewRef = useRef(null);
+  const scrollX = useRef(new Animated.Value(0)).current;
 
-  // Carregar a última tab ativa ao montar o componente
+  // Carregar configurações salvas
   useEffect(() => {
-    const loadLastActiveTab = async () => {
+    const loadLastActiveSettings = async () => {
       try {
         const savedTab = await AsyncStorage.getItem(EVENTS_ACTIVE_TAB_KEY);
+        const savedFilter = await AsyncStorage.getItem(EVENTS_ACTIVE_FILTER_KEY);
+
         if (savedTab && (savedTab === 'list' || savedTab === 'calendar')) {
           setActiveTab(savedTab);
         }
+
+        if (savedFilter) {
+          setActiveFilter(savedFilter);
+        }
       } catch (error) {
-        console.error('Error loading active tab:', error);
+        console.error('Error loading active settings:', error);
       } finally {
         setInitialLoading(false);
       }
     };
     
-    loadLastActiveTab();
+    loadLastActiveSettings();
   }, []);
 
-  // Quando a tela receber foco, recarregar as preferências
-  useFocusEffect(
-    useCallback(() => {
-      // Você pode adicionar aqui lógica adicional quando a tela receber foco
-      // Por exemplo, atualizar dados de eventos se necessário
-    }, [])
-  );
-
-  // Lidar com a mudança de tab e persistir a escolha
+  // Handlers para mudança de tab e filtro
   const handleTabChange = useCallback(async (tab: string) => {
     setActiveTab(tab);
     
-    // Persistir a escolha da tab para uso futuro
     try {
       await AsyncStorage.setItem(EVENTS_ACTIVE_TAB_KEY, tab);
     } catch (error) {
@@ -62,17 +76,27 @@ const EventsTabsScreen = () => {
     }
   }, []);
 
-  // Função para navegar para a criação de evento
+  const handleFilterChange = useCallback(async (filter: string) => {
+    setActiveFilter(filter);
+    
+    try {
+      await AsyncStorage.setItem(EVENTS_ACTIVE_FILTER_KEY, filter);
+    } catch (error) {
+      console.error('Error saving active filter:', error);
+    }
+  }, []);
+
+  // Navegação para criação de evento
   const navigateToCreateEvent = useCallback(() => {
     router.push('/(panel)/events/create');
   }, [router]);
 
-  // Renderiza o conteúdo da tab ativa
+  // Renderizar conteúdo da tab ativa
   const renderTabContent = () => {
     if (activeTab === 'calendar') {
       return <CalendarScreen />;
     } else {
-      return <EventsList />;
+      return <EventsList initialFilter={activeFilter} />;
     }
   };
 
@@ -94,51 +118,103 @@ const EventsTabsScreen = () => {
       <View style={styles.headerContainer}>
         <Text style={styles.headerTitle}>Eventos</Text>
         <View style={styles.tabsContainer}>
-          <TouchableOpacity
-            style={[
-              styles.tabButton,
-              activeTab === 'list' && styles.activeTabButton
-            ]}
-            onPress={() => handleTabChange('list')}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: activeTab === 'list' }}
-            accessibilityLabel="Lista de eventos"
-          >
-            <Ionicons 
-              name="list" 
-              size={20} 
-              color={activeTab === 'list' ? '#7B68EE' : '#aaa'} 
-            />
-            <Text style={[
-              styles.tabText,
-              activeTab === 'list' && styles.activeTabText
-            ]}>
-              Lista
-            </Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={[
-              styles.tabButton,
-              activeTab === 'calendar' && styles.activeTabButton
-            ]}
-            onPress={() => handleTabChange('calendar')}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: activeTab === 'calendar' }}
-            accessibilityLabel="Calendário de eventos"
-          >
-            <Ionicons 
-              name="calendar" 
-              size={20} 
-              color={activeTab === 'calendar' ? '#7B68EE' : '#aaa'} 
-            />
-            <Text style={[
-              styles.tabText,
-              activeTab === 'calendar' && styles.activeTabText
-            ]}>
-              Calendário
-            </Text>
-          </TouchableOpacity>
+          <View style={styles.tabRowContainer}>
+            {/* Tabs */}
+            <TouchableOpacity
+              style={[
+                styles.tabButton,
+                activeTab === 'list' && styles.activeTabButton
+              ]}
+              onPress={() => handleTabChange('list')}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: activeTab === 'list' }}
+              accessibilityLabel="Lista de eventos"
+            >
+              <Ionicons 
+                name="list" 
+                size={20} 
+                color={activeTab === 'list' ? '#7B68EE' : '#aaa'} 
+              />
+              <Text style={[
+                styles.tabText,
+                activeTab === 'list' && styles.activeTabText
+              ]}>
+                Lista
+              </Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={[
+                styles.tabButton,
+                activeTab === 'calendar' && styles.activeTabButton
+              ]}
+              onPress={() => handleTabChange('calendar')}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: activeTab === 'calendar' }}
+              accessibilityLabel="Calendário de eventos"
+            >
+              <Ionicons 
+                name="calendar" 
+                size={20} 
+                color={activeTab === 'calendar' ? '#7B68EE' : '#aaa'} 
+              />
+              <Text style={[
+                styles.tabText,
+                activeTab === 'calendar' && styles.activeTabText
+              ]}>
+                Calendário
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Filters (only show when in list tab) */}
+          {activeTab === 'list' && (
+            <View style={styles.filtersWrapper}>
+              <TouchableOpacity 
+                style={styles.scrollButton} 
+              >
+                <Ionicons name="chevron-back" size={20} color="#7B68EE" />
+              </TouchableOpacity>
+              
+              <ScrollView 
+                ref={scrollViewRef}
+                horizontal 
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.filtersContainer}
+                snapToInterval={120}
+                decelerationRate="fast"
+                scrollEventThrottle={16}
+                onScroll={Animated.event(
+                  [{ nativeEvent: { contentOffset: { x: scrollX } } }],
+                  { useNativeDriver: false }
+                )}
+              >
+                {EVENT_FILTERS.map((filter) => (
+                  <TouchableOpacity
+                    key={filter.key}
+                    style={[
+                      styles.filterButton,
+                      activeFilter === filter.key && styles.activeFilterButton
+                    ]}
+                    onPress={() => handleFilterChange(filter.key)}
+                  >
+                    <Text style={[
+                      styles.filterText,
+                      activeFilter === filter.key && styles.activeFilterText
+                    ]}>
+                      {filter.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+              
+              <TouchableOpacity 
+                style={styles.scrollButton} 
+              >
+                <Ionicons name="chevron-forward" size={20} color="#7B68EE" />
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
       </View>
       
@@ -185,10 +261,13 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   tabsContainer: {
-    flexDirection: 'row',
     borderRadius: 12,
     backgroundColor: '#444',
     padding: 4,
+    marginBottom: 8,
+  },
+  tabRowContainer: {
+    flexDirection: 'row',
     marginBottom: 8,
   },
   tabButton: {
@@ -210,6 +289,43 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   activeTabText: {
+    color: '#7B68EE',
+    fontWeight: 'bold',
+  },
+  filtersWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  scrollButton: {
+    paddingHorizontal: 10,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  filtersContainer: {
+    paddingHorizontal: 8,
+    alignItems: 'center',
+  },
+  filterButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginRight: 8,
+    borderRadius: 8,
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: 'rgba(123, 104, 238, 0.3)',
+  },
+  activeFilterButton: {
+    backgroundColor: 'rgba(123, 104, 238, 0.2)',
+    borderColor: '#7B68EE',
+  },
+  filterText: {
+    color: '#aaa',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  activeFilterText: {
     color: '#7B68EE',
     fontWeight: 'bold',
   },

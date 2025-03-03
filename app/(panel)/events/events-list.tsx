@@ -7,13 +7,10 @@ import {
   FlatList, 
   TouchableOpacity, 
   RefreshControl,
-  Image,
-  ActivityIndicator,
-  Alert
+  ActivityIndicator
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import TaskFilter, { FilterOption } from '../../../components/TaskFilter';
 import { useEvents, Event } from '../../../src/hooks/useEvents';
 import { useAuth } from '../../../src/context/AuthContext';
 import { format, parseISO, isToday, isTomorrow, isPast } from 'date-fns';
@@ -26,6 +23,7 @@ interface EventItemProps {
   currentUserId?: string;
   onPress: (eventId: number) => void;
 }
+
 
 const EventItem: React.FC<EventItemProps> = ({ 
   item, 
@@ -194,14 +192,18 @@ const EventItem: React.FC<EventItemProps> = ({
   );
 };
 
-const EventsListScreen: React.FC = () => {
+interface EventsListProps {
+  initialFilter?: string;
+}
+
+const EventsListScreen: React.FC<EventsListProps> = ({ initialFilter = 'all' }) => {
   const router = useRouter();
   const { user } = useAuth();
-  const [filter, setFilter] = useState<string>('all');
+  const [filter, setFilter] = useState<string>(initialFilter);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
 
   // Definição das opções de filtro
-  const eventFilters: FilterOption[] = [
+  const eventFilters = [
     { key: 'all', label: 'Todos' },
     { key: 'upcoming', label: 'Próximos' },
     { key: 'today', label: 'Hoje' },
@@ -235,10 +237,12 @@ const EventsListScreen: React.FC = () => {
     }, [lastRefresh])
   );
 
-  // Carregar eventos inicialmente
+  // Carregar eventos inicialmente com o filtro inicial
   useEffect(() => {
-    refreshEventsList();
-  }, []);
+    // Apply the initial filter when component mounts
+    applyFilter(initialFilter);
+    refreshEvents(initialFilter);
+  }, [initialFilter]);
 
   // Função de atualização para o componente
   const refreshEventsList = useCallback(async () => {
@@ -259,12 +263,6 @@ const EventsListScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      <TaskFilter 
-        filters={eventFilters}
-        activeFilter={filter}
-        onFilterChange={handleFilterChange}
-      />
-
       <FlatList
         data={events}
         keyExtractor={(item) => item.id?.toString() || Math.random().toString()}
