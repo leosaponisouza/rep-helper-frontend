@@ -341,8 +341,7 @@ const styles = StyleSheet.create({
   myTaskItem: {
     borderLeftWidth: 3,
     borderLeftColor: '#7B68EE',
-    borderTopLeftRadius: 0,
-    borderBottomLeftRadius: 0,
+    borderRadius: 10
   },
   checkboxContainer: {
     justifyContent: 'center',
