@@ -1,4 +1,4 @@
-// app/(panel)/events/calendar.tsx
+// app/(panel)/events/calendar.tsx - Fixed version with improved null checks and error handling
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
-  Modal,
   SafeAreaView,
   StatusBar,
   FlatList,
@@ -43,7 +42,7 @@ const CalendarScreen: React.FC = () => {
   const { user } = useAuth();
   const { events, loading, fetchEvents } = useEvents();
   const [selectedDate, setSelectedDate] = useState<string>('');
-  const [markedDates, setMarkedDates] = useState({});
+  const [markedDates, setMarkedDates] = useState<Record<string, MarkedDate>>({});
   const [selectedDateEvents, setSelectedDateEvents] = useState<Event[]>([]);
   const [modalVisible, setModalVisible] = useState<boolean>(false);
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
@@ -81,28 +80,32 @@ const CalendarScreen: React.FC = () => {
 
   // Processar eventos para marcação no calendário
   useEffect(() => {
-    if (events.length > 0) {
+    if (events && events.length > 0) {
       const dates: Record<string, MarkedDate> = {};
       
       events.forEach(event => {
         if (!event.startDate) return; // Verificar se startDate existe
         
-        const dateStr = event.startDate.split('T')[0]; // Formato YYYY-MM-DD
-        
-        if (!dates[dateStr]) {
-          dates[dateStr] = {
-            marked: true,
-            dotColor: '#7B68EE',
-            dots: []
-          };
-        }
-        
-        // Limite a 3 dots por data
-        if (dates[dateStr].dots && dates[dateStr].dots.length < 3) {
-          dates[dateStr].dots.push({
-            color: getEventColor(event),
-            key: event.id.toString()
-          });
+        try {
+          const dateStr = event.startDate.split('T')[0]; // Formato YYYY-MM-DD
+          
+          if (!dates[dateStr]) {
+            dates[dateStr] = {
+              marked: true,
+              dotColor: '#7B68EE',
+              dots: []
+            };
+          }
+          
+          // Limite a 3 dots por data
+          if (dates[dateStr].dots && dates[dateStr].dots.length < 3) {
+            dates[dateStr].dots.push({
+              color: getEventColor(event),
+              key: String(event.id) // Ensure key is a string
+            });
+          }
+        } catch (error) {
+          console.error('Error processing event date:', error);
         }
       });
       
@@ -110,7 +113,8 @@ const CalendarScreen: React.FC = () => {
       if (selectedDate) {
         dates[selectedDate] = {
           ...dates[selectedDate],
-          selected: true
+          selected: true,
+          selectedColor: '#7B68EE'
         };
       }
       
@@ -127,7 +131,7 @@ const CalendarScreen: React.FC = () => {
     
     // Remover seleção anterior
     Object.keys(updatedMarkedDates).forEach(key => {
-      if (updatedMarkedDates[key].selected) {
+      if (updatedMarkedDates[key]?.selected) {
         updatedMarkedDates[key] = {
           ...updatedMarkedDates[key],
           selected: false
@@ -153,8 +157,10 @@ const CalendarScreen: React.FC = () => {
     setSelectedDateEvents(dayEvents);
   };
 
-// Fixed getEventColor function with null check for invitations
-const getEventColor = (event: Event): string => {
+  // Fixed getEventColor function with proper null checks
+  const getEventColor = (event: Event): string => {
+    if (!event) return '#7B68EE'; // Default color
+    
     // Verificar se é um evento atrasado ou cancelado
     if (event.isFinished) return '#9E9E9E';
     
@@ -162,7 +168,7 @@ const getEventColor = (event: Event): string => {
     if (event.isHappening) return '#4CAF50';
     
     // Verificar status do convite para o usuário atual
-    if (user && event.invitations) {
+    if (user && event.invitations && Array.isArray(event.invitations)) {
       const userInvitation = event.invitations.find(inv => inv.userId === user.uid);
       
       if (userInvitation) {
@@ -178,6 +184,7 @@ const getEventColor = (event: Event): string => {
     // Padrão para todos os outros casos
     return '#7B68EE';
   };
+
   // Formatar hora do evento
   const formatEventTime = (dateString?: string): string => {
     if (!dateString) return '';
@@ -186,6 +193,7 @@ const getEventColor = (event: Event): string => {
       const date = parseISO(dateString);
       return format(date, "HH:mm", { locale: ptBR });
     } catch (error) {
+      console.error('Error formatting event time:', dateString, error);
       return '';
     }
   };
@@ -205,17 +213,18 @@ const getEventColor = (event: Event): string => {
         return format(date, "dd 'de' MMMM", { locale: ptBR });
       }
     } catch (error) {
+      console.error('Error formatting date:', dateString, error);
       return dateString;
     }
   };
 
-  // Renderização de cada evento na lista de eventos do dia
-// Fixed renderEventItem function with null check for invitations
-const renderEventItem = ({ item }: ListRenderItemInfo<Event>): React.ReactElement => {
+  // Fixed renderEventItem function with proper null checks
+  const renderEventItem = ({ item }: ListRenderItemInfo<Event>): React.ReactElement => {
     // Calculate confirmed count safely
-    const confirmedCount = item.invitations 
-      ? item.invitations.filter(inv => inv.status === 'CONFIRMED').length 
-      : 0;
+    let confirmedCount = 0;
+    if (item.invitations && Array.isArray(item.invitations)) {
+      confirmedCount = item.invitations.filter(inv => inv.status === 'CONFIRMED').length;
+    }
       
     return (
       <TouchableOpacity
@@ -235,7 +244,7 @@ const renderEventItem = ({ item }: ListRenderItemInfo<Event>): React.ReactElemen
         
         <View style={styles.eventContent}>
           <Text style={styles.eventTitle} numberOfLines={1}>
-            {item.title}
+            {item.title || 'Evento sem título'}
           </Text>
           
           {item.location && (
@@ -262,13 +271,7 @@ const renderEventItem = ({ item }: ListRenderItemInfo<Event>): React.ReactElemen
     );
   };
 
-  // Mostrar modal de detalhes de evento
-  const showEventDetailsModal = (event: Event): void => {
-    setSelectedEvent(event);
-    setModalVisible(true);
-  };
-
-  if (loading && events.length === 0) {
+  if (loading && (!events || events.length === 0)) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <StatusBar barStyle="light-content" backgroundColor="#222" />
@@ -283,18 +286,6 @@ const renderEventItem = ({ item }: ListRenderItemInfo<Event>): React.ReactElemen
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" backgroundColor="#222" />
-      
-      <View style={styles.headerContainer}>
-        <Text style={styles.headerTitle}>Calendário</Text>
-        <View style={styles.headerActions}>
-          <TouchableOpacity 
-            style={styles.listViewButton}
-            onPress={() => router.replace('/(panel)/events/index')}
-          >
-            <Ionicons name="list" size={22} color="#7B68EE" />
-          </TouchableOpacity>
-        </View>
-      </View>
       
       <View style={styles.container}>
         {/* Calendário */}
@@ -328,7 +319,7 @@ const renderEventItem = ({ item }: ListRenderItemInfo<Event>): React.ReactElemen
             {selectedDateEvents.length > 0 ? (
               <FlatList
                 data={selectedDateEvents}
-                keyExtractor={(item) => item.id.toString()}
+                keyExtractor={(item) => String(item.id)}
                 renderItem={renderEventItem}
                 style={styles.eventsList}
               />
@@ -400,23 +391,27 @@ const styles = StyleSheet.create({
   listViewButton: {
     padding: 8,
   },
-  container: {
-    flex: 1,
-    backgroundColor: '#222',
-  },
-  calendar: {
-    marginBottom: 10,
-    backgroundColor: '#333',
-    borderRadius: 12,
-    padding: 10,
-    margin: 10,
-  },
   eventsContainer: {
     flex: 1,
+    minHeight: 200, // Altura mínima garantida
+    maxHeight: Dimensions.get('window').height * 0.4, // Limita a altura máxima
     backgroundColor: '#222',
     borderTopWidth: 1,
     borderTopColor: '#444',
     padding: 10,
+  },
+  calendar: {
+    backgroundColor: '#333',
+    borderRadius: 12,
+    padding: 10,
+    margin: 10,
+    // Remover height fixo
+  },
+  container: {
+    flex: 1,
+    backgroundColor: '#222',
+    // Adicionar justifyContent para melhor distribuição
+    justifyContent: 'flex-start', 
   },
   selectedDateHeader: {
     flexDirection: 'row',

@@ -1,4 +1,4 @@
-// app/(panel)/events/[id].tsx
+// app/(panel)/events/[id].tsx - Enhanced version with better error handling and UX
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -11,6 +11,7 @@ import {
   Alert,
   ActivityIndicator,
   Image,
+  Share
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
@@ -18,7 +19,7 @@ import { useEvents, Event, InvitationStatus } from '../../../src/hooks/useEvents
 import { useAuth } from '../../../src/context/AuthContext';
 import api from '../../../src/services/api';
 import { ErrorHandler } from '../../../src/utils/errorHandling';
-import { format, parseISO, isToday, isTomorrow, isPast, addDays } from 'date-fns';
+import { format, parseISO, isToday, isTomorrow, isPast, addDays, differenceInDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { getDisplayName } from '../../../src/utils/userUtils';
 
@@ -42,7 +43,11 @@ const EventDetailsScreen: React.FC = () => {
   // Buscar dados do evento
   useEffect(() => {
     const fetchEventDetails = async () => {
-      if (!id) return;
+      if (!id) {
+        setEventExists(false);
+        setLoading(false);
+        return;
+      }
       
       try {
         setLoading(true);
@@ -78,6 +83,12 @@ const EventDetailsScreen: React.FC = () => {
       const response = await api.get(`/api/v1/events/${id}`);
       setEvent(response.data);
       
+      // Mostrar mensagem de confirmação
+      const actionText = status === 'CONFIRMED' ? 'confirmado' : 'recusado';
+      Alert.alert(
+        'Sucesso',
+        `Você ${actionText} sua participação no evento.`
+      );
     } catch (error) {
       ErrorHandler.handle(error);
     } finally {
@@ -85,11 +96,36 @@ const EventDetailsScreen: React.FC = () => {
     }
   };
   
-  // Formatar intervalo de data/hora do evento
+  // Compartilhar evento
+  const shareEvent = async () => {
+    if (!event) return;
+    
+    try {
+      const eventDate = formatEventDateRange(event.startDate, event.endDate);
+      const message = `Evento: ${event.title}\nData: ${eventDate}\n${event.location ? `Local: ${event.location}\n` : ''}`;
+      
+      await Share.share({
+        message
+      });
+    } catch (error) {
+      console.error('Error sharing event:', error);
+    }
+  };
+  
+  // Formatar intervalo de data/hora do evento com tratamento de erro aprimorado
   const formatEventDateRange = (startDateStr: string, endDateStr: string) => {
     try {
+      if (!startDateStr || !endDateStr) {
+        return 'Data não definida';
+      }
+      
       const startDate = parseISO(startDateStr);
       const endDate = parseISO(endDateStr);
+      
+      // Validar datas
+      if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+        return 'Data inválida';
+      }
       
       // Mesmo dia
       if (format(startDate, 'yyyy-MM-dd') === format(endDate, 'yyyy-MM-dd')) {
@@ -105,11 +141,12 @@ const EventDetailsScreen: React.FC = () => {
       // Dias diferentes
       return `${format(startDate, "dd 'de' MMMM 'às' HH:mm", { locale: ptBR })} - ${format(endDate, "dd 'de' MMMM 'às' HH:mm", { locale: ptBR })}`;
     } catch (error) {
-      return `${startDateStr} - ${endDateStr}`;
+      console.error('Error formatting date range:', error);
+      return 'Data indisponível';
     }
   };
   
-  // Função para excluir evento
+  // Função para excluir evento com confirmação
   const handleDeleteEvent = async () => {
     if (!event || !id) return;
     
@@ -133,6 +170,95 @@ const EventDetailsScreen: React.FC = () => {
         }
       ]
     );
+  };
+  
+  // Função utilitária para obter cores baseadas no status do evento
+  const getEventStatusStyle = (event: Event) => {
+    if (event.isFinished) {
+      return { 
+        color: '#9E9E9E', 
+        backgroundColor: 'rgba(158, 158, 158, 0.2)',
+        text: 'Evento finalizado'
+      };
+    }
+    
+    if (event.isHappening) {
+      return { 
+        color: '#4CAF50', 
+        backgroundColor: 'rgba(76, 175, 80, 0.2)',
+        text: 'Acontecendo agora'
+      };
+    }
+    
+    // Verificar status de convite
+    if (userStatus === 'INVITED') {
+      return { 
+        color: '#FFC107', 
+        backgroundColor: 'rgba(255, 193, 7, 0.2)',
+        text: 'Você foi convidado'
+      };
+    }
+    
+    if (userStatus === 'CONFIRMED') {
+      return { 
+        color: '#7B68EE', 
+        backgroundColor: 'rgba(123, 104, 238, 0.2)',
+        text: 'Você confirmou presença'
+      };
+    }
+    
+    if (userStatus === 'DECLINED') {
+      return { 
+        color: '#FF6347', 
+        backgroundColor: 'rgba(255, 99, 71, 0.2)',
+        text: 'Você recusou o convite'
+      };
+    }
+    
+    return { 
+      color: '#7B68EE', 
+      backgroundColor: 'rgba(123, 104, 238, 0.2)',
+      text: 'Evento futuro'
+    };
+  };
+  
+  // Formatar datas relativas (quando ocorre)
+  const getRelativeDateText = (dateStr: string) => {
+    try {
+      const date = parseISO(dateStr);
+      const now = new Date();
+      
+      if (isToday(date)) {
+        return { text: 'Hoje', color: '#4CAF50' };
+      }
+      
+      if (isTomorrow(date)) {
+        return { text: 'Amanhã', color: '#7B68EE' };
+      }
+      
+      const daysUntil = differenceInDays(date, now);
+      
+      if (daysUntil < 0) {
+        return { 
+          text: `${Math.abs(daysUntil)} dias atrás`, 
+          color: '#9E9E9E' 
+        };
+      }
+      
+      if (daysUntil < 7) {
+        return { 
+          text: `Em ${daysUntil} dias`, 
+          color: '#7B68EE' 
+        };
+      }
+      
+      return { 
+        text: format(date, "dd 'de' MMMM", { locale: ptBR }), 
+        color: '#7B68EE' 
+      };
+    } catch (error) {
+      return { text: 'Data indisponível', color: '#9E9E9E' };
+    }
   };
   
   if (loading) {
@@ -167,13 +293,24 @@ const EventDetailsScreen: React.FC = () => {
   }
   
   // Contagem de participantes
-  const confirmedCount = event.invitations.filter(inv => inv.status === 'CONFIRMED').length;
-  const invitedCount = event.invitations.filter(inv => inv.status === 'INVITED').length;
-  const declinedCount = event.invitations.filter(inv => inv.status === 'DECLINED').length;
+  const confirmedCount = event.invitations ? 
+    event.invitations.filter(inv => inv.status === 'CONFIRMED').length : 0;
+  const invitedCount = event.invitations ? 
+    event.invitations.filter(inv => inv.status === 'INVITED').length : 0;
+  const declinedCount = event.invitations ? 
+    event.invitations.filter(inv => inv.status === 'DECLINED').length : 0;
   
   // Verificar estado do evento
   const isFinished = event.isFinished;
   const isHappening = event.isHappening;
+  
+  // Obter estilo baseado no status
+  const eventStatusStyle = getEventStatusStyle(event);
+  
+  // Obter informações de data relativa
+  const relativeDateInfo = event.startDate ? 
+    getRelativeDateText(event.startDate) : 
+    { text: '', color: '#7B68EE' };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -189,42 +326,53 @@ const EventDetailsScreen: React.FC = () => {
         <Text style={styles.headerTitle} numberOfLines={1}>
           Detalhes do Evento
         </Text>
-        {isCreator && (
+        
+        <View style={styles.headerActions}>
+          {isCreator && (
+            <TouchableOpacity
+              style={styles.headerActionButton}
+              onPress={handleDeleteEvent}
+            >
+              <Ionicons name="trash-outline" size={24} color="#FF6347" />
+            </TouchableOpacity>
+          )}
+          
           <TouchableOpacity
             style={styles.headerActionButton}
-            onPress={handleDeleteEvent}
+            onPress={shareEvent}
           >
-            <Ionicons name="trash-outline" size={24} color="#FF6347" />
+            <Ionicons name="share-social-outline" size={24} color="#7B68EE" />
           </TouchableOpacity>
-        )}
+        </View>
       </View>
       
-      <ScrollView style={styles.container}>
-        <View style={styles.eventHeader}>
-          {/* Status banner */}
-          {(isFinished || isHappening || userStatus === 'INVITED') && (
-            <View style={[
-              styles.statusBanner,
-              isFinished ? styles.finishedBanner : 
-              isHappening ? styles.happeningBanner : 
-              userStatus === 'INVITED' ? styles.invitedBanner : null
-            ]}>
-              <Ionicons 
-                name={
-                  isFinished ? "checkmark-done-circle" : 
-                  isHappening ? "time" : 
-                  "mail"
-                } 
-                size={20} 
-                color="white" 
-              />
-              <Text style={styles.statusBannerText}>
-                {isFinished ? "Este evento já aconteceu" : 
-                 isHappening ? "Este evento está acontecendo agora" : 
-                 userStatus === 'INVITED' ? "Você foi convidado para este evento" : ""}
+      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+        {/* Evento Banner/Header */}
+        <View style={styles.eventHeaderSection}>
+          <View style={[
+            styles.statusBanner,
+            { backgroundColor: eventStatusStyle.backgroundColor }
+          ]}>
+            <Ionicons 
+              name={
+                isFinished ? "checkmark-done-circle" : 
+                isHappening ? "time" : 
+                userStatus === 'INVITED' ? "mail" :
+                userStatus === 'CONFIRMED' ? "checkmark-circle" : "calendar"
+              } 
+              size={20} 
+              color={eventStatusStyle.color} 
+            />
+            <Text style={[styles.statusBannerText, { color: eventStatusStyle.color }]}>
+              {eventStatusStyle.text}
+            </Text>
+            
+            <View style={styles.relativeDateBadge}>
+              <Text style={[styles.relativeDateText, { color: relativeDateInfo.color }]}>
+                {relativeDateInfo.text}
               </Text>
             </View>
-          )}
+          </View>
           
           <Text style={styles.eventTitle}>{event.title}</Text>
           
@@ -288,6 +436,50 @@ const EventDetailsScreen: React.FC = () => {
           </View>
         )}
         
+        {/* Status de Participação do Usuário */}
+        {userStatus === 'CONFIRMED' && !isFinished && (
+          <View style={styles.userAttendanceContainer}>
+            <View style={styles.userStatusIndicator}>
+              <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
+              <Text style={styles.userStatusText}>Você confirmou presença</Text>
+            </View>
+            
+            <TouchableOpacity
+              style={styles.changeStatusButton}
+              onPress={() => handleRespondToInvite('DECLINED')}
+              disabled={respondingToInvite}
+            >
+              {respondingToInvite ? (
+                <ActivityIndicator size="small" color="#FF6347" />
+              ) : (
+                <Text style={styles.changeStatusButtonText}>Cancelar participação</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
+        
+        {/* Status de Participação do Usuário - Recusado */}
+        {userStatus === 'DECLINED' && !isFinished && (
+          <View style={styles.userAttendanceContainer}>
+            <View style={styles.userStatusIndicator}>
+              <Ionicons name="close-circle" size={24} color="#FF6347" />
+              <Text style={styles.userStatusText}>Você recusou o convite</Text>
+            </View>
+            
+            <TouchableOpacity
+              style={styles.rejoinButton}
+              onPress={() => handleRespondToInvite('CONFIRMED')}
+              disabled={respondingToInvite}
+            >
+              {respondingToInvite ? (
+                <ActivityIndicator size="small" color="#4CAF50" />
+              ) : (
+                <Text style={styles.rejoinButtonText}>Participar</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
+        
         {/* Descrição */}
         {event.description && (
           <View style={styles.sectionContainer}>
@@ -321,63 +513,73 @@ const EventDetailsScreen: React.FC = () => {
           
           {/* Lista de participantes */}
           <View style={styles.participantsList}>
-            {event.invitations
-              .filter(inv => inv.status === 'CONFIRMED')
-              .map(invitation => (
-                <View key={invitation.userId} style={styles.participantItem}>
-                  {invitation.userProfilePicture ? (
-                    <Image 
-                      source={{ uri: invitation.userProfilePicture }} 
-                      style={styles.participantAvatar}
-                    />
-                  ) : (
-                    <View style={styles.participantAvatarPlaceholder}>
-                      <Text style={styles.participantInitials}>
-                        {invitation.userName.charAt(0).toUpperCase()}
+            {event.invitations && 
+              event.invitations
+                .filter(inv => inv.status === 'CONFIRMED')
+                .map(invitation => (
+                  <View key={invitation.userId} style={styles.participantItem}>
+                    {invitation.userProfilePicture ? (
+                      <Image 
+                        source={{ uri: invitation.userProfilePicture }} 
+                        style={styles.participantAvatar}
+                      />
+                    ) : (
+                      <View style={styles.participantAvatarPlaceholder}>
+                        <Text style={styles.participantInitials}>
+                          {invitation.userName.charAt(0).toUpperCase()}
+                        </Text>
+                      </View>
+                    )}
+                    <View style={styles.participantInfo}>
+                      <Text style={styles.participantName}>
+                        {invitation.userName}
+                        {invitation.userId === user?.uid && ' (Você)'}
                       </Text>
+                      <Text style={styles.participantEmail}>{invitation.userEmail}</Text>
                     </View>
-                  )}
-                  <View style={styles.participantInfo}>
-                    <Text style={styles.participantName}>
-                      {invitation.userName}
-                      {invitation.userId === user?.uid && ' (Você)'}
-                    </Text>
-                    <Text style={styles.participantEmail}>{invitation.userEmail}</Text>
+                    <View style={styles.participantStatusBadge}>
+                      <Text style={styles.participantStatusText}>Confirmado</Text>
+                    </View>
                   </View>
-                  <View style={styles.participantStatusBadge}>
-                    <Text style={styles.participantStatusText}>Confirmado</Text>
-                  </View>
-                </View>
-              ))}
+                ))
+            }
             
-            {event.invitations
-              .filter(inv => inv.status === 'INVITED')
-              .map(invitation => (
-                <View key={invitation.userId} style={styles.participantItem}>
-                  {invitation.userProfilePicture ? (
-                    <Image 
-                      source={{ uri: invitation.userProfilePicture }} 
-                      style={styles.participantAvatar}
-                    />
-                  ) : (
-                    <View style={styles.participantAvatarPlaceholder}>
-                      <Text style={styles.participantInitials}>
-                        {invitation.userName.charAt(0).toUpperCase()}
+            {event.invitations && 
+              event.invitations
+                .filter(inv => inv.status === 'INVITED')
+                .map(invitation => (
+                  <View key={invitation.userId} style={styles.participantItem}>
+                    {invitation.userProfilePicture ? (
+                      <Image 
+                        source={{ uri: invitation.userProfilePicture }} 
+                        style={styles.participantAvatar}
+                      />
+                    ) : (
+                      <View style={styles.participantAvatarPlaceholder}>
+                        <Text style={styles.participantInitials}>
+                          {invitation.userName.charAt(0).toUpperCase()}
+                        </Text>
+                      </View>
+                    )}
+                    <View style={styles.participantInfo}>
+                      <Text style={styles.participantName}>
+                        {invitation.userName}
+                        {invitation.userId === user?.uid && ' (Você)'}
                       </Text>
+                      <Text style={styles.participantEmail}>{invitation.userEmail}</Text>
                     </View>
-                  )}
-                  <View style={styles.participantInfo}>
-                    <Text style={styles.participantName}>
-                      {invitation.userName}
-                      {invitation.userId === user?.uid && ' (Você)'}
-                    </Text>
-                    <Text style={styles.participantEmail}>{invitation.userEmail}</Text>
+                    <View style={[styles.participantStatusBadge, styles.pendingBadge]}>
+                      <Text style={[styles.participantStatusText, styles.pendingStatusText]}>Pendente</Text>
+                    </View>
                   </View>
-                  <View style={[styles.participantStatusBadge, styles.pendingBadge]}>
-                    <Text style={[styles.participantStatusText, styles.pendingStatusText]}>Pendente</Text>
-                  </View>
-                </View>
-              ))}
+                ))
+            }
+            
+            {(!event.invitations || event.invitations.length === 0) && (
+              <Text style={styles.noParticipantsText}>
+                Nenhum participante confirmado ainda.
+              </Text>
+            )}
           </View>
         </View>
       </ScrollView>
@@ -425,8 +627,12 @@ const styles = StyleSheet.create({
     color: '#fff',
     marginHorizontal: 10,
   },
+  headerActions: {
+    flexDirection: 'row',
+  },
   headerActionButton: {
     padding: 5,
+    marginLeft: 15,
   },
   loadingContainer: {
     flex: 1,
@@ -470,7 +676,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
-  eventHeader: {
+  eventHeaderSection: {
     backgroundColor: '#333',
     padding: 20,
     borderBottomWidth: 1,
@@ -479,24 +685,25 @@ const styles = StyleSheet.create({
   statusBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: 10,
     paddingHorizontal: 12,
     borderRadius: 8,
     marginBottom: 15,
   },
-  finishedBanner: {
-    backgroundColor: '#666',
-  },
-  happeningBanner: {
-    backgroundColor: '#4CAF50',
-  },
-  invitedBanner: {
-    backgroundColor: '#FFC107',
-  },
   statusBannerText: {
-    color: 'white',
     marginLeft: 8,
     fontWeight: '500',
+    flex: 1,
+  },
+  relativeDateBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.2)',
+  },
+  relativeDateText: {
+    fontSize: 12,
+    fontWeight: 'bold',
   },
   eventTitle: {
     fontSize: 24,
@@ -577,6 +784,49 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: 'bold',
     fontSize: 16,
+  },
+  userAttendanceContainer: {
+    backgroundColor: 'rgba(123, 104, 238, 0.15)',
+    marginHorizontal: 16,
+    marginTop: 16,
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(123, 104, 238, 0.3)',
+  },
+  userStatusIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    justifyContent: 'center',
+  },
+  userStatusText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '500',
+    marginLeft: 8,
+  },
+  changeStatusButton: {
+    backgroundColor: '#FF6347',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  changeStatusButtonText: {
+    color: '#fff',
+    fontWeight: '500',
+  },
+  rejoinButton: {
+    backgroundColor: '#4CAF50',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  rejoinButtonText: {
+    color: '#fff',
+    fontWeight: '500',
   },
   sectionContainer: {
     backgroundColor: '#333',
@@ -676,6 +926,12 @@ const styles = StyleSheet.create({
   },
   pendingStatusText: {
     color: '#FFC107',
+  },
+  noParticipantsText: {
+    color: '#aaa',
+    textAlign: 'center',
+    fontStyle: 'italic',
+    padding: 20,
   },
   editButton: {
     position: 'absolute',
