@@ -6,13 +6,11 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
-  Image,
   Platform
 } from 'react-native';
-import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
-import { format, parseISO, isToday, isTomorrow } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Task } from '../../src/hooks/useTasks';
+import EnhancedTaskItem from '../TaskItem';
 
 interface TasksSectionProps {
   tasks: Task[];
@@ -33,28 +31,14 @@ const TasksSection: React.FC<TasksSectionProps> = ({
   onCreateTask,
   currentUserId
 }) => {
-  // Formatador de datas para tarefas
-  const formatTaskDueDate = (dateString?: string) => {
-    if (!dateString) return null;
-    
-    try {
-      const dueDate = parseISO(dateString);
-      
-      if (isToday(dueDate)) {
-        return { text: 'Hoje', color: '#FF9800' };
-      } else if (isTomorrow(dueDate)) {
-        return { text: 'Amanhã', color: '#2196F3' };
-      } else {
-        const formattedDate = format(dueDate, 'dd/MM', { locale: ptBR });
-        const now = new Date();
-        return { 
-          text: formattedDate, 
-          color: dueDate < now ? '#F44336' : '#7B68EE' 
-        };
-      }
-    } catch (error) {
-      return { text: 'Data inválida', color: '#9E9E9E' };
-    }
+  const handleToggleTaskStatus = async () => {
+    // Esta função é um placeholder para o EnhancedTaskItem
+    // Na implementação real, isso seria manipulado no nível do hook useTasks
+  };
+
+  const navigateToTaskDetails = (taskId: number) => {
+    // Esta função é um placeholder para o EnhancedTaskItem
+    // Na implementação real, seria uma navegação para a tela de detalhes da tarefa
   };
 
   return (
@@ -93,10 +77,13 @@ const TasksSection: React.FC<TasksSectionProps> = ({
       ) : tasks.length > 0 ? (
         <View style={styles.tasksContainer}>
           {tasks.map(task => (
-            <TaskItem 
+            <EnhancedTaskItem 
               key={task.id?.toString()} 
-              task={task} 
+              item={task}
+              onToggleStatus={handleToggleTaskStatus}
               currentUserId={currentUserId}
+              pendingTaskIds={[]}
+              onPress={navigateToTaskDetails}
             />
           ))}
         </View>
@@ -120,121 +107,6 @@ const TasksSection: React.FC<TasksSectionProps> = ({
         </View>
       )}
     </View>
-  );
-};
-
-interface TaskItemProps {
-  task: Task;
-  currentUserId?: string;
-}
-
-const TaskItem: React.FC<TaskItemProps> = ({ task, currentUserId }) => {
-  // Formatar a data para exibição
-  const formatDueDate = (dateString?: string) => {
-    if (!dateString) return null;
-    
-    try {
-      const dueDate = parseISO(dateString);
-      
-      if (isToday(dueDate)) {
-        return { text: 'Hoje', color: '#FF9800' };
-      } else if (isTomorrow(dueDate)) {
-        return { text: 'Amanhã', color: '#2196F3' };
-      } else {
-        const formattedDate = format(dueDate, 'dd/MM', { locale: ptBR });
-        const now = new Date();
-        return { 
-          text: formattedDate, 
-          color: dueDate < now ? '#F44336' : '#7B68EE' 
-        };
-      }
-    } catch (error) {
-      return { text: 'Data inválida', color: '#9E9E9E' };
-    }
-  };
-
-  const formattedDate = task.dueDate ? formatDueDate(task.dueDate) : null;
-  const hasDescription = task.description && task.description.trim().length > 0;
-
-  return (
-    <TouchableOpacity style={styles.taskItem}>
-      <View style={styles.taskMainContent}>
-        <Text 
-          style={styles.taskTitle}
-          numberOfLines={1}
-        >
-          {task.title}
-        </Text>
-        
-        {hasDescription && (
-          <Text 
-            style={styles.taskDescription}
-            numberOfLines={1}
-            ellipsizeMode="tail"
-          >
-            {task.description}
-          </Text>
-        )}
-        
-        <View style={styles.taskFooter}>
-          {formattedDate && (
-            <View style={styles.dueDateContainer}>
-              <Ionicons 
-                name="calendar-outline" 
-                size={14} 
-                color={formattedDate.color} 
-              />
-              <Text style={[styles.dueDateText, { color: formattedDate.color }]}>
-                {formattedDate.text}
-              </Text>
-            </View>
-          )}
-          
-          {task.category && (
-            <View style={styles.categoryChip}>
-              <FontAwesome5 name="tag" size={12} color="#7B68EE" />
-              <Text style={styles.categoryText}>{task.category}</Text>
-            </View>
-          )}
-          
-          {task.assignedUsers && task.assignedUsers.length > 0 && (
-            <View style={styles.assigneesContainer}>
-              {task.assignedUsers.slice(0, 3).map((assignee, index) => (
-                <View 
-                  key={assignee.id} 
-                  style={[
-                    styles.assigneeAvatar, 
-                    { zIndex: 10 - index, marginLeft: index > 0 ? -10 : 0 },
-                    assignee.id === currentUserId && styles.currentUserAvatar
-                  ]}
-                >
-                  {assignee.profilePictureUrl ? (
-                    <Image 
-                      source={{ uri: assignee.profilePictureUrl }} 
-                      style={styles.avatarImage}
-                    />
-                  ) : (
-                    <Text style={styles.avatarInitial}>
-                      {assignee.nickname
-                        ? assignee.nickname.charAt(0).toUpperCase()
-                        : assignee.name?.charAt(0).toUpperCase() || '?'}
-                    </Text>
-                  )}
-                </View>
-              ))}
-              
-              {task.assignedUsers.length > 3 && (
-                <View style={[styles.assigneeAvatar, styles.moreAssigneesAvatar]}>
-                  <Text style={styles.moreAssigneesText}>
-                    +{task.assignedUsers.length - 3}
-                  </Text>
-                </View>
-              )}
-            </View>
-          )}
-        </View>
-      </View>
-    </TouchableOpacity>
   );
 };
 
@@ -335,96 +207,7 @@ const styles = StyleSheet.create({
   },
   tasksContainer: {
     marginBottom: 8,
-  },
-  taskItem: {
-    backgroundColor: '#333',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 10,
-    borderLeftWidth: 3,
-    borderLeftColor: '#7B68EE',
-  },
-  taskMainContent: {
-    flex: 1,
-  },
-  taskTitle: {
-    fontSize: 15,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 4,
-  },
-  taskDescription: {
-    fontSize: 14,
-    color: '#ccc',
-    marginBottom: 8,
-  },
-  taskFooter: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    marginTop: 6,
-    gap: 8,
-  },
-  dueDateContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginRight: 8,
-  },
-  dueDateText: {
-    marginLeft: 4,
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  categoryChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(123, 104, 238, 0.15)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 12,
-  },
-  categoryText: {
-    color: '#7B68EE',
-    fontSize: 12,
-    marginLeft: 4,
-  },
-  assigneesContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginLeft: 'auto',
-  },
-  assigneeAvatar: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#555',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#333',
-  },
-  avatarImage: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-  },
-  avatarInitial: {
-    color: '#fff',
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
-  currentUserAvatar: {
-    borderColor: '#7B68EE',
-    backgroundColor: '#444',
-  },
-  moreAssigneesAvatar: {
-    backgroundColor: 'rgba(123, 104, 238, 0.3)',
-  },
-  moreAssigneesText: {
-    color: '#7B68EE',
-    fontSize: 9,
-    fontWeight: 'bold',
-  },
+  }
 });
 
 export default TasksSection;

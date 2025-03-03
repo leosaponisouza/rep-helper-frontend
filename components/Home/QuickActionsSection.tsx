@@ -34,41 +34,31 @@ const QuickActionsSection: React.FC<QuickActionsSectionProps> = ({ actions }) =>
       
       <View style={styles.quickActionsContainer}>
         {actions.map(action => (
-          <QuickActionButton key={action.id} action={action} />
+          <TouchableOpacity 
+            key={action.id}
+            style={[styles.quickActionButton, { backgroundColor: action.bgColor }]}
+            onPress={action.onPress}
+          >
+            <MaterialCommunityIcons 
+              name={action.icon as any} 
+              size={28} 
+              color={action.color} 
+            />
+            <Text style={[styles.quickActionText, { color: action.color }]}>
+              {action.title}
+            </Text>
+          </TouchableOpacity>
         ))}
       </View>
     </View>
   );
 };
 
-interface QuickActionButtonProps {
-  action: QuickAction;
-}
-
-const QuickActionButton: React.FC<QuickActionButtonProps> = ({ action }) => (
-  <TouchableOpacity 
-    style={[
-      styles.quickActionButton,
-      { backgroundColor: action.bgColor }
-    ]}
-    onPress={action.onPress}
-  >
-    <MaterialCommunityIcons 
-      name={action.icon as any} 
-      size={28} 
-      color={action.color} 
-    />
-    <Text style={[styles.quickActionText, { color: action.color }]}>
-      {action.title}
-    </Text>
-  </TouchableOpacity>
-);
-
 const styles = StyleSheet.create({
   section: {
     marginHorizontal: 20,
     marginBottom: 20,
-    marginTop: 10, // Reduzido para ficar abaixo do header
+    marginTop: 10,
     backgroundColor: 'transparent',
   },
   sectionHeader: {
@@ -93,20 +83,11 @@ const styles = StyleSheet.create({
   },
   quickActionButton: {
     width: '31%',
-    padding: 16,
     borderRadius: 16,
+    padding: 16,
     alignItems: 'center',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-      },
-      android: {
-        elevation: 3,
-      },
-    }),
+    justifyContent: 'center',
+    aspectRatio: 1, // Forçar formato quadrado
   },
   quickActionText: {
     fontWeight: '600',

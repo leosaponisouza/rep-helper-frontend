@@ -9,9 +9,8 @@ import {
   Platform
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { format, parseISO, isToday, isTomorrow } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
 import { Event } from '../../src/hooks/useEvents';
+import { useRouter } from 'expo-router';
 
 interface EventsSectionProps {
   events: Event[];
@@ -21,6 +20,86 @@ interface EventsSectionProps {
   onViewAll: () => void;
   onCreateEvent: () => void;
 }
+
+// Componente EventItem importado da tela events-list com pequenas adaptações
+const EventItem = ({ event }: { event: Event }) => {
+  const router = useRouter();
+  
+  // Determinar a cor do status do evento
+  const getStatusColor = (event: Event): string => {
+    if (event.isFinished) return '#9E9E9E';
+    if (event.isHappening) return '#4CAF50';
+    
+    // Verificar status do convite para o usuário atual
+    const invitation = event.invitations?.find(inv => inv.status === 'INVITED');
+    if (invitation) {
+      switch (invitation.status) {
+        case 'CONFIRMED': return '#7B68EE';
+        case 'INVITED': return '#FFC107';
+        case 'DECLINED': return '#FF6347';
+        default: return '#7B68EE';
+      }
+    }
+    
+    return '#7B68EE';
+  };
+
+  // Calcular contagem de confirmados com segurança
+  let confirmedCount = 0;
+  if (event.invitations && Array.isArray(event.invitations)) {
+    confirmedCount = event.invitations.filter(inv => inv.status === 'CONFIRMED').length;
+  }
+    
+  return (
+    <TouchableOpacity
+      style={[
+        styles.eventItem,
+        { borderLeftColor: getStatusColor(event) }
+      ]}
+      onPress={() => {
+        router.push(`/(panel)/events/${event.id}`);
+      }}
+    >
+      <View style={styles.eventContent}>
+        <Text style={styles.eventTitle} numberOfLines={1}>
+          {event.title || 'Evento sem título'}
+        </Text>
+        
+        {event.location && (
+          <View style={styles.locationContainer}>
+            <Ionicons name="location-outline" size={14} color="#aaa" />
+            <Text style={styles.locationText} numberOfLines={1}>
+              {event.location}
+            </Text>
+          </View>
+        )}
+        
+        <View style={styles.eventMeta}>
+          <View style={styles.dateContainer}>
+            <Ionicons name="calendar-outline" size={14} color="#7B68EE" />
+            <Text style={styles.dateText}>
+              {new Date(event.startDate).toLocaleDateString('pt-BR', {
+                day: '2-digit',
+                month: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit'
+              })}
+            </Text>
+          </View>
+          
+          <View style={styles.attendeesInfo}>
+            <Ionicons name="people-outline" size={14} color="#7B68EE" />
+            <Text style={styles.attendeesText}>
+              {confirmedCount} {confirmedCount === 1 ? 'confirmado' : 'confirmados'}
+            </Text>
+          </View>
+        </View>
+      </View>
+      
+      <Ionicons name="chevron-forward" size={20} color="#7B68EE" />
+    </TouchableOpacity>
+  );
+};
 
 const EventsSection: React.FC<EventsSectionProps> = ({
   events,
@@ -89,99 +168,6 @@ const EventsSection: React.FC<EventsSectionProps> = ({
         </View>
       )}
     </View>
-  );
-};
-
-interface EventItemProps {
-  event: Event;
-}
-
-const EventItem: React.FC<EventItemProps> = ({ event }) => {
-  // Formatar data para exibição
-  const formatEventDate = (dateString?: string) => {
-    if (!dateString) return null;
-    
-    try {
-      const eventDate = parseISO(dateString);
-      
-      if (isToday(eventDate)) {
-        const timeStr = format(eventDate, 'HH:mm', { locale: ptBR });
-        return { text: `Hoje, ${timeStr}`, color: '#4CAF50', isToday: true };
-      } else if (isTomorrow(eventDate)) {
-        const timeStr = format(eventDate, 'HH:mm', { locale: ptBR });
-        return { text: `Amanhã, ${timeStr}`, color: '#FF9800', isToday: false };
-      } else {
-        const dateStr = format(eventDate, 'dd/MM', { locale: ptBR });
-        const timeStr = format(eventDate, 'HH:mm', { locale: ptBR });
-        return { 
-          text: `${dateStr}, ${timeStr}`,
-          color: '#7B68EE',
-          isToday: false
-        };
-      }
-    } catch (error) {
-      return { text: 'Data inválida', color: '#9E9E9E', isToday: false };
-    }
-  };
-
-  const eventDate = formatEventDate(event.startDate);
-  const confirmedCount = event.invitations?.filter(inv => inv.status === 'CONFIRMED').length || 0;
-
-  return (
-    <TouchableOpacity 
-      style={[
-        styles.eventItem,
-        event.isHappening && styles.happeningEventItem
-      ]}
-    >
-      {event.isHappening && (
-        <View style={styles.liveIndicatorContainer}>
-          <View style={styles.liveIndicator} />
-          <Text style={styles.liveText}>AGORA</Text>
-        </View>
-      )}
-      
-      <View style={styles.eventContent}>
-        <Text style={styles.eventTitle} numberOfLines={1}>
-          {event.title}
-        </Text>
-        
-        <View style={styles.eventDetails}>
-          {eventDate && (
-            <View style={styles.eventDateContainer}>
-              <Ionicons name="time" size={14} color={eventDate.color} />
-              <Text style={[styles.eventDateText, { color: eventDate.color }]}>
-                {eventDate.text}
-              </Text>
-            </View>
-          )}
-          
-          {event.location && (
-            <View style={styles.eventLocationContainer}>
-              <Ionicons name="location" size={14} color="#9E9E9E" />
-              <Text style={styles.eventLocationText} numberOfLines={1}>
-                {event.location}
-              </Text>
-            </View>
-          )}
-        </View>
-        
-        <View style={styles.eventFooter}>
-          <View style={styles.attendeesInfo}>
-            <Ionicons name="people" size={14} color="#7B68EE" />
-            <Text style={styles.attendeesText}>
-              {confirmedCount} {confirmedCount === 1 ? 'participante' : 'participantes'}
-            </Text>
-          </View>
-          
-          {event.isHappening && (
-            <View style={styles.happeningBadge}>
-              <Text style={styles.happeningText}>Acontecendo</Text>
-            </View>
-          )}
-        </View>
-      </View>
-    </TouchableOpacity>
   );
 };
 
@@ -283,96 +269,58 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 14,
   },
+  // Estilos do EventItem
   eventItem: {
     backgroundColor: '#333',
-    borderRadius: 12,
-    padding: 12,
+    borderRadius: 10,
     marginBottom: 10,
-    position: 'relative',
-  },
-  happeningEventItem: {
-    borderLeftWidth: 3,
-    borderLeftColor: '#4CAF50',
-  },
-  liveIndicatorContainer: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
+    padding: 12,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(76, 175, 80, 0.2)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 12,
-    zIndex: 1,
-  },
-  liveIndicator: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#4CAF50',
-    marginRight: 4,
-  },
-  liveText: {
-    color: '#4CAF50',
-    fontSize: 10,
-    fontWeight: 'bold',
+    borderLeftWidth: 4,
   },
   eventContent: {
-    paddingRight: 70, // Espaço para o indicador "AGORA"
+    flex: 1,
+    marginRight: 10,
   },
   eventTitle: {
-    fontSize: 15,
-    fontWeight: 'bold',
     color: '#fff',
-    marginBottom: 8,
-  },
-  eventDetails: {
-    marginBottom: 8,
-  },
-  eventDateContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    fontSize: 16,
+    fontWeight: '600',
     marginBottom: 4,
   },
-  eventDateText: {
-    fontSize: 12,
-    marginLeft: 5,
-    fontWeight: '500',
-  },
-  eventLocationContainer: {
+  locationContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginBottom: 6,
   },
-  eventLocationText: {
-    fontSize: 12,
+  locationText: {
     color: '#aaa',
-    marginLeft: 5,
+    fontSize: 14,
+    marginLeft: 4,
   },
-  eventFooter: {
+  eventMeta: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  dateContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  dateText: {
+    color: '#ccc',
+    fontSize: 12,
+    marginLeft: 4,
   },
   attendeesInfo: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   attendeesText: {
-    fontSize: 12,
     color: '#aaa',
-    marginLeft: 5,
-  },
-  happeningBadge: {
-    backgroundColor: 'rgba(76, 175, 80, 0.15)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 12,
-  },
-  happeningText: {
-    color: '#4CAF50',
-    fontSize: 10,
-    fontWeight: 'bold',
+    fontSize: 12,
+    marginLeft: 4,
   }
 });
 

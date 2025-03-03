@@ -1,9 +1,8 @@
-// app/(panel)/home.tsx - Versão refatorada e modularizada
+// app/(panel)/home.tsx
 import React from 'react';
 import { StyleSheet } from 'react-native';
 import { useAuth } from '../../src/context/AuthContext';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
 
 // Componentes
 import HomeHeader from '../../components/Home/HomeHeader';
@@ -89,14 +88,14 @@ const HomeScreen = () => {
         stats={stats} 
         navigation={router}
       />
-      
+            
       {/* Ações Rápidas */}
       <QuickActionsSection actions={quickActions} />
       
       {/* Seção de Tarefas do Usuário */}
       <TasksSection 
-        tasks={userTasks} 
-        loading={loading.tasks} 
+        tasks={userTasks}
+        loading={loading.tasks}
         error={errors.tasks}
         onRetry={() => refreshData('tasks')}
         onViewAll={navigateToAllTasks}
@@ -106,8 +105,8 @@ const HomeScreen = () => {
       
       {/* Seção de Eventos Próximos */}
       <EventsSection 
-        events={upcomingEvents} 
-        loading={loading.events} 
+        events={upcomingEvents}
+        loading={loading.events}
         error={errors.events}
         onRetry={() => refreshData('events')}
         onViewAll={navigateToAllEvents}
@@ -116,4 +115,5 @@ const HomeScreen = () => {
     </HomeContainer>
   );
 };
+
 export default HomeScreen;

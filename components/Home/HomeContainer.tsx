@@ -6,9 +6,9 @@ import {
   StatusBar, 
   Platform,
   ScrollView, 
-  RefreshControl
+  RefreshControl,
+  SafeAreaView
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 
 interface HomeContainerProps {
@@ -23,23 +23,22 @@ const HomeContainer: React.FC<HomeContainerProps> = ({
   onRefresh 
 }) => {
   return (
-<SafeAreaView style={styles.safeArea} edges={['top', 'bottom', 'right', 'left']}>
-<StatusBar
-    barStyle="light-content" 
-    backgroundColor="#7B68EE" // Mesma cor do header
-  />
-
-<View style={styles.headerBackground}>
-    <LinearGradient
-      // Se quiser o mesmo roxo em todo o topo, use a mesma cor
-      // colors={['#7B68EE', '#7B68EE']}
-      // Ou mantenha seu degradê:
-      colors={['#7B68EE', '#6A5ACD']}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-      style={styles.gradient}
-    />
-  </View>
+    <View style={styles.container}>
+      <StatusBar
+        barStyle="light-content" 
+        backgroundColor="#222" // Cor de fundo da status bar
+        translucent={false}
+      />
+      
+      {/* Background do header */}
+      <View style={styles.headerBackground}>
+        <LinearGradient
+          colors={['#7B68EE', '#6A5ACD']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.gradient}
+        />
+      </View>
       
       <ScrollView 
         style={styles.scrollView}
@@ -56,23 +55,21 @@ const HomeContainer: React.FC<HomeContainerProps> = ({
       >
         {children}
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  safeArea: {
+  container: {
     flex: 1,
-    // Deixe como transparente, pois o gradiente já cuida do fundo
-    backgroundColor: 'transparent'
+    backgroundColor: '#222',
   },
   headerBackground: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    // Ajuste essa altura para cobrir a StatusBar + parte do header
-    height: 200,
+    height: 160, // Altura menor para o background do header
     zIndex: 0,
   },
   gradient: {
@@ -83,9 +80,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   scrollContent: {
-    // Aumente este paddingTop para ficar abaixo do gradiente
-    paddingTop: 200,
-    backgroundColor: '#1a1a1a',
+    paddingTop: 160, // Mesmo valor que a altura do headerBackground
+    backgroundColor: '#222',
     paddingBottom: 30,
   },
 });
