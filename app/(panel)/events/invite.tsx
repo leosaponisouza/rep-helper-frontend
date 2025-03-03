@@ -29,13 +29,21 @@ interface Member {
   isInvited: boolean;
 }
 
+// Import the EventInvitation type from useEvents.ts
+import { EventInvitation } from '../../../src/hooks/useEvents';
+
+// Update the interface to match useEvents.ts definition
+interface EventWithInvitations extends Event {
+  invitations: EventInvitation[];
+}
+
 const InviteMembersScreen: React.FC = () => {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
   const { isCurrentUserCreator, inviteUsers } = useEvents();
   
-  const [event, setEvent] = useState<Event | null>(null);
+  const [event, setEvent] = useState<EventWithInvitations | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [filteredMembers, setFilteredMembers] = useState<Member[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -56,6 +64,11 @@ const InviteMembersScreen: React.FC = () => {
         const eventResponse = await api.get(`/api/v1/events/${id}`);
         const eventData = eventResponse.data;
         
+        // Ensure invitations is always an array
+        if (!eventData.invitations) {
+          eventData.invitations = [];
+        }
+        
         // Check if user is the creator to manage permissions
         if (!isCurrentUserCreator(eventData)) {
           Alert.alert('Error', 'You do not have permission to manage invitations for this event');
@@ -71,13 +84,13 @@ const InviteMembersScreen: React.FC = () => {
         
         // Map invitation status for each member
         const mappedMembers = membersData.map((member: any) => {
-          const isInvited = eventData.invitations.some(
+          const isInvited = eventData.invitations?.some(
             (inv: any) => inv.userId === member.uid
           );
           
           return {
             ...member,
-            isInvited
+            isInvited: !!isInvited // Ensure boolean value
           };
         });
         
@@ -137,15 +150,19 @@ const InviteMembersScreen: React.FC = () => {
       
       // Only send IDs that are not already in the invitation list
       const newInvitees = selectedMembersIds.filter(memberId => 
-        !event.invitations.some(inv => inv.userId === memberId)
+        !event.invitations?.some(inv => inv.userId === memberId)
       );
       
       if (newInvitees.length === 0) {
         Alert.alert('Info', 'No new members to invite');
+        setInviting(false);
         return;
       }
       
-      await inviteUsers(parseInt(id), newInvitees);
+      // Make sure to use the correct ID format that your API expects
+      // If it expects a number, parse it, otherwise use it as a string
+      const eventId = parseInt(id);
+      await inviteUsers(eventId, newInvitees);
       
       Alert.alert(
         'Success',

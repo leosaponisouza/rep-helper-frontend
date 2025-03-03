@@ -1,4 +1,4 @@
-// app/(panel)/events/calendar.tsx - Fixed version with improved null checks and error handling
+// app/(panel)/events/calendar.tsx - Versão corrigida com melhor tratamento de erros e atualizações
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
@@ -11,14 +11,16 @@ import {
   StatusBar,
   FlatList,
   Dimensions,
-  ListRenderItemInfo
+  ListRenderItemInfo,
+  RefreshControl,
+  Alert
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useEvents, Event } from '../../../src/hooks/useEvents';
 import { useAuth } from '../../../src/context/AuthContext';
 import { Calendar, DateData } from 'react-native-calendars';
-import { format, parseISO, isToday, isTomorrow } from 'date-fns';
+import { format, parseISO, isToday, isTomorrow, isPast } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useFocusEffect } from '@react-navigation/native';
 
@@ -40,12 +42,13 @@ interface MarkedDate {
 const CalendarScreen: React.FC = () => {
   const router = useRouter();
   const { user } = useAuth();
-  const { events, loading, fetchEvents } = useEvents();
+  const { events, loading, refreshEvents } = useEvents();
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [markedDates, setMarkedDates] = useState<Record<string, MarkedDate>>({});
+
   const [selectedDateEvents, setSelectedDateEvents] = useState<Event[]>([]);
-  const [modalVisible, setModalVisible] = useState<boolean>(false);
-  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
+  const [refreshing, setRefreshing] = useState<boolean>(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Configurações de tema para o calendário
   const calendarTheme = {
@@ -74,8 +77,8 @@ const CalendarScreen: React.FC = () => {
   // Recarregar eventos quando a tela receber foco
   useFocusEffect(
     useCallback(() => {
-      fetchEvents();
-    }, [fetchEvents])
+      refreshCalendarEvents();
+    }, [])
   );
 
   // Processar eventos para marcação no calendário
@@ -101,7 +104,7 @@ const CalendarScreen: React.FC = () => {
           if (dates[dateStr].dots && dates[dateStr].dots.length < 3) {
             dates[dateStr].dots.push({
               color: getEventColor(event),
-              key: String(event.id) // Ensure key is a string
+              key: String(event.id)
             });
           }
         } catch (error) {
@@ -122,8 +125,36 @@ const CalendarScreen: React.FC = () => {
     }
   }, [events, selectedDate]);
 
+  // Função para recarregar os eventos do calendário
+  const refreshCalendarEvents = useCallback(async () => {
+    try {
+      setRefreshing(true);
+      setErrorMessage(null);
+      await refreshEvents('all');
+      
+      // Se já tiver uma data selecionada, atualizar os eventos dessa data
+      if (selectedDate) {
+        updateSelectedDateEvents(selectedDate);
+      }
+    } catch (error) {
+      console.error('Error refreshing calendar events:', error);
+      setErrorMessage('Não foi possível carregar os eventos. Tente novamente.');
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refreshEvents, selectedDate]);
+
+  // Atualizar a lista de eventos para a data selecionada
+  const updateSelectedDateEvents = useCallback((dateStr: string) => {
+    const filtered = events.filter(event => {
+      return event.startDate && event.startDate.startsWith(dateStr);
+    });
+    
+    setSelectedDateEvents(filtered);
+  }, [events]);
+
   // Selecionar data e buscar eventos
-  const handleDayPress = (day: DateData): void => {
+  const handleDayPress = useCallback((day: DateData) => {
     const dateStr = day.dateString;
     
     // Atualizar marca no calendário
@@ -146,18 +177,15 @@ const CalendarScreen: React.FC = () => {
       selectedColor: '#7B68EE'
     };
     
+    // Atualizar estado
     setMarkedDates(updatedMarkedDates);
     setSelectedDate(dateStr);
     
-    // Filtrar eventos para a data selecionada
-    const dayEvents = events.filter(event => {
-      return event.startDate && event.startDate.startsWith(dateStr);
-    });
-    
-    setSelectedDateEvents(dayEvents);
-  };
+    // Atualizar eventos para a data selecionada
+    updateSelectedDateEvents(dateStr);
+  }, [markedDates, updateSelectedDateEvents]);
 
-  // Fixed getEventColor function with proper null checks
+  // Função para determinar a cor do evento com tratamento seguro
   const getEventColor = (event: Event): string => {
     if (!event) return '#7B68EE'; // Default color
     
@@ -218,9 +246,9 @@ const CalendarScreen: React.FC = () => {
     }
   };
 
-  // Fixed renderEventItem function with proper null checks
+  // Renderizar item de evento com tratamento seguro
   const renderEventItem = ({ item }: ListRenderItemInfo<Event>): React.ReactElement => {
-    // Calculate confirmed count safely
+    // Calcular contagem de confirmados com segurança
     let confirmedCount = 0;
     if (item.invitations && Array.isArray(item.invitations)) {
       confirmedCount = item.invitations.filter(inv => inv.status === 'CONFIRMED').length;
@@ -235,6 +263,9 @@ const CalendarScreen: React.FC = () => {
         onPress={() => {
           router.push(`/(panel)/events/${item.id}`);
         }}
+        accessibilityRole="button"
+        accessibilityLabel={`Evento: ${item.title}`}
+        accessibilityHint="Toque para ver detalhes do evento"
       >
         <View style={styles.eventTimeContainer}>
           <Text style={styles.eventTime}>
@@ -260,7 +291,7 @@ const CalendarScreen: React.FC = () => {
             <View style={styles.attendeesInfo}>
               <Ionicons name="people-outline" size={14} color="#7B68EE" />
               <Text style={styles.attendeesText}>
-                {confirmedCount} confirmados
+                {confirmedCount} {confirmedCount === 1 ? 'confirmado' : 'confirmados'}
               </Text>
             </View>
           </View>
@@ -271,91 +302,110 @@ const CalendarScreen: React.FC = () => {
     );
   };
 
-  if (loading && (!events || events.length === 0)) {
+  // Se estiver carregando e não temos eventos, mostrar um loader
+  if (loading && (!events || events.length === 0) && !refreshing) {
     return (
-      <SafeAreaView style={styles.safeArea}>
-        <StatusBar barStyle="light-content" backgroundColor="#222" />
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#7B68EE" />
-          <Text style={styles.loadingText}>Carregando eventos...</Text>
-        </View>
-      </SafeAreaView>
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#7B68EE" />
+        <Text style={styles.loadingText}>Carregando eventos...</Text>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="light-content" backgroundColor="#222" />
+    <View style={styles.container}>
+      {/* Calendário */}
+      <Calendar
+        theme={calendarTheme}
+        onDayPress={handleDayPress}
+        markedDates={markedDates}
+        markingType={'multi-dot'}
+        enableSwipeMonths={true}
+        monthFormat={'MMMM yyyy'}
+        hideExtraDays={false}
+        firstDay={0}
+        style={styles.calendar}
+      />
       
-      <View style={styles.container}>
-        {/* Calendário */}
-        <Calendar
-          theme={calendarTheme}
-          onDayPress={handleDayPress}
-          markedDates={markedDates}
-          markingType={'multi-dot'}
-          enableSwipeMonths={true}
-          monthFormat={'MMMM yyyy'}
-          hideExtraDays={false}
-          firstDay={0}
-          style={styles.calendar}
-        />
-        
-        {/* Lista de eventos para o dia selecionado */}
-        {selectedDate && (
-          <View style={styles.eventsContainer}>
-            <View style={styles.selectedDateHeader}>
-              <Text style={styles.selectedDateText}>
-                {getFormattedDate(selectedDate)}
+      {/* Exibir mensagem de erro se houver */}
+      {errorMessage && (
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>{errorMessage}</Text>
+          <TouchableOpacity 
+            style={styles.retryButton}
+            onPress={refreshCalendarEvents}
+          >
+            <Text style={styles.retryButtonText}>Tentar novamente</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+      
+      {/* Lista de eventos para o dia selecionado */}
+      {selectedDate && (
+        <View style={styles.eventsContainer}>
+          <View style={styles.selectedDateHeader}>
+            <Text style={styles.selectedDateText}>
+              {getFormattedDate(selectedDate)}
+            </Text>
+            <TouchableOpacity 
+              style={styles.addEventButton}
+              onPress={() => router.push('/(panel)/events/create')}
+              accessibilityLabel="Adicionar evento"
+              accessibilityHint="Cria um novo evento"
+            >
+              <Ionicons name="add" size={20} color="#7B68EE" />
+            </TouchableOpacity>
+          </View>
+          
+          {selectedDateEvents.length > 0 ? (
+            <FlatList
+              data={selectedDateEvents}
+              keyExtractor={(item) => String(item.id)}
+              renderItem={renderEventItem}
+              style={styles.eventsList}
+              refreshControl={
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={refreshCalendarEvents}
+                  colors={['#7B68EE']}
+                  tintColor={'#7B68EE'}
+                />
+              }
+            />
+          ) : (
+            <View style={styles.noEventsContainer}>
+              <MaterialCommunityIcons name="calendar-blank" size={48} color="#7B68EE" />
+              <Text style={styles.noEventsText}>
+                Nenhum evento nesta data
               </Text>
               <TouchableOpacity 
-                style={styles.addEventButton}
+                style={styles.createEventButtonLarge}
                 onPress={() => router.push('/(panel)/events/create')}
               >
-                <Ionicons name="add" size={20} color="#7B68EE" />
+                <Text style={styles.createEventButtonText}>
+                  Criar Evento
+                </Text>
               </TouchableOpacity>
             </View>
-            
-            {selectedDateEvents.length > 0 ? (
-              <FlatList
-                data={selectedDateEvents}
-                keyExtractor={(item) => String(item.id)}
-                renderItem={renderEventItem}
-                style={styles.eventsList}
-              />
-            ) : (
-              <View style={styles.noEventsContainer}>
-                <MaterialCommunityIcons name="calendar-blank" size={48} color="#7B68EE" />
-                <Text style={styles.noEventsText}>
-                  Nenhum evento nesta data
-                </Text>
-                <TouchableOpacity 
-                  style={styles.createEventButtonLarge}
-                  onPress={() => router.push('/(panel)/events/create')}
-                >
-                  <Text style={styles.createEventButtonText}>
-                    Criar Evento
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-        )}
-        
-        {/* Botão flutuante de adicionar */}
-        <TouchableOpacity 
-          style={styles.floatingButton}
-          onPress={() => router.push('/(panel)/events/create')}
-        >
-          <Ionicons name="add" size={24} color="white" />
-        </TouchableOpacity>
-      </View>
-    </SafeAreaView>
+          )}
+        </View>
+      )}
+      
+      {/* Botão flutuante de adicionar */}
+      <TouchableOpacity 
+        style={styles.floatingButton}
+        onPress={() => router.push('/(panel)/events/create')}
+        accessibilityLabel="Criar evento"
+        accessibilityRole="button"
+      >
+        <Ionicons name="add" size={24} color="white" />
+      </TouchableOpacity>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  safeArea: {
+  container: {
     flex: 1,
     backgroundColor: '#222',
   },
@@ -368,6 +418,29 @@ const styles = StyleSheet.create({
     color: '#fff',
     marginTop: 16,
     fontSize: 16,
+  },
+  errorContainer: {
+    padding: 16,
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 99, 71, 0.1)',
+    margin: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 99, 71, 0.3)',
+  },
+  errorText: {
+    color: '#FF6347',
+    marginBottom: 10,
+  },
+  retryButton: {
+    backgroundColor: 'rgba(255, 99, 71, 0.2)',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 4,
+  },
+  retryButtonText: {
+    color: '#FF6347',
+    fontWeight: 'bold',
   },
   headerContainer: {
     flexDirection: 'row',
@@ -393,8 +466,8 @@ const styles = StyleSheet.create({
   },
   eventsContainer: {
     flex: 1,
-    minHeight: 200, // Altura mínima garantida
-    maxHeight: Dimensions.get('window').height * 0.4, // Limita a altura máxima
+    minHeight: 200,
+    maxHeight: Dimensions.get('window').height * 0.4,
     backgroundColor: '#222',
     borderTopWidth: 1,
     borderTopColor: '#444',
@@ -405,13 +478,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 10,
     margin: 10,
-    // Remover height fixo
-  },
-  container: {
-    flex: 1,
-    backgroundColor: '#222',
-    // Adicionar justifyContent para melhor distribuição
-    justifyContent: 'flex-start', 
   },
   selectedDateHeader: {
     flexDirection: 'row',
@@ -520,5 +586,6 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
 });
+
 
 export default CalendarScreen;

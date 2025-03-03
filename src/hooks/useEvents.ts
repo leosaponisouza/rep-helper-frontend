@@ -54,74 +54,68 @@ export const useEvents = (options: UseEventsOptions = {}) => {
   const [error, setError] = useState<string | null>(null);
   const [filterType, setFilterType] = useState<string>(options.initialFilter || 'all');
 
-  // Função para buscar eventos
-  const fetchEvents = useCallback(async () => {
+  // Funções utilitárias para verificar status dos eventos
+  const checkEventIsHappening = (event: Event): boolean => {
+    try {
+      const now = new Date();
+      const startDate = parseISO(event.startDate);
+      const endDate = parseISO(event.endDate);
+      
+      return isAfter(now, startDate) && isBefore(now, endDate);
+    } catch (error) {
+      console.error('Error checking if event is happening:', error);
+      return false;
+    }
+  };
+
+  const checkEventIsFinished = (event: Event): boolean => {
+    try {
+      const now = new Date();
+      const endDate = parseISO(event.endDate);
+      
+      return isAfter(now, endDate);
+    } catch (error) {
+      console.error('Error checking if event is finished:', error);
+      return false;
+    }
+  };
+
+  // Função unificada para buscar eventos
+  const fetchEvents = useCallback(async (filter?: string) => {
     try {
       setLoading(true);
       setError(null);
 
-      const response = await api.get('/api/v1/events');
-      const normalizedEvents = response.data.map((event: any) => ({
-        ...event,
-        invitations: event.invitations || [], // Garante que nunca seja null
-      }));
+      let endpoint = '/api/v1/events';
+      
+      // Determinar endpoint baseado no filtro
+      if (filter === 'upcoming') endpoint = '/api/v1/events/upcoming';
+      else if (filter === 'invited') endpoint = '/api/v1/events/invited';
+      else if (filter === 'confirmed') endpoint = '/api/v1/events/confirmed';
+      
+      const response = await api.get(endpoint);
+      
+      const normalizedEvents = response.data.map((event: any) => {
+        // Garantir que propriedades importantes existam
+        const processedEvent = {
+          ...event,
+          invitations: event.invitations || [], // Garante que nunca seja null
+        };
+        
+        // Adicionar flags de status se não estiverem presentes
+        if (typeof processedEvent.isHappening !== 'boolean') {
+          processedEvent.isHappening = checkEventIsHappening(processedEvent);
+        }
+        
+        if (typeof processedEvent.isFinished !== 'boolean') {
+          processedEvent.isFinished = checkEventIsFinished(processedEvent);
+        }
+        
+        return processedEvent;
+      });
       
       setAllEvents(normalizedEvents);
-      applyFilter(filterType, response.data);
-    } catch (err) {
-      const parsedError = ErrorHandler.parseError(err);
-      setError(parsedError.message);
-      ErrorHandler.logError(parsedError);
-    } finally {
-      setLoading(false);
-    }
-  }, [filterType]);
-
-  // Função para buscar eventos futuros
-  const fetchUpcomingEvents = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const response = await api.get('/api/v1/events/upcoming');
-      setAllEvents(response.data);
-      applyFilter(filterType, response.data);
-    } catch (err) {
-      const parsedError = ErrorHandler.parseError(err);
-      setError(parsedError.message);
-      ErrorHandler.logError(parsedError);
-    } finally {
-      setLoading(false);
-    }
-  }, [filterType]);
-
-  // Função para buscar eventos para os quais o usuário foi convidado
-  const fetchInvitedEvents = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const response = await api.get('/api/v1/events/invited');
-      setAllEvents(response.data);
-      applyFilter(filterType, response.data);
-    } catch (err) {
-      const parsedError = ErrorHandler.parseError(err);
-      setError(parsedError.message);
-      ErrorHandler.logError(parsedError);
-    } finally {
-      setLoading(false);
-    }
-  }, [filterType]);
-
-  // Função para buscar eventos confirmados pelo usuário
-  const fetchConfirmedEvents = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const response = await api.get('/api/v1/events/confirmed');
-      setAllEvents(response.data);
-      applyFilter(filterType, response.data);
+      applyFilter(filter || filterType, normalizedEvents);
     } catch (err) {
       const parsedError = ErrorHandler.parseError(err);
       setError(parsedError.message);
@@ -157,14 +151,14 @@ export const useEvents = (options: UseEventsOptions = {}) => {
         break;
       case 'invited':
         setFilteredEvents(events.filter(event => {
-          return event.invitations.some(
+          return event.invitations?.some(
             invitation => invitation.userId === user?.uid && invitation.status === 'INVITED'
           );
         }));
         break;
       case 'confirmed':
         setFilteredEvents(events.filter(event => {
-          return event.invitations.some(
+          return event.invitations?.some(
             invitation => invitation.userId === user?.uid && invitation.status === 'CONFIRMED'
           );
         }));
@@ -177,21 +171,24 @@ export const useEvents = (options: UseEventsOptions = {}) => {
 
   // Carregar eventos no mount do componente
   useEffect(() => {
-    switch (filterType) {
-      case 'upcoming':
-        fetchUpcomingEvents();
-        break;
-      case 'invited':
-        fetchInvitedEvents();
-        break;
-      case 'confirmed':
-        fetchConfirmedEvents();
-        break;
-      default:
-        fetchEvents();
-        break;
+    fetchEvents(filterType);
+  }, [fetchEvents, filterType]);
+
+  // Função para atualizar eventos
+  const refreshEvents = useCallback(async (specificFilter?: string) => {
+    const filterToUse = specificFilter || filterType;
+    
+    try {
+      setLoading(true);
+      await fetchEvents(filterToUse);
+      return true;
+    } catch (error) {
+      console.error('Error refreshing events:', error);
+      return false;
+    } finally {
+      setLoading(false);
     }
-  }, [fetchEvents, fetchUpcomingEvents, fetchInvitedEvents, fetchConfirmedEvents, filterType]);
+  }, [fetchEvents, filterType]);
 
   // Função para criar evento
   const createEvent = async (eventData: EventFormData) => {
@@ -199,7 +196,7 @@ export const useEvents = (options: UseEventsOptions = {}) => {
       const response = await api.post('/api/v1/events', eventData);
       
       // Atualizar lista de eventos
-      fetchEvents();
+      await refreshEvents();
       
       return response.data;
     } catch (err) {
@@ -215,7 +212,7 @@ export const useEvents = (options: UseEventsOptions = {}) => {
       const response = await api.put(`/api/v1/events/${eventId}`, updateData);
       
       // Atualizar lista de eventos
-      fetchEvents();
+      await refreshEvents();
       
       return response.data;
     } catch (err) {
@@ -247,12 +244,24 @@ export const useEvents = (options: UseEventsOptions = {}) => {
     try {
       const response = await api.put(`/api/v1/events/${eventId}/respond`, { status });
       
-      // Update event lists after responding to invitation
-      await Promise.all([
-        fetchEvents(),
-        fetchInvitedEvents(),
-        fetchConfirmedEvents()
-      ]);
+      // Atualizar apenas o evento alterado na lista atual
+      setAllEvents(prev => 
+        prev.map(event => 
+          event.id === eventId 
+            ? {
+                ...event, 
+                invitations: event.invitations.map(inv => 
+                  inv.userId === user?.uid 
+                    ? { ...inv, status } 
+                    : inv
+                )
+              } 
+            : event
+        )
+      );
+      
+      // Aplicar novamente o filtro para atualizar a lista filtrada
+      applyFilter(filterType);
       
       return response.data;
     } catch (err) {
@@ -268,8 +277,22 @@ export const useEvents = (options: UseEventsOptions = {}) => {
       
       const response = await api.post(`/api/v1/events/${eventId}/invite`, { userIds });
       
-      // Update event list after inviting users
-      await fetchEvents();
+      // Após convidar usuários, buscar novamente o evento específico
+      try {
+        const eventResponse = await api.get(`/api/v1/events/${eventId}`);
+        
+        // Atualizar o evento na lista
+        setAllEvents(prev => 
+          prev.map(event => 
+            event.id === eventId ? eventResponse.data : event
+          )
+        );
+        
+        // Aplicar novamente o filtro
+        applyFilter(filterType);
+      } catch (error) {
+        console.error('Error fetching updated event data:', error);
+      }
       
       return response.data;
     } catch (err) {
@@ -288,6 +311,7 @@ export const useEvents = (options: UseEventsOptions = {}) => {
       }
       return format(date, "dd 'de' MMMM", { locale: ptBR });
     } catch (error) {
+      console.error('Error formatting event date:', error, dateString);
       return dateString;
     }
   };
@@ -298,6 +322,7 @@ export const useEvents = (options: UseEventsOptions = {}) => {
     const invitation = event.invitations.find(inv => inv.userId === user.uid);
     return invitation ? invitation.status : null;
   };
+  
   const getInvitationStats = (event: Event) => {
     if (!event || !event.invitations) {
       return { confirmed: 0, pending: 0, declined: 0 };
@@ -309,6 +334,7 @@ export const useEvents = (options: UseEventsOptions = {}) => {
       declined: event.invitations.filter(inv => inv.status === 'DECLINED').length
     };
   };
+  
   // Verificar se o usuário atual é o criador do evento
   const isCurrentUserCreator = (event: Event): boolean => {
     return !!user && user.uid === event.creatorId;
@@ -320,9 +346,7 @@ export const useEvents = (options: UseEventsOptions = {}) => {
     loading,
     error,
     fetchEvents,
-    fetchUpcomingEvents,
-    fetchInvitedEvents,
-    fetchConfirmedEvents,
+    refreshEvents,
     applyFilter,
     createEvent,
     updateEvent,

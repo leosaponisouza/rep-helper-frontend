@@ -1,23 +1,73 @@
 // app/(panel)/events/index.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   View, 
   Text, 
   StyleSheet, 
   TouchableOpacity, 
   SafeAreaView, 
-  StatusBar 
+  StatusBar, 
+  ActivityIndicator 
 } from 'react-native';
-import { useRouter, usePathname } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import EventsList from './events-list';
 import CalendarScreen from './calendar';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFocusEffect } from '@react-navigation/native';
+
+// Chave para armazenar a tab ativa
+const EVENTS_ACTIVE_TAB_KEY = 'events_active_tab';
 
 const EventsTabsScreen = () => {
   const [activeTab, setActiveTab] = useState('list'); // 'list' ou 'calendar'
+  const [initialLoading, setInitialLoading] = useState(true);
   const router = useRouter();
-  const pathname = usePathname();
 
+  // Carregar a última tab ativa ao montar o componente
+  useEffect(() => {
+    const loadLastActiveTab = async () => {
+      try {
+        const savedTab = await AsyncStorage.getItem(EVENTS_ACTIVE_TAB_KEY);
+        if (savedTab && (savedTab === 'list' || savedTab === 'calendar')) {
+          setActiveTab(savedTab);
+        }
+      } catch (error) {
+        console.error('Error loading active tab:', error);
+      } finally {
+        setInitialLoading(false);
+      }
+    };
+    
+    loadLastActiveTab();
+  }, []);
+
+  // Quando a tela receber foco, recarregar as preferências
+  useFocusEffect(
+    useCallback(() => {
+      // Você pode adicionar aqui lógica adicional quando a tela receber foco
+      // Por exemplo, atualizar dados de eventos se necessário
+    }, [])
+  );
+
+  // Lidar com a mudança de tab e persistir a escolha
+  const handleTabChange = useCallback(async (tab: string) => {
+    setActiveTab(tab);
+    
+    // Persistir a escolha da tab para uso futuro
+    try {
+      await AsyncStorage.setItem(EVENTS_ACTIVE_TAB_KEY, tab);
+    } catch (error) {
+      console.error('Error saving active tab:', error);
+    }
+  }, []);
+
+  // Função para navegar para a criação de evento
+  const navigateToCreateEvent = useCallback(() => {
+    router.push('/(panel)/events/create');
+  }, [router]);
+
+  // Renderiza o conteúdo da tab ativa
   const renderTabContent = () => {
     if (activeTab === 'calendar') {
       return <CalendarScreen />;
@@ -25,6 +75,17 @@ const EventsTabsScreen = () => {
       return <EventsList />;
     }
   };
+
+  if (initialLoading) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar barStyle="light-content" backgroundColor="#222" />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#7B68EE" />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -38,7 +99,10 @@ const EventsTabsScreen = () => {
               styles.tabButton,
               activeTab === 'list' && styles.activeTabButton
             ]}
-            onPress={() => setActiveTab('list')}
+            onPress={() => handleTabChange('list')}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: activeTab === 'list' }}
+            accessibilityLabel="Lista de eventos"
           >
             <Ionicons 
               name="list" 
@@ -58,7 +122,10 @@ const EventsTabsScreen = () => {
               styles.tabButton,
               activeTab === 'calendar' && styles.activeTabButton
             ]}
-            onPress={() => setActiveTab('calendar')}
+            onPress={() => handleTabChange('calendar')}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: activeTab === 'calendar' }}
+            accessibilityLabel="Calendário de eventos"
           >
             <Ionicons 
               name="calendar" 
@@ -83,7 +150,9 @@ const EventsTabsScreen = () => {
       {/* Botão de criar evento */}
       <TouchableOpacity 
         style={styles.addButton}
-        onPress={() => router.push('/(panel)/events/create')}
+        onPress={navigateToCreateEvent}
+        accessibilityRole="button"
+        accessibilityLabel="Criar novo evento"
       >
         <Ionicons name="add" size={24} color="white" />
       </TouchableOpacity>
@@ -95,6 +164,11 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: '#222',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   headerContainer: {
     paddingHorizontal: 20,
