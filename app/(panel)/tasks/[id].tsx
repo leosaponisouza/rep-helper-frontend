@@ -1,7 +1,4 @@
 // app/(panel)/tasks/[id].tsx
-// Atualização da tela de detalhes de tarefa para destacar quando a tarefa está atribuída ao usuário atual
-// e melhorar a visualização de tarefas atribuídas ao usuário
-
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -98,8 +95,7 @@ const TaskDetailsScreen = () => {
   const [isStatusChanging, setIsStatusChanging] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  console.log('User Object:', JSON.stringify(user, null, 2));
-  console.log('User UID:', user?.uid);
+
   // Busca detalhes da tarefa
   useEffect(() => {
     const fetchTaskDetails = async () => {
@@ -119,11 +115,11 @@ const TaskDetailsScreen = () => {
   }, [id]);
 
   // Verificar se usuário atual está atribuído à tarefa
-  const isAssignedToCurrentUser = task?.assignedUsers?.some(assignedUser => assignedUser.id === user?.uid);
+  const isAssignedToCurrentUser = task?.assignedUsers?.some(user => user.id === user?.id);
 
   // Verificar se usuário atual pode editar
   const canEditTask = isAssignedToCurrentUser;
-  const isUserAdmin = user?.isAdmin === true; // Assumindo que seu objeto de usuário tem este campo
+  const isUserAdmin = user?.isAdmin === true;
   const canModifyTask = canEditTask || isUserAdmin;
 
   const handleToggleStatus = async () => {
@@ -180,6 +176,7 @@ const TaskDetailsScreen = () => {
       setIsStatusChanging(false);
     }
   };
+
   const handleCancelTask = async () => {
     if (!task || isCancelling) return;
 
@@ -361,9 +358,7 @@ const TaskDetailsScreen = () => {
       </View>
 
       {/* Banner de tarefa atribuída ao usuário corrente */}
-      {isAssignedToCurrentUser && (
-        <UserAssignmentBanner isAssignedToCurrentUser={isAssignedToCurrentUser} />
-      )}
+      <UserAssignmentBanner isAssignedToCurrentUser={isAssignedToCurrentUser || false} />
 
       <ScrollView
         style={styles.container}
@@ -391,73 +386,73 @@ const TaskDetailsScreen = () => {
         </View>
 
         {/* Action Buttons */}
-{/* Action Buttons */}
-{isTaskActive && canModifyTask && (
-  <View style={styles.actionButtonsContainer}>
-    {task.status === 'PENDING' && (
-      <TouchableOpacity
-        style={[
-          styles.actionButton,
-          styles.primaryButton,
-          isStatusChanging && styles.actionButtonDisabled
-        ]}
-        onPress={handleToggleStatus}
-        disabled={isStatusChanging}
-      >
-        {isStatusChanging ? (
-          <ActivityIndicator size="small" color="#fff" />
-        ) : (
-          <>
-            <Ionicons name="play-circle" size={18} color="#fff" />
-            <Text style={styles.primaryButtonText}>Iniciar Tarefa</Text>
-          </>
+        {isTaskActive && canModifyTask && (
+          <View style={styles.actionButtonsContainer}>
+            {task.status === 'PENDING' && (
+              <TouchableOpacity
+                style={[
+                  styles.actionButton,
+                  styles.primaryButton,
+                  isStatusChanging && styles.actionButtonDisabled
+                ]}
+                onPress={handleToggleStatus}
+                disabled={isStatusChanging}
+              >
+                {isStatusChanging ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <>
+                    <Ionicons name="play-circle" size={18} color="#fff" />
+                    <Text style={styles.primaryButtonText}>Iniciar Tarefa</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
+            
+            {task.status === 'IN_PROGRESS' && (
+              <TouchableOpacity
+                style={[
+                  styles.actionButton,
+                  styles.primaryButton,
+                  isStatusChanging && styles.actionButtonDisabled
+                ]}
+                onPress={handleToggleStatus}
+                disabled={isStatusChanging}
+              >
+                {isStatusChanging ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <>
+                    <Ionicons name="checkmark-circle" size={18} color="#fff" />
+                    <Text style={styles.primaryButtonText}>Concluir Tarefa</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
+            
+            <View style={styles.buttonSpacer} />
+            
+            <TouchableOpacity
+              style={[
+                styles.actionButton,
+                styles.secondaryButton,
+                isCancelling && styles.actionButtonDisabled
+              ]}
+              onPress={confirmCancelTask}
+              disabled={isCancelling}
+            >
+              {isCancelling ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <>
+                  <Ionicons name="close-circle" size={18} color="#fff" />
+                  <Text style={styles.secondaryButtonText}>Cancelar</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
         )}
-      </TouchableOpacity>
-    )}
-    
-    {task.status === 'IN_PROGRESS' && (
-      <TouchableOpacity
-        style={[
-          styles.actionButton,
-          styles.primaryButton,
-          isStatusChanging && styles.actionButtonDisabled
-        ]}
-        onPress={handleToggleStatus}
-        disabled={isStatusChanging}
-      >
-        {isStatusChanging ? (
-          <ActivityIndicator size="small" color="#fff" />
-        ) : (
-          <>
-            <Ionicons name="checkmark-circle" size={18} color="#fff" />
-            <Text style={styles.primaryButtonText}>Concluir Tarefa</Text>
-          </>
-        )}
-      </TouchableOpacity>
-    )}
-    
-    <View style={styles.buttonSpacer} />
-    
-    <TouchableOpacity
-      style={[
-        styles.actionButton,
-        styles.secondaryButton,
-        isCancelling && styles.actionButtonDisabled
-      ]}
-      onPress={confirmCancelTask}
-      disabled={isCancelling}
-    >
-      {isCancelling ? (
-        <ActivityIndicator size="small" color="#fff" />
-      ) : (
-        <>
-          <Ionicons name="close-circle" size={18} color="#fff" />
-          <Text style={styles.secondaryButtonText}>Cancelar</Text>
-        </>
-      )}
-    </TouchableOpacity>
-  </View>
-)}
+
         {/* Botão para reabrir tarefas concluídas */}
         {isTaskCompleted && canModifyTask && (
           <View style={styles.actionButtonsContainer}>
@@ -481,6 +476,7 @@ const TaskDetailsScreen = () => {
             </TouchableOpacity>
           </View>
         )}
+
         {/* Description */}
         <View style={styles.sectionContainer}>
           <View style={styles.sectionHeader}>
