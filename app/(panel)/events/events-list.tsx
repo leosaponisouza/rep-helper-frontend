@@ -16,9 +16,6 @@ import { useRouter } from 'expo-router';
 import TaskFilter, { FilterOption } from '../../../components/TaskFilter';
 import { useEvents, Event } from '../../../src/hooks/useEvents';
 import { useAuth } from '../../../src/context/AuthContext';
-import { format, parseISO, isToday, isTomorrow } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
-import { useFocusEffect } from '@react-navigation/native';
 
 // Interface de tipos para as propriedades do EventItem
 interface EventItemProps {
@@ -34,6 +31,8 @@ const EventItem: React.FC<EventItemProps> = ({
   const isAssignedToCurrentUser = item.invitations?.some(user => user.userId === currentUserId);
   
   const getStatusColor = (event: Event) => {
+    if (!event) return '#7B68EE'; // Cor padrão caso o evento seja nulo
+    
     if (event.isFinished) return '#9E9E9E';
     if (event.isHappening) return '#4CAF50';
     return '#7B68EE';
@@ -42,25 +41,30 @@ const EventItem: React.FC<EventItemProps> = ({
   const formatDate = (dateString?: string) => {
     if (!dateString) return null;
     
-    const date = new Date(dateString);
-    const today = new Date();
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    
-    const isEventToday = date.toDateString() === today.toDateString();
-    const isEventTomorrow = date.toDateString() === tomorrow.toDateString();
-    
-    const formattedDate = format(date, "dd/MM", { locale: ptBR });
-    const formattedTime = format(date, "HH:mm", { locale: ptBR });
-    
-    if (isEventToday) return { text: `Hoje, ${formattedTime}`, isSpecial: true, isOverdue: false };
-    if (isEventTomorrow) return { text: `Amanhã, ${formattedTime}`, isSpecial: true, isOverdue: false };
-    
-    return { 
-      text: `${formattedDate}, ${formattedTime}`, 
-      isSpecial: false, 
-      isOverdue: false 
-    };
+    try {
+      const date = new Date(dateString);
+      const today = new Date();
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      
+      const isEventToday = date.toDateString() === today.toDateString();
+      const isEventTomorrow = date.toDateString() === tomorrow.toDateString();
+      
+      const formattedDate = date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+      const formattedTime = date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      
+      if (isEventToday) return { text: `Hoje, ${formattedTime}`, isSpecial: true, isOverdue: false };
+      if (isEventTomorrow) return { text: `Amanhã, ${formattedTime}`, isSpecial: true, isOverdue: false };
+      
+      return { 
+        text: `${formattedDate}, ${formattedTime}`, 
+        isSpecial: false, 
+        isOverdue: false 
+      };
+    } catch (error) {
+      console.error('Erro ao formatar data:', error);
+      return { text: dateString, isSpecial: false, isOverdue: false };
+    }
   };
   
   // Formata a data para exibição
@@ -82,7 +86,7 @@ const EventItem: React.FC<EventItemProps> = ({
       <View style={styles.eventContent}>
         <View style={styles.eventMainContent}>
           <Text style={styles.eventTitle} numberOfLines={1}>
-            {item.title}
+            {item.title || 'Sem título'}
           </Text>
           
           <View style={styles.eventDateTimeContainer}>
@@ -92,7 +96,7 @@ const EventItem: React.FC<EventItemProps> = ({
                 styles.eventDateTime,
                 formattedDate?.isSpecial && styles.specialDateText
               ]}>
-                {formattedDate?.text}
+                {formattedDate?.text || 'Data não disponível'}
               </Text>
             </View>
             
@@ -112,7 +116,7 @@ const EventItem: React.FC<EventItemProps> = ({
               </Text>
             </View>
             
-            {item.creatorId === currentUserId && (
+            {currentUserId && item.creatorId === currentUserId && (
               <View style={styles.creatorBadge}>
                 <Text style={styles.creatorText}>Criador</Text>
               </View>
@@ -125,7 +129,8 @@ const EventItem: React.FC<EventItemProps> = ({
     </TouchableOpacity>
   );
 };
-const EventsListScreen = () => {
+
+const EventsListScreen: React.FC = () => {
   const router = useRouter();
   const { user } = useAuth();
   const [filter, setFilter] = useState<string>('all');
@@ -151,11 +156,9 @@ const EventsListScreen = () => {
   } = useEvents();
 
   // Recarregar eventos quando a tela receber foco
-  useFocusEffect(
-    useCallback(() => {
-      refreshEvents();
-    }, [])
-  );
+  useEffect(() => {
+    refreshEvents();
+  }, []);
 
   // Função para mudar filtro localmente
   const handleFilterChange = useCallback((newFilter: string) => {
@@ -207,7 +210,7 @@ const EventsListScreen = () => {
 
       <FlatList
         data={events}
-        keyExtractor={(item) => item.id?.toString() || ''}
+        keyExtractor={(item) => item.id?.toString() || Math.random().toString()}
         renderItem={({ item }) => (
           <EventItem 
             item={item}
@@ -326,8 +329,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   participantsText: {
-    color: '#ccc',
-    fontSize: 14,
+    color: '#aaa',
+    fontSize: 12,
   },
   creatorBadge: {
     backgroundColor: 'rgba(123, 104, 238, 0.15)',

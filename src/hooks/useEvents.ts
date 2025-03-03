@@ -247,8 +247,12 @@ export const useEvents = (options: UseEventsOptions = {}) => {
     try {
       const response = await api.put(`/api/v1/events/${eventId}/respond`, { status });
       
-      // Atualizar lista de eventos
-      fetchEvents();
+      // Update event lists after responding to invitation
+      await Promise.all([
+        fetchEvents(),
+        fetchInvitedEvents(),
+        fetchConfirmedEvents()
+      ]);
       
       return response.data;
     } catch (err) {
@@ -258,13 +262,14 @@ export const useEvents = (options: UseEventsOptions = {}) => {
     }
   };
 
-  // Função para convidar usuários
   const inviteUsers = async (eventId: number, userIds: string[]) => {
     try {
+      if (!userIds.length) return null;
+      
       const response = await api.post(`/api/v1/events/${eventId}/invite`, { userIds });
       
-      // Atualizar lista de eventos
-      fetchEvents();
+      // Update event list after inviting users
+      await fetchEvents();
       
       return response.data;
     } catch (err) {
@@ -287,17 +292,26 @@ export const useEvents = (options: UseEventsOptions = {}) => {
     }
   };
 
-  // Verificar status do usuário atual em um evento
   const getCurrentUserEventStatus = (event: Event): InvitationStatus | null => {
     if (!user || !event || !event.invitations) return null;
     
     const invitation = event.invitations.find(inv => inv.userId === user.uid);
     return invitation ? invitation.status : null;
   };
-
+  const getInvitationStats = (event: Event) => {
+    if (!event || !event.invitations) {
+      return { confirmed: 0, pending: 0, declined: 0 };
+    }
+    
+    return {
+      confirmed: event.invitations.filter(inv => inv.status === 'CONFIRMED').length,
+      pending: event.invitations.filter(inv => inv.status === 'INVITED').length,
+      declined: event.invitations.filter(inv => inv.status === 'DECLINED').length
+    };
+  };
   // Verificar se o usuário atual é o criador do evento
   const isCurrentUserCreator = (event: Event): boolean => {
-    return user?.uid === event.creatorId;
+    return !!user && user.uid === event.creatorId;
   };
 
   return {
@@ -317,6 +331,7 @@ export const useEvents = (options: UseEventsOptions = {}) => {
     inviteUsers,
     formatEventDate,
     getCurrentUserEventStatus,
+    getInvitationStats,
     isCurrentUserCreator,
     filterType
   };

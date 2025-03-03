@@ -44,7 +44,7 @@ const InviteMembersScreen: React.FC = () => {
   const [selectedMembersIds, setSelectedMembersIds] = useState<string[]>([]);
   const [searchFocused, setSearchFocused] = useState(false);
   
-  // Carregar dados do evento e membros da república
+  // Fetch event data and republic members
   useEffect(() => {
     const fetchData = async () => {
       if (!id || !user?.currentRepublicId) return;
@@ -52,24 +52,24 @@ const InviteMembersScreen: React.FC = () => {
       try {
         setLoading(true);
         
-        // Buscar dados do evento
+        // Fetch event data
         const eventResponse = await api.get(`/api/v1/events/${id}`);
         const eventData = eventResponse.data;
         
-        // Verificar se o usuário tem permissão para editar
+        // Check if user is the creator to manage permissions
         if (!isCurrentUserCreator(eventData)) {
-          Alert.alert('Erro', 'Você não tem permissão para gerenciar convites deste evento');
+          Alert.alert('Error', 'You do not have permission to manage invitations for this event');
           router.back();
           return;
         }
         
         setEvent(eventData);
         
-        // Buscar membros da república
+        // Fetch republic members
         const membersResponse = await api.get(`/api/v1/republics/${user.currentRepublicId}/members`);
         const membersData = membersResponse.data;
         
-        // Mapear status de convite para cada membro
+        // Map invitation status for each member
         const mappedMembers = membersData.map((member: any) => {
           const isInvited = eventData.invitations.some(
             (inv: any) => inv.userId === member.uid
@@ -84,7 +84,7 @@ const InviteMembersScreen: React.FC = () => {
         setMembers(mappedMembers);
         setFilteredMembers(mappedMembers);
         
-        // Inicializar seleção com os membros já convidados
+        // Initialize selection with already invited members
         const invitedMembersIds = eventData.invitations.map((inv: any) => inv.userId);
         setSelectedMembersIds(invitedMembersIds);
         
@@ -100,7 +100,7 @@ const InviteMembersScreen: React.FC = () => {
     fetchData();
   }, [id, user?.currentRepublicId]);
   
-  // Filtrar membros ao mudar a busca
+  // Filter members when search query changes
   useEffect(() => {
     if (searchQuery.trim() === '') {
       setFilteredMembers(members);
@@ -117,7 +117,7 @@ const InviteMembersScreen: React.FC = () => {
     setFilteredMembers(filtered);
   }, [searchQuery, members]);
   
-  // Alternar seleção de membro
+  // Toggle member selection
   const toggleMemberSelection = (memberId: string) => {
     setSelectedMembersIds(prev => {
       if (prev.includes(memberId)) {
@@ -128,28 +128,28 @@ const InviteMembersScreen: React.FC = () => {
     });
   };
   
-  // Enviar convites para os membros selecionados
+  // Invite selected members
   const handleInviteMembers = async () => {
     if (!id || !event) return;
     
     try {
       setInviting(true);
       
-      // Enviar apenas os IDs que não estão na lista de convidados
+      // Only send IDs that are not already in the invitation list
       const newInvitees = selectedMembersIds.filter(memberId => 
         !event.invitations.some(inv => inv.userId === memberId)
       );
       
       if (newInvitees.length === 0) {
-        Alert.alert('Informação', 'Nenhum novo membro para convidar');
+        Alert.alert('Info', 'No new members to invite');
         return;
       }
       
       await inviteUsers(parseInt(id), newInvitees);
       
       Alert.alert(
-        'Sucesso',
-        `${newInvitees.length} membro(s) convidado(s) com sucesso!`,
+        'Success',
+        `${newInvitees.length} member(s) invited successfully!`,
         [
           {
             text: 'OK',
@@ -158,14 +158,14 @@ const InviteMembersScreen: React.FC = () => {
         ]
       );
     } catch (error) {
-      console.error('Erro ao convidar membros:', error);
-      Alert.alert('Erro', 'Não foi possível enviar os convites. Tente novamente.');
+      console.error('Error inviting members:', error);
+      Alert.alert('Error', 'Could not send invitations. Please try again.');
     } finally {
       setInviting(false);
     }
   };
   
-  // Renderizar item de membro
+  // Render member item
   const renderMemberItem = ({ item }: { item: Member }) => {
     const isSelected = selectedMembersIds.includes(item.uid);
     const displayName = item.nickname || item.name;
@@ -195,7 +195,7 @@ const InviteMembersScreen: React.FC = () => {
           <View style={styles.memberTextInfo}>
             <Text style={styles.memberName}>
               {displayName}
-              {item.uid === user?.uid ? ' (Você)' : ''}
+              {item.uid === user?.uid ? ' (You)' : ''}
             </Text>
             <Text style={styles.memberEmail}>{item.email}</Text>
           </View>
@@ -204,7 +204,7 @@ const InviteMembersScreen: React.FC = () => {
         <View style={styles.memberStatusContainer}>
           {item.isInvited ? (
             <View style={styles.invitedBadge}>
-              <Text style={styles.invitedText}>Convidado</Text>
+              <Text style={styles.invitedText}>Invited</Text>
             </View>
           ) : (
             <View style={[
@@ -227,7 +227,7 @@ const InviteMembersScreen: React.FC = () => {
         <StatusBar barStyle="light-content" backgroundColor="#222" />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#7B68EE" />
-          <Text style={styles.loadingText}>Carregando membros...</Text>
+          <Text style={styles.loadingText}>Loading members...</Text>
         </View>
       </SafeAreaView>
     );
@@ -244,7 +244,7 @@ const InviteMembersScreen: React.FC = () => {
         >
           <Ionicons name="arrow-back" size={24} color="#7B68EE" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Convidar Membros</Text>
+        <Text style={styles.headerTitle}>Invite Members</Text>
       </View>
       
       <View style={styles.container}>
@@ -261,7 +261,7 @@ const InviteMembersScreen: React.FC = () => {
           <Ionicons name="search" size={20} color="#7B68EE" style={styles.searchIcon} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Buscar membro"
+            placeholder="Search member"
             placeholderTextColor="#aaa"
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -280,7 +280,7 @@ const InviteMembersScreen: React.FC = () => {
         
         <View style={styles.selectionInfo}>
           <Text style={styles.selectionCount}>
-            {selectedMembersIds.length} membro(s) selecionado(s)
+            {selectedMembersIds.length} member(s) selected
           </Text>
         </View>
         
@@ -294,7 +294,7 @@ const InviteMembersScreen: React.FC = () => {
             <View style={styles.emptyContainer}>
               <Ionicons name="people" size={50} color="#7B68EE" />
               <Text style={styles.emptyText}>
-                {searchQuery ? 'Nenhum membro encontrado' : 'Nenhum membro disponível'}
+                {searchQuery ? 'No members found' : 'No members available'}
               </Text>
             </View>
           )}
@@ -313,7 +313,7 @@ const InviteMembersScreen: React.FC = () => {
           ) : (
             <>
               <Ionicons name="mail" size={20} color="#fff" style={styles.buttonIcon} />
-              <Text style={styles.inviteButtonText}>Convidar Membros Selecionados</Text>
+              <Text style={styles.inviteButtonText}>Invite Selected Members</Text>
             </>
           )}
         </TouchableOpacity>
