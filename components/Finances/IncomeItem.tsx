@@ -99,12 +99,12 @@ const IncomeItem: React.FC<IncomeItemProps> = ({ income, onPress }) => {
             ) : (
               <View style={styles.creatorAvatarPlaceholder}>
                 <Text style={styles.creatorInitials}>
-                  {income.creatorName?.charAt(0).toUpperCase() || '?'}
+                  {income.contributorName?.charAt(0).toUpperCase() || '?'}
                 </Text>
               </View>
             )}
             <Text style={styles.creatorName} numberOfLines={1}>
-              {income.creatorName}
+              {income.contributorName}
             </Text>
           </View>
           

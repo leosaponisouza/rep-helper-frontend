@@ -1,5 +1,5 @@
-// app/(panel)/finances/index.tsx - Fix for pendingActions
-import React, { useState, useCallback } from 'react';
+// app/(panel)/finances/index.tsx - Correção das abas e navegação
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,12 +9,10 @@ import {
   ScrollView,
   TouchableOpacity,
   RefreshControl,
-  FlatList,
   ActivityIndicator,
-  useWindowDimensions,
-  Platform
+  useWindowDimensions
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFinances } from '../../../src/hooks/useFinances';
 import { PendingAction, Transaction } from '../../../src/models/finances.model';
@@ -23,6 +21,8 @@ import { PendingAction, Transaction } from '../../../src/models/finances.model';
 import FinancialSummary from '../../../components/Finances/FinancialSummary';
 import MonthlyChart from '../../../components/Finances/MonthlyChart';
 import CategoryChart from '../../../components/Finances/CategoryChart';
+import ExpensesScreen from './expenses/index';
+import IncomesScreen from './incomes/index';
 
 // Types for tabs
 type TabType = 'dashboard' | 'expenses' | 'incomes';
@@ -30,10 +30,18 @@ type TabType = 'dashboard' | 'expenses' | 'incomes';
 // Main component
 const FinancesDashboardScreen = () => {
   const router = useRouter();
+  const params = useLocalSearchParams<{ tab?: string }>();
   const { width } = useWindowDimensions();
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
   
+  // Set active tab from URL parameter
+  useEffect(() => {
+    if (params.tab && ['dashboard', 'expenses', 'incomes'].includes(params.tab)) {
+      setActiveTab(params.tab as TabType);
+    }
+  }, [params.tab]);
+
   const {
     // Data
     dashboardSummary,
@@ -68,6 +76,13 @@ const FinancesDashboardScreen = () => {
     setRefreshing(false);
   }, [refreshFinancialData]);
 
+  // Tab change handler
+  const handleTabChange = useCallback((tab: TabType) => {
+    setActiveTab(tab);
+    // Atualize a URL para refletir a aba atual, mas sem criar uma nova entrada na pilha de navegação
+    router.setParams({ tab: tab });
+  }, [router]);
+
   // Navigation handlers
   const navigateToExpenseDetails = useCallback((id: number) => {
     router.push(`/(panel)/finances/expenses/${id}`);
@@ -85,13 +100,14 @@ const FinancesDashboardScreen = () => {
     router.push('/(panel)/finances/incomes/create');
   }, [router]);
 
+  // Tab navigation handlers
   const navigateToExpensesList = useCallback(() => {
-    router.push('/(panel)/finances/expenses');
-  }, [router]);
+    handleTabChange('expenses');
+  }, [handleTabChange]);
 
   const navigateToIncomesList = useCallback(() => {
-    router.push('/(panel)/finances/incomes');
-  }, [router]);
+    handleTabChange('incomes');
+  }, [handleTabChange]);
 
   // Handle item press
   const handleTransactionPress = useCallback((item: Transaction) => {
@@ -132,18 +148,16 @@ const FinancesDashboardScreen = () => {
             <Text style={styles.emptyText}>Nenhuma ação pendente</Text>
           </View>
         ) : (
-          <FlatList
-            data={safePendingActions.slice(0, 3)} // Show only 3 items
-            keyExtractor={item => `pending-${item.id}`}
-            renderItem={({ item }) => (
+          // Substituído FlatList por um mapeamento direto dos itens
+          <View style={styles.pendingList}>
+            {safePendingActions.slice(0, 3).map((item, index) => (
               <PendingActionItem 
+                key={`pending-${item.id}-${index}`}
                 item={item} 
                 onPress={handlePendingActionPress} 
               />
-            )}
-            style={styles.pendingList}
-            scrollEnabled={false} // Disable scrolling inside the list
-          />
+            ))}
+          </View>
         )}
       </View>
     );
@@ -161,8 +175,8 @@ const FinancesDashboardScreen = () => {
         loading={loadingDashboard}
         error={dashboardError}
         onRetry={handleRefresh}
-        onPressExpenses={() => setActiveTab('expenses')}
-        onPressIncomes={() => setActiveTab('incomes')}
+        onPressExpenses={navigateToExpensesList}
+        onPressIncomes={navigateToIncomesList}
       />
       
       {/* Quick Actions */}
@@ -236,24 +250,47 @@ const FinancesDashboardScreen = () => {
             <Text style={styles.emptyText}>Nenhuma transação recente</Text>
           </View>
         ) : (
-          <FlatList
-            data={recentTransactions.slice(0, 5)} // Show only 5 transactions
-            keyExtractor={item => `transaction-${item.id}`}
-            renderItem={({ item }) => (
+          // Substituído FlatList por um mapeamento direto dos itens
+          <View style={styles.transactionsList}>
+            {recentTransactions.slice(0, 5).map((item, index) => (
               <TransactionItem 
+                key={`${item.type}-${item.id}-${index}`}
                 item={item} 
                 onPress={handleTransactionPress} 
               />
-            )}
-            style={styles.transactionsList}
-            scrollEnabled={false} // Disable scrolling inside the list
-          />
+            ))}
+          </View>
         )}
       </View>
     </>
   );
 
-  /* Other render methods and component definitions... */
+  // Renderizar conteúdo com base na aba ativa
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'expenses':
+        return <ExpensesScreen hideHeader={true} />;
+      case 'incomes':
+        return <IncomesScreen hideHeader={true} />;
+      default:
+        return (
+          <ScrollView 
+            style={styles.container}
+            contentContainerStyle={styles.contentContainer}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={handleRefresh}
+                colors={['#7B68EE']}
+                tintColor={'#7B68EE'}
+              />
+            }
+          >
+            {renderDashboardContent()}
+          </ScrollView>
+        );
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -267,7 +304,7 @@ const FinancesDashboardScreen = () => {
       <View style={styles.tabsContainer}>
         <TouchableOpacity 
           style={[styles.tab, activeTab === 'dashboard' && styles.activeTab]}
-          onPress={() => setActiveTab('dashboard')}
+          onPress={() => handleTabChange('dashboard')}
         >
           <Text style={[styles.tabText, activeTab === 'dashboard' && styles.activeTabText]}>
             Visão Geral
@@ -276,7 +313,7 @@ const FinancesDashboardScreen = () => {
         
         <TouchableOpacity 
           style={[styles.tab, activeTab === 'expenses' && styles.activeTab]}
-          onPress={() => setActiveTab('expenses')}
+          onPress={() => handleTabChange('expenses')}
         >
           <Text style={[styles.tabText, activeTab === 'expenses' && styles.activeTabText]}>
             Despesas
@@ -285,7 +322,7 @@ const FinancesDashboardScreen = () => {
         
         <TouchableOpacity 
           style={[styles.tab, activeTab === 'incomes' && styles.activeTab]}
-          onPress={() => setActiveTab('incomes')}
+          onPress={() => handleTabChange('incomes')}
         >
           <Text style={[styles.tabText, activeTab === 'incomes' && styles.activeTabText]}>
             Receitas
@@ -293,26 +330,10 @@ const FinancesDashboardScreen = () => {
         </TouchableOpacity>
       </View>
 
-      {activeTab === 'dashboard' ? (
-        <ScrollView 
-          style={styles.container}
-          contentContainerStyle={styles.contentContainer}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={handleRefresh}
-              colors={['#7B68EE']}
-              tintColor={'#7B68EE'}
-            />
-          }
-        >
-          {renderDashboardContent()}
-        </ScrollView>
-      ) : (
-        <View style={styles.container}>
-          {/* Other tabs content - would be renderedExpensesContent() or renderedIncomesContent() */}
-        </View>
-      )}
+      {/* Renderiza o conteúdo da aba atual */}
+      <View style={styles.container}>
+        {renderContent()}
+      </View>
       
       {/* Floating action button */}
       {activeTab !== 'dashboard' && (
@@ -376,7 +397,7 @@ const PendingActionItem = ({
         
         <View style={styles.pendingItemFooter}>
           <Text style={styles.pendingItemCreator}>
-            {item.creatorName}
+            {item.creatorNickname || item.creatorName}
           </Text>
           
           <View style={styles.pendingItemMeta}>

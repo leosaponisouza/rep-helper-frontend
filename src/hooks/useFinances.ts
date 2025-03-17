@@ -80,17 +80,19 @@ export const useFinances = (options: UseFinancesOptions = {}) => {
     const allTransactions: Transaction[] = [
       ...expenses.map(expense => ({
         ...expense,
-        date: expense.expenseDate, // Normalize date field
+        date: expense.expenseDate,
+        uniqueId: `expense-${expense.id}` // Adicione este campo para garantir unicidade
       })),
       ...incomes.map(income => ({
         ...income,
-        date: income.incomeDate, // Normalize date field
+        date: income.incomeDate,
+        uniqueId: `income-${income.id}` // Adicione este campo para garantir unicidade
       }))
     ];
     
     return allTransactions
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-      .slice(0, 10); // Get the 10 most recent transactions
+      .slice(0, 10);
   }, [expenses, incomes]);
 
   // API request functions with better error handling
@@ -145,6 +147,7 @@ export const useFinances = (options: UseFinancesOptions = {}) => {
     
     if (data) {
       setIncomes(data);
+      console.log(data);
     }
   }, [republicId]);
 

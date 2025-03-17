@@ -16,6 +16,7 @@ export interface Transaction {
   republicName?: string;
   creatorId: string;
   creatorName: string;
+  creatorNickname?: string;
   creatorProfilePictureUrl?: string;
   receiptUrl?: string;
   notes?: string;
@@ -104,6 +105,7 @@ export interface PendingAction {
   status: 'PENDING' | 'APPROVED';
   creatorId: string;
   creatorName: string;
+  creatorNickname?: string;
   creatorProfilePictureUrl?: string;
 }
 

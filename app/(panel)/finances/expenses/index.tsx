@@ -1,5 +1,4 @@
-// app/(panel)/finances/expenses/index.tsx
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,17 +6,15 @@ import {
   FlatList,
   TouchableOpacity,
   RefreshControl,
-  SafeAreaView,
-  StatusBar,
   ActivityIndicator,
   Alert
 } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useFinances, ExpenseFilterType } from '../../../../src/hooks/useFinances';
-import ExpenseItem from '../../../../components/Finances/ExpenseItem';
-import ExpenseFilters from '../../../../components/Finances/ExpenseFilters';
-import { Expense } from '../../../../src/models/finances.model';
+import { useFinances, ExpenseFilterType } from '@/src/hooks/useFinances';
+import ExpenseItem from '@/components/Finances/ExpenseItem';
+import ExpenseFilters from '@/components/Finances/ExpenseFilters';
+import { Expense } from '@/src/models/finances.model';
 
 // Define the filter option interface
 interface FilterOption {
@@ -34,9 +31,8 @@ const availableFilters: FilterOption[] = [
   { key: 'REIMBURSED', label: 'Reembolsadas' }
 ];
 
-const ExpensesScreen = () => {
+const ExpensesScreen = ({ hideHeader = false }) => {
   const router = useRouter();
-  const { filter: urlFilter } = useLocalSearchParams<{ filter?: string }>();
   const [refreshing, setRefreshing] = useState(false);
 
   // Get expenses and related functions from useFinances hook
@@ -48,15 +44,8 @@ const ExpensesScreen = () => {
     applyExpenseFilter,
     expenseFilter
   } = useFinances({
-    initialFilter: (urlFilter as ExpenseFilterType) || 'ALL'
+    initialFilter: 'ALL'
   });
-
-  // Update filter from URL
-  useEffect(() => {
-    if (urlFilter && urlFilter !== expenseFilter) {
-      applyExpenseFilter(urlFilter as ExpenseFilterType);
-    }
-  }, [urlFilter, applyExpenseFilter, expenseFilter]);
 
   // Refresh expenses
   const handleRefresh = useCallback(async () => {
@@ -79,9 +68,7 @@ const ExpensesScreen = () => {
   // Handle filter change
   const handleFilterChange = useCallback((newFilter: ExpenseFilterType) => {
     applyExpenseFilter(newFilter);
-    // Update URL without reloading the page
-    router.setParams({ filter: newFilter });
-  }, [applyExpenseFilter, router]);
+  }, [applyExpenseFilter]);
 
   // Navigate to create expense
   const navigateToCreateExpense = useCallback(() => {
@@ -142,26 +129,26 @@ const ExpensesScreen = () => {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="light-content" backgroundColor="#222" />
-      
-      {/* Header */}
-      <View style={styles.headerContainer}>
-        <TouchableOpacity 
-          style={styles.backButton}
-          onPress={() => router.back()}
-        >
-          <Ionicons name="arrow-back" size={24} color="#7B68EE" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Despesas</Text>
-        
-        <TouchableOpacity 
-          style={styles.headerActionButton}
-          onPress={navigateToCreateExpense}
-        >
-          <Ionicons name="add-circle-outline" size={24} color="#7B68EE" />
-        </TouchableOpacity>
-      </View>
+    <View style={styles.container}>
+      {/* Oculta o header quando solicitado */}
+      {!hideHeader && (
+        <View style={styles.headerContainer}>
+          <TouchableOpacity 
+            style={styles.backButton}
+            onPress={() => router.back()}
+          >
+            <Ionicons name="arrow-back" size={24} color="#7B68EE" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Despesas</Text>
+          
+          <TouchableOpacity 
+            style={styles.headerActionButton}
+            onPress={navigateToCreateExpense}
+          >
+            <Ionicons name="add-circle-outline" size={24} color="#7B68EE" />
+          </TouchableOpacity>
+        </View>
+      )}
       
       {/* Filters */}
       <View style={styles.filtersContainer}>
@@ -196,20 +183,12 @@ const ExpensesScreen = () => {
           />
         }
       />
-      
-      {/* Floating action button */}
-      <TouchableOpacity 
-        style={styles.floatingButton}
-        onPress={navigateToCreateExpense}
-      >
-        <Ionicons name="add" size={28} color="#fff" />
-      </TouchableOpacity>
-    </SafeAreaView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  safeArea: {
+  container: {
     flex: 1,
     backgroundColor: '#222',
   },
@@ -296,23 +275,6 @@ const styles = StyleSheet.create({
   createButtonText: {
     color: '#fff',
     fontWeight: 'bold',
-  },
-  floatingButton: {
-    position: 'absolute',
-    bottom: 20,
-    right: 20,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#7B68EE',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#7B68EE',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4.65,
-    elevation: 8,
-  },
+  }
 });
-
 export default ExpensesScreen;

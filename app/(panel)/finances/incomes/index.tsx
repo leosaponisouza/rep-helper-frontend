@@ -1,4 +1,6 @@
-// app/(panel)/finances/incomes/index.tsx
+// Modificação do componente IncomesScreen para embutir na tab
+// Arquivo: components/Finances/EmbeddedIncomesScreen.tsx
+
 import React, { useState, useCallback } from 'react';
 import {
   View,
@@ -7,18 +9,16 @@ import {
   FlatList,
   TouchableOpacity,
   RefreshControl,
-  SafeAreaView,
-  StatusBar,
   ActivityIndicator,
   Alert
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useFinances } from '../../../../src/hooks/useFinances';
-import IncomeItem from '../../../../components/Finances/IncomeItem';
-import { Income } from '../../../../src/models/finances.model';
+import { useFinances } from '@/src/hooks/useFinances';
+import IncomeItem from '@/components/Finances/IncomeItem';
+import { Income } from '@/src/models/finances.model';
 
-const IncomesScreen = () => {
+const IncomesScreen = ({ hideHeader = false }) => {
   const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
   
@@ -101,26 +101,26 @@ const IncomesScreen = () => {
   }, [loadingIncomes, incomesError, handleRefresh, navigateToCreateIncome]);
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="light-content" backgroundColor="#222" />
-      
-      {/* Header */}
-      <View style={styles.headerContainer}>
-        <TouchableOpacity 
-          style={styles.backButton}
-          onPress={() => router.back()}
-        >
-          <Ionicons name="arrow-back" size={24} color="#7B68EE" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Receitas</Text>
-        
-        <TouchableOpacity 
-          style={styles.headerActionButton}
-          onPress={navigateToCreateIncome}
-        >
-          <Ionicons name="add-circle-outline" size={24} color="#7B68EE" />
-        </TouchableOpacity>
-      </View>
+    <View style={styles.container}>
+      {/* Oculta o header quando solicitado */}
+      {!hideHeader && (
+        <View style={styles.headerContainer}>
+          <TouchableOpacity 
+            style={styles.backButton}
+            onPress={() => router.back()}
+          >
+            <Ionicons name="arrow-back" size={24} color="#7B68EE" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Receitas</Text>
+          
+          <TouchableOpacity 
+            style={styles.headerActionButton}
+            onPress={navigateToCreateIncome}
+          >
+            <Ionicons name="add-circle-outline" size={24} color="#7B68EE" />
+          </TouchableOpacity>
+        </View>
+      )}
       
       {/* Incomes List */}
       <FlatList
@@ -146,20 +146,12 @@ const IncomesScreen = () => {
           />
         }
       />
-      
-      {/* Floating action button */}
-      <TouchableOpacity 
-        style={styles.floatingButton}
-        onPress={navigateToCreateIncome}
-      >
-        <Ionicons name="add" size={28} color="#fff" />
-      </TouchableOpacity>
-    </SafeAreaView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  safeArea: {
+  container: {
     flex: 1,
     backgroundColor: '#222',
   },
@@ -240,23 +232,7 @@ const styles = StyleSheet.create({
   createButtonText: {
     color: '#fff',
     fontWeight: 'bold',
-  },
-  floatingButton: {
-    position: 'absolute',
-    bottom: 20,
-    right: 20,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#4CAF50',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#4CAF50',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4.65,
-    elevation: 8,
-  },
+  }
 });
 
 export default IncomesScreen;
