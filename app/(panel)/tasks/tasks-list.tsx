@@ -9,8 +9,7 @@ import {
   RefreshControl,
   SafeAreaView,
   StatusBar,
-  ScrollView,
-  Animated
+  ScrollView
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -25,11 +24,10 @@ const TasksListScreen = () => {
   const [filter, setFilter] = useState<string>(urlFilter || 'all');
   const [pendingTaskIds, setPendingTaskIds] = useState<number[]>([]);
   const scrollViewRef = useRef(null);
-  const scrollX = useRef(new Animated.Value(0)).current;
 
   const taskFilters = [
     { key: 'all', label: 'Todas' },
-    { key: 'my-tasks', label: 'Minhas Tarefas' },
+    { key: 'my-tasks', label: 'Minhas' },
     { key: 'PENDING', label: 'Pendentes' },
     { key: 'IN_PROGRESS', label: 'Em Andamento' },
     { key: 'COMPLETED', label: 'Concluídas' },
@@ -114,13 +112,6 @@ const TasksListScreen = () => {
     router.push(`/(panel)/tasks/${taskId}`);
   };
 
-  // Função para contar as tarefas do usuário atual
-  const getUserTasksCount = useCallback(() => {
-    return myTasks.length;
-  }, [myTasks]);
-
-  const myTasksCount = getUserTasksCount();
-
   // Determina qual conjunto de tarefas exibir com base no filtro
   const displayTasks = filter === 'my-tasks' ? myTasks : tasks;
   const isLoading = filter === 'my-tasks' ? loadingMyTasks : loading;
@@ -138,57 +129,40 @@ const TasksListScreen = () => {
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" backgroundColor="#222" />
       
+      {/* Header */}
       <View style={styles.headerContainer}>
         <Text style={styles.headerTitle}>Tarefas</Text>
-        
-        {/* Filtros com rolagem horizontal */}
-        <View style={styles.filtersWrapper}>
-          <TouchableOpacity 
-            style={styles.scrollButton} 
-          >
-            <Ionicons name="chevron-back" size={20} color="#7B68EE" />
-          </TouchableOpacity>
-          
-          <ScrollView 
-            ref={scrollViewRef}
-            horizontal 
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.filtersContainer}
-            snapToInterval={120}
-            decelerationRate="fast"
-            scrollEventThrottle={16}
-            onScroll={Animated.event(
-              [{ nativeEvent: { contentOffset: { x: scrollX } } }],
-              { useNativeDriver: false }
-            )}
-          >
-            {taskFilters.map((filterItem) => (
-              <TouchableOpacity
-                key={filterItem.key}
-                style={[
-                  styles.filterButton,
-                  filter === filterItem.key && styles.activeFilterButton
-                ]}
-                onPress={() => handleFilterChange(filterItem.key)}
-              >
-                <Text style={[
-                  styles.filterText,
-                  filter === filterItem.key && styles.activeFilterText
-                ]}>
-                  {filterItem.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-          
-          <TouchableOpacity 
-            style={styles.scrollButton} 
-          >
-            <Ionicons name="chevron-forward" size={20} color="#7B68EE" />
-          </TouchableOpacity>
-        </View>
+      </View>
+      
+      {/* Filtros no estilo das outras telas */}
+      <View style={styles.filtersSection}>
+        <ScrollView 
+          ref={scrollViewRef}
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filtersContainer}
+        >
+          {taskFilters.map((filterItem) => (
+            <TouchableOpacity
+              key={filterItem.key}
+              style={[
+                styles.filterButton,
+                filter === filterItem.key && styles.activeFilterButton
+              ]}
+              onPress={() => handleFilterChange(filterItem.key)}
+            >
+              <Text style={[
+                styles.filterText,
+                filter === filterItem.key && styles.activeFilterText
+              ]}>
+                {filterItem.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
       </View>
 
+      {/* Lista de tarefas */}
       <FlatList
         data={displayTasks}
         keyExtractor={(item) => item.id?.toString() || ''}
@@ -233,6 +207,7 @@ const TasksListScreen = () => {
         ]}
       />
 
+      {/* Botão de adicionar */}
       <TouchableOpacity 
         style={styles.addButton} 
         onPress={() => router.push('/(panel)/tasks/create')}
@@ -248,28 +223,55 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#222',
   },
+  // Header
   headerContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     backgroundColor: '#333',
+    paddingVertical: 16,
     paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 15,
     borderBottomWidth: 1,
     borderBottomColor: '#444',
   },
   headerTitle: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: 'bold',
     color: '#fff',
-    marginBottom: 8,
   },
-  myTasksCountContainer: {
-    marginBottom: 12,
+  // Filtros
+  filtersSection: {
+    backgroundColor: '#2A2A2A',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#444',
   },
-  myTasksCountText: {
-    color: '#7B68EE',
-    fontSize: 16,
-    fontWeight: '500',
+  filtersContainer: {
+    paddingHorizontal: 16,
+    flexDirection: 'row',
   },
+  filterButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    marginRight: 8,
+    borderRadius: 20,
+    backgroundColor: '#333',
+    borderWidth: 1,
+    borderColor: '#444',
+  },
+  activeFilterButton: {
+    backgroundColor: '#7B68EE',
+    borderColor: '#7B68EE',
+  },
+  filterText: {
+    color: '#aaa',
+    fontSize: 14,
+  },
+  activeFilterText: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  // Lista
   listContainer: {
     flexGrow: 1,
     backgroundColor: '#222',
@@ -277,22 +279,7 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     paddingBottom: 20,
   },
-  addButton: {
-    position: 'absolute',
-    bottom: 20,
-    right: 20,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#7B68EE',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#7B68EE',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4.65,
-    elevation: 8,
-  },
+  // Estado vazio
   emptyStateContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -311,43 +298,22 @@ const styles = StyleSheet.create({
     marginTop: 10,
     textAlign: 'center',
   },
-  // New styles for horizontal filters
-  filtersWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 4,
-  },
-  scrollButton: {
-    paddingHorizontal: 10,
-    height: 40,
+  // Botão de adicionar
+  addButton: {
+    position: 'absolute',
+    bottom: 20,
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#7B68EE',
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  filtersContainer: {
-    paddingHorizontal: 8,
-    alignItems: 'center',
-  },
-  filterButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    marginRight: 8,
-    borderRadius: 8,
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: 'rgba(123, 104, 238, 0.3)',
-  },
-  activeFilterButton: {
-    backgroundColor: 'rgba(123, 104, 238, 0.2)',
-    borderColor: '#7B68EE',
-  },
-  filterText: {
-    color: '#aaa',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  activeFilterText: {
-    color: '#7B68EE',
-    fontWeight: 'bold',
+    shadowColor: '#7B68EE',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4.65,
+    elevation: 8,
   },
 });
   

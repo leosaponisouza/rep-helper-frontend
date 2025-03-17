@@ -41,20 +41,20 @@ export default function PanelLayout() {
         }}
       />
       <Tabs.Screen
-        name="expenses"
+        name="finances"
         options={{
-          tabBarLabel: 'Despesas',
+          tabBarLabel: 'Finanças',
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons name="cash" color={color} size={size} />
           ),
         }}
       />
       <Tabs.Screen
-        name="profile"
+        name="settings"
         options={{
-          tabBarLabel: 'Perfil',
+          tabBarLabel: 'Configurações',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="person-outline" color={color} size={size} />
+            <Ionicons name="settings-outline" color={color} size={size} />
           ),
         }}
       />
@@ -65,12 +65,13 @@ export default function PanelLayout() {
         }}
       />
       <Tabs.Screen
-        name="settings"
+        name="profile"
         options={{
-          tabBarLabel: 'Configurações',
+          tabBarLabel: 'Perfil',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="settings-outline" color={color} size={size} />
+            <Ionicons name="person-outline" color={color} size={size} />
           ),
+          href: null, // Opcional: Se você quiser esconder esta tab por enquanto
         }}
       />
     </Tabs>
