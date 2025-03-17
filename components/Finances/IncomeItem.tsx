@@ -1,5 +1,5 @@
 // components/Finances/IncomeItem.tsx
-import React from 'react';
+import React, { memo } from 'react';
 import { 
   View, 
   Text, 
@@ -18,7 +18,7 @@ interface IncomeItemProps {
 }
 
 const IncomeItem: React.FC<IncomeItemProps> = ({ income, onPress }) => {
-  // Formatar valor monetário
+  // Format currency
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
@@ -26,7 +26,7 @@ const IncomeItem: React.FC<IncomeItemProps> = ({ income, onPress }) => {
     }).format(value);
   };
 
-  // Formatação de data
+  // Format date
   const formatDate = (dateString?: string) => {
     if (!dateString) return '';
     
@@ -38,25 +38,18 @@ const IncomeItem: React.FC<IncomeItemProps> = ({ income, onPress }) => {
     }
   };
 
-  // Ícone da categoria
-  const getSourceIcon = (source: string | undefined) => {
-    switch (source?.toLowerCase()) {
-      case 'mensalidade':
-        return 'calendar';
-      case 'doação':
-      case 'doacao':
-        return 'gift';
+  // Get source icon
+  const getSourceIcon = (source: string | undefined): string => {
+    if (!source) return 'cash';
+    
+    switch(source.toLowerCase()) {
+      case 'contribuição':
+      case 'contribuicao':
+        return 'wallet';
       case 'evento':
         return 'calendar';
-      case 'venda':
-        return 'cart';
-      case 'serviço':
-      case 'servico':
-        return 'construct';
-      case 'investimento':
-        return 'trending-up';
-      case 'outros':
-        return 'ellipsis-horizontal-circle';
+      case 'reembolso':
+        return 'refresh-circle';
       default:
         return 'cash';
     }
@@ -66,12 +59,10 @@ const IncomeItem: React.FC<IncomeItemProps> = ({ income, onPress }) => {
     <TouchableOpacity 
       style={styles.container}
       onPress={() => onPress(income)}
+      activeOpacity={0.7}
     >
       <View 
-        style={[
-          styles.statusIndicator, 
-          { backgroundColor: '#4CAF50' }
-        ]} 
+        style={styles.statusIndicator}
       />
       
       <View style={styles.content}>
@@ -112,17 +103,23 @@ const IncomeItem: React.FC<IncomeItemProps> = ({ income, onPress }) => {
                 </Text>
               </View>
             )}
-            <Text style={styles.creatorName}>
+            <Text style={styles.creatorName} numberOfLines={1}>
               {income.creatorName}
             </Text>
           </View>
           
           <View style={styles.meta}>
             <Text style={styles.date}>
-              {formatDate(income.date)}
+              {formatDate(income.incomeDate)}
             </Text>
             
             <View style={styles.statusBadge}>
+              <Ionicons 
+                name="checkmark-circle" 
+                size={10} 
+                color="#4CAF50" 
+                style={styles.statusIcon}
+              />
               <Text style={styles.statusText}>
                 Recebido
               </Text>
@@ -141,10 +138,16 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 12,
     overflow: 'hidden',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
   },
   statusIndicator: {
     width: 4,
     height: '100%',
+    backgroundColor: '#4CAF50',
   },
   content: {
     flex: 1,
@@ -188,6 +191,7 @@ const styles = StyleSheet.create({
   creatorContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    maxWidth: '50%',
   },
   creatorAvatar: {
     width: 20,
@@ -222,10 +226,15 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingVertical: 3,
     borderRadius: 12,
-    backgroundColor: 'rgba(76, 175, 80, 0.2)',
+    backgroundColor: 'rgba(76, 175, 80, 0.15)',
+  },
+  statusIcon: {
+    marginRight: 3,
   },
   statusText: {
     fontSize: 10,
@@ -234,4 +243,5 @@ const styles = StyleSheet.create({
   }
 });
 
-export default IncomeItem;
+// Use memo to prevent unnecessary re-renders
+export default memo(IncomeItem);

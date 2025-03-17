@@ -1,5 +1,5 @@
 // app/(panel)/finances/expenses/create.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -18,13 +18,14 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { format, parseISO } from 'date-fns';
+import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import * as ImagePicker from 'expo-image-picker';
 import { useFinances } from '../../../../src/hooks/useFinances';
 import { useAuth } from '../../../../src/context/AuthContext';
-import { CreateExpenseRequest } from '../../../../src/models/expense.model';
+import { CreateExpenseRequest, ExpenseFormData } from '../../../../src/models/finances.model';
 
+// Expense categories
 const expenseCategories = [
   'Alimentação',
   'Aluguel',
@@ -35,27 +36,141 @@ const expenseCategories = [
   'Outros'
 ];
 
+// Category selector component
+const CategorySelector = ({ 
+  categories,
+  selectedCategory,
+  onSelectCategory,
+  visible,
+  onClose
+}: {
+  categories: string[];
+  selectedCategory: string;
+  onSelectCategory: (category: string) => void;
+  visible: boolean;
+  onClose: () => void;
+}) => {
+  if (!visible) return null;
+  
+  return (
+    <View style={styles.categoryPicker}>
+      {categories.map((category) => (
+        <TouchableOpacity
+          key={category}
+          style={[
+            styles.categoryOption,
+            selectedCategory === category && styles.selectedCategoryOption
+          ]}
+          onPress={() => {
+            onSelectCategory(category);
+            onClose();
+          }}
+        >
+          <Text style={[
+            styles.categoryOptionText,
+            selectedCategory === category && styles.selectedCategoryOptionText
+          ]}>
+            {category}
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+};
+
+// Receipt selector component
+const ReceiptSelector = ({
+  receiptUrl,
+  onSelectImage,
+  onTakePhoto,
+  onRemoveImage,
+  uploading
+}: {
+  receiptUrl?: string;
+  onSelectImage: () => void;
+  onTakePhoto: () => void;
+  onRemoveImage: () => void;
+  uploading: boolean;
+}) => {
+  if (receiptUrl) {
+    return (
+      <View style={styles.receiptContainer}>
+        <Image
+          source={{ uri: receiptUrl }}
+          style={styles.receiptImage}
+          resizeMode="cover"
+        />
+        
+        <TouchableOpacity
+          style={styles.removeReceiptButton}
+          onPress={onRemoveImage}
+        >
+          <Ionicons name="trash-outline" size={20} color="#fff" />
+        </TouchableOpacity>
+      </View>
+    );
+  }
+  
+  return (
+    <View style={styles.receiptActions}>
+      <TouchableOpacity
+        style={styles.receiptActionButton}
+        onPress={onSelectImage}
+        disabled={uploading}
+      >
+        {uploading ? (
+          <ActivityIndicator size="small" color="#fff" />
+        ) : (
+          <>
+            <Ionicons name="image-outline" size={20} color="#fff" style={styles.receiptActionIcon} />
+            <Text style={styles.receiptActionText}>Galeria</Text>
+          </>
+        )}
+      </TouchableOpacity>
+      
+      <TouchableOpacity
+        style={styles.receiptActionButton}
+        onPress={onTakePhoto}
+        disabled={uploading}
+      >
+        {uploading ? (
+          <ActivityIndicator size="small" color="#fff" />
+        ) : (
+          <>
+            <Ionicons name="camera-outline" size={20} color="#fff" style={styles.receiptActionIcon} />
+            <Text style={styles.receiptActionText}>Câmera</Text>
+          </>
+        )}
+      </TouchableOpacity>
+    </View>
+  );
+};
+
 const CreateExpenseScreen = () => {
   const router = useRouter();
   const params = useLocalSearchParams<{ id?: string }>();
   const { user } = useAuth();
   const { createExpense, updateExpense, getExpenseById } = useFinances();
   
-  const [isEditing, setIsEditing] = useState(false);
-  const [description, setDescription] = useState('');
-  const [amount, setAmount] = useState('');
-  const [category, setCategory] = useState(expenseCategories[0]);
-  const [expenseDate, setExpenseDate] = useState(new Date());
-  const [receiptUrl, setReceiptUrl] = useState<string | undefined>(undefined);
-  const [receiptImage, setReceiptImage] = useState<string | undefined>(undefined);
+  // Form state
+  const [formData, setFormData] = useState<ExpenseFormData>({
+    description: '',
+    amount: '',
+    date: new Date().toISOString(),
+    category: expenseCategories[0],
+    notes: ''
+  });
   
+  // UI state
+  const [isEditing, setIsEditing] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showCategoryPicker, setShowCategoryPicker] = useState(false);
+  const [receiptUrl, setReceiptUrl] = useState<string | undefined>(undefined);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadingExpense, setLoadingExpense] = useState(false);
-  const [showCategoryPicker, setShowCategoryPicker] = useState(false);
-  const [uploadingImage, setUploadingImage] = useState(false);
 
-  // Se existir um ID, então estamos editando
+  // Fetch expense details if editing
   useEffect(() => {
     const fetchExpenseDetails = async () => {
       if (params.id) {
@@ -65,10 +180,13 @@ const CreateExpenseScreen = () => {
         try {
           const expense = await getExpenseById(Number(params.id));
           
-          setDescription(expense.description);
-          setAmount((expense.amount * 100).toString());
-          setCategory(expense.category || expenseCategories[0]);
-          setExpenseDate(parseISO(expense.expenseDate));
+          setFormData({
+            description: expense.description,
+            amount: expense.amount.toString(),
+            date: expense.expenseDate,
+            category: expense.category || expenseCategories[0],
+            notes: expense.notes || ''
+          });
           setReceiptUrl(expense.receiptUrl);
           
         } catch (error) {
@@ -82,68 +200,111 @@ const CreateExpenseScreen = () => {
     };
 
     fetchExpenseDetails();
-  }, [params.id]);
+  }, [params.id, getExpenseById, router]);
+  
+  // Handle form field changes
+  const handleChange = (field: keyof ExpenseFormData, value: string | number | Date) => {
+    if (field === 'date' && value instanceof Date) {
+      setFormData(prev => ({ ...prev, [field]: value.toISOString() }));
+    } else {
+      setFormData(prev => ({ ...prev, [field]: value }));
+    }
+  };
 
-  // Formatar valor monetário para exibição
-  const formatCurrency = (value: string) => {
-    // Remove tudo que não for número
-    let numberValue = value.replace(/\D/g, '');
+  // Handle amount input
+  const handleAmountChange = (text: string) => {
+    // Keep only numbers
+    const numericValue = text.replace(/\D/g, '');
+    handleChange('amount', numericValue);
+  };
+
+  // Format amount for display
+  const getFormattedAmount = () => {
+    if (!formData.amount) return '';
     
-    // Converte para float (dividindo por 100 para tratar como centavos)
-    const floatValue = parseInt(numberValue || '0', 10) / 100;
+    // Convert to number
+    const numericValue = parseInt(formData.amount.toString(), 10) / 100;
     
-    // Formata como moeda brasileira
+    // Format as BRL currency
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
       currency: 'BRL'
-    }).format(floatValue);
+    }).format(numericValue);
   };
 
-  // Manipular a entrada de valor
-  const handleAmountChange = (text: string) => {
-    // Mantém apenas os números
-    const numericValue = text.replace(/\D/g, '');
-    setAmount(numericValue);
-  };
-
-  // Mostrar o valor formatado
-  const getFormattedAmount = () => {
-    if (!amount) return '';
-    
-    const numericValue = parseInt(amount, 10) / 100;
-    return formatCurrency(numericValue.toString());
-  };
-
-  // Validar formulário
-  const validateForm = () => {
-    if (!description.trim()) {
-      Alert.alert('Erro', 'Por favor, informe uma descrição para a despesa.');
-      return false;
-    }
-    
-    if (!amount || parseInt(amount, 10) === 0) {
-      Alert.alert('Erro', 'Por favor, informe um valor válido para a despesa.');
-      return false;
-    }
-    
-    if (!category) {
-      Alert.alert('Erro', 'Por favor, selecione uma categoria para a despesa.');
-      return false;
-    }
-    
-    return true;
-  };
-
-  // Selecionar imagem da galeria
-  const pickImage = async () => {
+  // Date handling
+  const getFormattedDate = () => {
     try {
-      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const date = new Date(formData.date);
+      return format(date, "dd 'de' MMMM 'de' yyyy", { locale: ptBR });
+    } catch (error) {
+      return 'Data inválida';
+    }
+  };
+
+  const handleDateChange = (event: any, selectedDate?: Date) => {
+    setShowDatePicker(false);
+    
+    if (selectedDate) {
+      handleChange('date', selectedDate);
+    }
+  };
+
+  // Image handling functions
+  const checkPermission = async (permissionType: 'camera' | 'mediaLibrary'): Promise<boolean> => {
+    try {
+      let permissionResult;
       
-      if (!permissionResult.granted) {
-        Alert.alert('Permissão Negada', 'Precisamos de permissão para acessar suas fotos.');
-        return;
+      if (permissionType === 'camera') {
+        permissionResult = await ImagePicker.requestCameraPermissionsAsync();
+      } else {
+        permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
       }
       
+      if (!permissionResult.granted) {
+        Alert.alert(
+          'Permissão Negada', 
+          `Precisamos de permissão para acessar sua ${permissionType === 'camera' ? 'câmera' : 'galeria'}.`,
+          [{ text: 'OK' }]
+        );
+        return false;
+      }
+      
+      return true;
+    } catch (error) {
+      console.error(`Erro ao solicitar permissão de ${permissionType}:`, error);
+      return false;
+    }
+  };
+
+  const uploadImage = async (uri: string) => {
+    // In a real app, you would implement an actual upload to your server/storage
+    // For now, we'll simulate an upload
+    setUploadingImage(true);
+    
+    try {
+      // Simulate API delay
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Set the receipt URL to the local URI
+      // In a real app, this would be the URL returned by your server
+      setReceiptUrl(uri);
+      
+      return uri;
+    } catch (error) {
+      console.error('Erro ao fazer upload da imagem:', error);
+      Alert.alert('Erro', 'Falha ao fazer upload da imagem. Tente novamente.');
+      return null;
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  const pickImage = async () => {
+    const hasPermission = await checkPermission('mediaLibrary');
+    if (!hasPermission) return;
+    
+    try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
@@ -151,17 +312,8 @@ const CreateExpenseScreen = () => {
         quality: 0.8,
       });
       
-      if (!result.canceled) {
-        setReceiptImage(result.assets[0].uri);
-        // Aqui você implementaria o upload da imagem para seu servidor
-        // e então atualizaria o receiptUrl com a URL retornada
-        
-        // Simulando upload
-        setUploadingImage(true);
-        setTimeout(() => {
-          setReceiptUrl(result.assets[0].uri);
-          setUploadingImage(false);
-        }, 1500);
+      if (!result.canceled && result.assets[0].uri) {
+        await uploadImage(result.assets[0].uri);
       }
     } catch (error) {
       console.error('Erro ao selecionar imagem:', error);
@@ -169,33 +321,19 @@ const CreateExpenseScreen = () => {
     }
   };
 
-  // Tirar foto
   const takePhoto = async () => {
+    const hasPermission = await checkPermission('camera');
+    if (!hasPermission) return;
+    
     try {
-      const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
-      
-      if (!permissionResult.granted) {
-        Alert.alert('Permissão Negada', 'Precisamos de permissão para acessar sua câmera.');
-        return;
-      }
-      
       const result = await ImagePicker.launchCameraAsync({
         allowsEditing: true,
         aspect: [4, 3],
         quality: 0.8,
       });
       
-      if (!result.canceled) {
-        setReceiptImage(result.assets[0].uri);
-        // Aqui você implementaria o upload da imagem para seu servidor
-        // e então atualizaria o receiptUrl com a URL retornada
-        
-        // Simulando upload
-        setUploadingImage(true);
-        setTimeout(() => {
-          setReceiptUrl(result.assets[0].uri);
-          setUploadingImage(false);
-        }, 1500);
+      if (!result.canceled && result.assets[0].uri) {
+        await uploadImage(result.assets[0].uri);
       }
     } catch (error) {
       console.error('Erro ao tirar foto:', error);
@@ -203,7 +341,6 @@ const CreateExpenseScreen = () => {
     }
   };
 
-  // Remover imagem
   const removeImage = () => {
     Alert.alert(
       'Remover Comprovante',
@@ -214,7 +351,6 @@ const CreateExpenseScreen = () => {
           text: 'Remover', 
           style: 'destructive',
           onPress: () => {
-            setReceiptImage(undefined);
             setReceiptUrl(undefined);
           }
         }
@@ -222,7 +358,28 @@ const CreateExpenseScreen = () => {
     );
   };
 
-  // Salvar despesa
+  // Form validation
+  const validateForm = (): boolean => {
+    if (!formData.description.trim()) {
+      Alert.alert('Erro', 'Por favor, informe uma descrição para a despesa.');
+      return false;
+    }
+    
+    const amountValue = parseInt(formData.amount.toString(), 10);
+    if (!formData.amount || amountValue === 0) {
+      Alert.alert('Erro', 'Por favor, informe um valor válido para a despesa.');
+      return false;
+    }
+    
+    if (!formData.category) {
+      Alert.alert('Erro', 'Por favor, selecione uma categoria para a despesa.');
+      return false;
+    }
+    
+    return true;
+  };
+
+  // Save expense
   const handleSaveExpense = async () => {
     if (!validateForm() || !user?.currentRepublicId) return;
     
@@ -230,70 +387,42 @@ const CreateExpenseScreen = () => {
     
     try {
       const expenseData: CreateExpenseRequest = {
-        description,
-        amount: parseInt(amount, 10) / 100,
-        expenseDate: expenseDate.toISOString(),
-        category,
+        description: formData.description,
+        amount: parseInt(formData.amount.toString(), 10) / 100,
+        expenseDate: formData.date,
+        category: formData.category,
         receiptUrl,
-        republicId: user.currentRepublicId
+        republicId: user.currentRepublicId,
+        notes: formData.notes
       };
       
       if (isEditing && params.id) {
         await updateExpense(Number(params.id), expenseData);
-        Alert.alert('Sucesso', 'Despesa atualizada com sucesso!');
+        Alert.alert(
+          'Sucesso', 
+          'Despesa atualizada com sucesso!',
+          [{ text: 'OK', onPress: () => router.back() }]
+        );
       } else {
         await createExpense(expenseData);
-        Alert.alert('Sucesso', 'Despesa cadastrada com sucesso!');
+        Alert.alert(
+          'Sucesso', 
+          'Despesa cadastrada com sucesso!',
+          [{ text: 'OK', onPress: () => router.back() }]
+        );
       }
-      
-      router.back();
     } catch (error) {
       console.error('Erro ao salvar despesa:', error);
-      Alert.alert('Erro', 'Ocorreu um erro ao salvar a despesa. Por favor, tente novamente.');
+      Alert.alert(
+        'Erro', 
+        'Ocorreu um erro ao salvar a despesa. Por favor, tente novamente.'
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  // Lidar com a mudança de data
-  const handleDateChange = (event: any, selectedDate?: Date) => {
-    setShowDatePicker(false);
-    
-    if (selectedDate) {
-      setExpenseDate(selectedDate);
-    }
-  };
-
-  // Renderizar o seletor de categoria
-  const renderCategoryPicker = () => {
-    if (!showCategoryPicker) return null;
-    
-    return (
-      <View style={styles.categoryPicker}>
-        {expenseCategories.map((item) => (
-          <TouchableOpacity
-            key={item}
-            style={[
-              styles.categoryOption,
-              category === item && styles.selectedCategoryOption
-            ]}
-            onPress={() => {
-              setCategory(item);
-              setShowCategoryPicker(false);
-            }}
-          >
-            <Text style={[
-              styles.categoryOptionText,
-              category === item && styles.selectedCategoryOptionText
-            ]}>
-              {item}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-    );
-  };
-
+  // Loading state
   if (loadingExpense) {
     return (
       <SafeAreaView style={styles.safeArea}>
@@ -328,21 +457,21 @@ const CreateExpenseScreen = () => {
         </View>
         
         <ScrollView style={styles.formContainer}>
-          {/* Descrição */}
+          {/* Description */}
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Descrição</Text>
             <TextInput
               style={styles.textInput}
               placeholder="Descreva a despesa"
               placeholderTextColor="#999"
-              value={description}
-              onChangeText={setDescription}
+              value={formData.description}
+              onChangeText={(text) => handleChange('description', text)}
               multiline
               maxLength={100}
             />
           </View>
           
-          {/* Valor */}
+          {/* Amount */}
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Valor</Text>
             <View style={styles.amountInputContainer}>
@@ -358,7 +487,7 @@ const CreateExpenseScreen = () => {
             </View>
           </View>
           
-          {/* Data */}
+          {/* Date */}
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Data</Text>
             <TouchableOpacity
@@ -366,14 +495,12 @@ const CreateExpenseScreen = () => {
               onPress={() => setShowDatePicker(true)}
             >
               <Ionicons name="calendar-outline" size={20} color="#7B68EE" />
-              <Text style={styles.dateText}>
-                {format(expenseDate, "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
-              </Text>
+              <Text style={styles.dateText}>{getFormattedDate()}</Text>
             </TouchableOpacity>
             
             {showDatePicker && (
               <DateTimePicker
-                value={expenseDate}
+                value={new Date(formData.date)}
                 mode="date"
                 display="default"
                 onChange={handleDateChange}
@@ -382,14 +509,14 @@ const CreateExpenseScreen = () => {
             )}
           </View>
           
-          {/* Categoria */}
+          {/* Category */}
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Categoria</Text>
             <TouchableOpacity
               style={styles.categoryButton}
               onPress={() => setShowCategoryPicker(!showCategoryPicker)}
             >
-              <Text style={styles.categoryText}>{category}</Text>
+              <Text style={styles.categoryText}>{formData.category}</Text>
               <Ionicons
                 name={showCategoryPicker ? "chevron-up" : "chevron-down"}
                 size={20}
@@ -397,64 +524,44 @@ const CreateExpenseScreen = () => {
               />
             </TouchableOpacity>
             
-            {renderCategoryPicker()}
+            <CategorySelector
+              categories={expenseCategories}
+              selectedCategory={formData.category}
+              onSelectCategory={(category) => handleChange('category', category)}
+              visible={showCategoryPicker}
+              onClose={() => setShowCategoryPicker(false)}
+            />
           </View>
           
-          {/* Comprovante */}
+          {/* Notes */}
           <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Comprovante</Text>
-            
-            {receiptUrl ? (
-              <View style={styles.receiptContainer}>
-                <Image
-                  source={{ uri: receiptUrl }}
-                  style={styles.receiptImage}
-                  resizeMode="cover"
-                />
-                
-                <TouchableOpacity
-                  style={styles.removeReceiptButton}
-                  onPress={removeImage}
-                >
-                  <Ionicons name="trash-outline" size={20} color="#fff" />
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <View style={styles.receiptActions}>
-                <TouchableOpacity
-                  style={styles.receiptActionButton}
-                  onPress={pickImage}
-                  disabled={uploadingImage}
-                >
-                  {uploadingImage ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                  ) : (
-                    <>
-                      <Ionicons name="image-outline" size={20} color="#fff" style={styles.receiptActionIcon} />
-                      <Text style={styles.receiptActionText}>Galeria</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-                
-                <TouchableOpacity
-                  style={styles.receiptActionButton}
-                  onPress={takePhoto}
-                  disabled={uploadingImage}
-                >
-                  {uploadingImage ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                  ) : (
-                    <>
-                      <Ionicons name="camera-outline" size={20} color="#fff" style={styles.receiptActionIcon} />
-                      <Text style={styles.receiptActionText}>Câmera</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-              </View>
-            )}
+            <Text style={styles.inputLabel}>Observações (opcional)</Text>
+            <TextInput
+              style={[styles.textInput, styles.notesInput]}
+              placeholder="Adicione informações adicionais sobre a despesa"
+              placeholderTextColor="#999"
+              value={formData.notes}
+              onChangeText={(text) => handleChange('notes', text)}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+            />
           </View>
           
-          {/* Botão de salvar */}
+          {/* Receipt */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Comprovante (opcional)</Text>
+            
+            <ReceiptSelector
+              receiptUrl={receiptUrl}
+              onSelectImage={pickImage}
+              onTakePhoto={takePhoto}
+              onRemoveImage={removeImage}
+              uploading={uploadingImage}
+            />
+          </View>
+          
+          {/* Save button */}
           <TouchableOpacity
             style={[styles.saveButton, loading && styles.disabledButton]}
             onPress={handleSaveExpense}
@@ -535,6 +642,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     borderWidth: 1,
     borderColor: '#444',
+  },
+  notesInput: {
+    minHeight: 100,
+    paddingTop: 12,
   },
   amountInputContainer: {
     flexDirection: 'row',

@@ -1,5 +1,5 @@
 // app/(panel)/finances/incomes/[id].tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -20,7 +20,43 @@ import { ptBR } from 'date-fns/locale';
 import { useFinances } from '../../../../src/hooks/useFinances';
 import { useAuth } from '../../../../src/context/AuthContext';
 import { ErrorHandler } from '../../../../src/utils/errorHandling';
-import { Income } from '../../../../src/models/income.model';
+import { Income } from '../../../../src/models/finances.model';
+
+// Action Button component
+const ActionButton = ({ 
+  title, 
+  iconName, 
+  color, 
+  onPress, 
+  isLoading, 
+  disabled 
+}: { 
+  title: string; 
+  iconName: string; 
+  color: string; 
+  onPress: () => void; 
+  isLoading?: boolean;
+  disabled?: boolean;
+}) => (
+  <TouchableOpacity 
+    style={[
+      styles.actionButton, 
+      { backgroundColor: color }, 
+      (isLoading || disabled) && styles.disabledButton
+    ]}
+    onPress={onPress}
+    disabled={isLoading || disabled}
+  >
+    {isLoading ? (
+      <ActivityIndicator size="small" color="#fff" />
+    ) : (
+      <>
+        <Ionicons name={iconName as any} size={20} color="#fff" style={styles.actionButtonIcon} />
+        <Text style={styles.actionButtonText}>{title}</Text>
+      </>
+    )}
+  </TouchableOpacity>
+);
 
 const IncomeDetailsScreen = () => {
   const router = useRouter();
@@ -32,30 +68,26 @@ const IncomeDetailsScreen = () => {
   const { deleteIncome, getIncomeById } = useFinances();
 
   // Fetch income details
-  useEffect(() => {
-    const fetchIncomeDetails = async () => {
-      if (!id) return;
-      
-      try {
-        setLoading(true);
-        // Usar getIncomeById em vez de buscar da lista de receitas
-        const foundIncome = await getIncomeById(Number(id));
-        
-        if (foundIncome) {
-          setIncome(foundIncome);
-        } else {
-          throw new Error('Receita não encontrada');
-        }
-      } catch (error) {
-        ErrorHandler.handle(error);
-        router.back();
-      } finally {
-        setLoading(false);
-      }
-    };
+  const fetchIncomeDetails = useCallback(async () => {
+    if (!id) return;
+    
+    try {
+      setLoading(true);
+      const data = await getIncomeById(Number(id));
+      setIncome(data);
+    } catch (error) {
+      ErrorHandler.handle(error);
+      Alert.alert('Erro', 'Não foi possível carregar os detalhes da receita.');
+      router.back();
+    } finally {
+      setLoading(false);
+    }
+  }, [id, getIncomeById, router]);
 
+  // Initial data fetch
+  useEffect(() => {
     fetchIncomeDetails();
-  }, [id, getIncomeById]);
+  }, [fetchIncomeDetails]);
 
   // Format currency
   const formatCurrency = (value: number) => {
@@ -78,7 +110,7 @@ const IncomeDetailsScreen = () => {
   };
 
   // Get source icon
-  const getSourceIcon = (source: string) => {
+  const getSourceIcon = (source: string): string => {
     switch(source.toLowerCase()) {
       case 'contribuição':
       case 'contribuicao':
@@ -89,6 +121,22 @@ const IncomeDetailsScreen = () => {
         return 'refresh-circle';
       default:
         return 'cash';
+    }
+  };
+
+  // Get source description
+  const getSourceDescription = (source: string): string => {
+    switch(source) {
+      case 'Contribuição':
+        return 'Contribuição de membro da república';
+      case 'Reembolso':
+        return 'Valor reembolsado';
+      case 'Evento':
+        return 'Receita proveniente de evento';
+      case 'Outros':
+        return 'Outra fonte de receita';
+      default:
+        return `Fonte: ${source}`;
     }
   };
 
@@ -134,11 +182,11 @@ const IncomeDetailsScreen = () => {
     );
   };
 
-  // Check if user is the contributor
+  // Check permissions
   const isContributor = income?.contributorId === user?.uid;
-  // Verificar se o usuário é administrador ou o contribuidor da receita
   const canEdit = isContributor || user?.isAdmin;
   
+  // Loading state
   if (loading) {
     return (
       <SafeAreaView style={styles.safeArea}>
@@ -151,6 +199,7 @@ const IncomeDetailsScreen = () => {
     );
   }
 
+  // Error state
   if (!income) {
     return (
       <SafeAreaView style={styles.safeArea}>
@@ -173,6 +222,7 @@ const IncomeDetailsScreen = () => {
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" backgroundColor="#222" />
       
+      {/* Header */}
       <View style={styles.headerContainer}>
         <TouchableOpacity
           onPress={() => router.back()}
@@ -229,7 +279,7 @@ const IncomeDetailsScreen = () => {
             ) : (
               <View style={styles.contributorAvatarPlaceholder}>
                 <Text style={styles.contributorInitials}>
-                  {income.contributorName?.charAt(0).toUpperCase()}
+                  {income.contributorName?.charAt(0).toUpperCase() || '?'}
                 </Text>
               </View>
             )}
@@ -260,46 +310,45 @@ const IncomeDetailsScreen = () => {
             <View style={styles.sourceInfoContainer}>
               <Text style={styles.sourceInfoText}>{income.source}</Text>
               <Text style={styles.sourceInfoDescription}>
-                {income.source === 'Contribuição' && 'Contribuição de membro da república'}
-                {income.source === 'Reembolso' && 'Valor reembolsado'}
-                {income.source === 'Evento' && 'Receita proveniente de evento'}
-                {income.source === 'Outros' && 'Outra fonte de receita'}
+                {getSourceDescription(income.source)}
               </Text>
             </View>
           </View>
         </View>
         
+        {/* Notes Section (if available) */}
+        {income.notes && (
+          <View style={styles.sectionContainer}>
+            <Text style={styles.sectionTitle}>Observações</Text>
+            <Text style={styles.notesText}>{income.notes}</Text>
+          </View>
+        )}
+        
         {/* Action Buttons (for contributor or admin) */}
         {canEdit && (
           <View style={styles.actionsContainer}>
-            <TouchableOpacity 
-              style={styles.editButton}
-              onPress={() => router.push(`/(panel)/finances/incomes/edit?id=${income.id}`)}
-            >
-              <Ionicons name="create-outline" size={20} color="#fff" style={styles.actionButtonIcon} />
-              <Text style={styles.actionButtonText}>Editar</Text>
-            </TouchableOpacity>
+            <ActionButton 
+              title="Editar" 
+              iconName="create-outline" 
+              color="#7B68EE" 
+              onPress={() => router.push(`/(panel)/finances/incomes/edit?id=${income.id}`)} 
+              disabled={deleteLoading} 
+            />
             
-            <TouchableOpacity 
-              style={[styles.deleteButton, deleteLoading && styles.disabledButton]}
-              onPress={handleDeleteIncome}
-              disabled={deleteLoading}
-            >
-              {deleteLoading ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <>
-                  <Ionicons name="trash-outline" size={20} color="#fff" style={styles.actionButtonIcon} />
-                  <Text style={styles.actionButtonText}>Excluir</Text>
-                </>
-              )}
-            </TouchableOpacity>
+            <ActionButton 
+              title="Excluir" 
+              iconName="trash-outline" 
+              color="#FF6347" 
+              onPress={handleDeleteIncome} 
+              isLoading={deleteLoading} 
+            />
           </View>
         )}
       </ScrollView>
     </SafeAreaView>
   );
 };
+
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -438,6 +487,11 @@ const styles = StyleSheet.create({
     color: '#4CAF50',
     marginBottom: 16,
   },
+  notesText: {
+    color: '#ddd',
+    fontSize: 14,
+    lineHeight: 20,
+  },
   contributorContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -506,17 +560,7 @@ const styles = StyleSheet.create({
     gap: 12,
     marginBottom: 20,
   },
-  editButton: {
-    backgroundColor: '#7B68EE',
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'center',
-  },
-  deleteButton: {
-    backgroundColor: '#FF6347',
+  actionButton: {
     paddingVertical: 14,
     paddingHorizontal: 20,
     borderRadius: 8,

@@ -28,8 +28,8 @@ api.interceptors.request.use(
     }
     return config;
   },
-  (error) => {
-    ErrorHandler.logError(ErrorHandler.parseError(error));
+  async (error) => {
+    ErrorHandler.logError(await ErrorHandler.parseError(error));
     return Promise.reject(error);
   }
 );
@@ -78,7 +78,7 @@ api.interceptors.response.use(
     }
     
     // Log do erro
-    ErrorHandler.logError(ErrorHandler.parseError(error));
+    ErrorHandler.logError(await ErrorHandler.parseError(error));
     
     // Continuar com o erro original
     return Promise.reject(error);
@@ -88,7 +88,7 @@ api.interceptors.response.use(
 // Função para checar conectividade
 export const checkApiConnection = async (): Promise<boolean> => {
   try {
-    await api.get('/health', { timeout: 5000 });
+    await api.get('api/v1/health', { timeout: 5000 });
     return true;
   } catch (error) {
     console.error('Falha na verificação de conexão com API:', error);

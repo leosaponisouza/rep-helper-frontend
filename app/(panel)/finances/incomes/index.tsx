@@ -1,5 +1,5 @@
 // app/(panel)/finances/incomes/index.tsx
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,17 +9,20 @@ import {
   RefreshControl,
   SafeAreaView,
   StatusBar,
-  ActivityIndicator
+  ActivityIndicator,
+  Alert
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFinances } from '../../../../src/hooks/useFinances';
 import IncomeItem from '../../../../components/Finances/IncomeItem';
-import { Income } from '@/src/models/finances.model';
+import { Income } from '../../../../src/models/finances.model';
 
 const IncomesScreen = () => {
   const router = useRouter();
+  const [refreshing, setRefreshing] = useState(false);
   
+  // Get incomes data from the hook
   const {
     incomes,
     loadingIncomes,
@@ -27,26 +30,81 @@ const IncomesScreen = () => {
     fetchIncomes
   } = useFinances();
 
-  // Função para recarregar receitas
+  // Refresh incomes
   const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
     try {
       await fetchIncomes();
-      return true;
     } catch (error) {
       console.error('Erro ao recarregar receitas:', error);
-      return false;
+      Alert.alert('Erro', 'Não foi possível atualizar as receitas.');
+    } finally {
+      setRefreshing(false);
     }
   }, [fetchIncomes]);
 
-  // Navegação para detalhes da receita
-  const handleIncomePress = (income: Income) => {
+  // Navigate to income details
+  const handleIncomePress = useCallback((income: Income) => {
     router.push(`/(panel)/finances/incomes/${income.id}`);
-  };
+  }, [router]);
+
+  // Navigate to create income
+  const navigateToCreateIncome = useCallback(() => {
+    router.push('/(panel)/finances/incomes/create');
+  }, [router]);
+
+  // Render empty state
+  const renderEmptyState = useCallback(() => {
+    if (loadingIncomes) {
+      return (
+        <View style={styles.emptyContainer}>
+          <ActivityIndicator size="large" color="#4CAF50" />
+          <Text style={styles.loadingText}>Carregando receitas...</Text>
+        </View>
+      );
+    }
+    
+    if (incomesError) {
+      return (
+        <View style={styles.emptyContainer}>
+          <MaterialCommunityIcons name="alert-circle-outline" size={64} color="#FF6347" />
+          <Text style={styles.errorText}>{incomesError}</Text>
+          <TouchableOpacity 
+            style={styles.retryButton}
+            onPress={handleRefresh}
+          >
+            <Text style={styles.retryButtonText}>Tentar novamente</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+    
+    return (
+      <View style={styles.emptyContainer}>
+        <MaterialCommunityIcons 
+          name="cash-plus" 
+          size={64} 
+          color="#4CAF50" 
+          style={{ opacity: 0.6 }} 
+        />
+        <Text style={styles.emptyText}>
+          Nenhuma receita cadastrada
+        </Text>
+        <TouchableOpacity 
+          style={styles.createButton}
+          onPress={navigateToCreateIncome}
+        >
+          <Text style={styles.createButtonText}>Registrar Receita</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }, [loadingIncomes, incomesError, handleRefresh, navigateToCreateIncome]);
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" backgroundColor="#222" />
       
+      {/* Header */}
       <View style={styles.headerContainer}>
         <TouchableOpacity 
           style={styles.backButton}
@@ -58,67 +116,41 @@ const IncomesScreen = () => {
         
         <TouchableOpacity 
           style={styles.headerActionButton}
-          onPress={() => router.push('/(panel)/finances/incomes/create')}
+          onPress={navigateToCreateIncome}
         >
           <Ionicons name="add-circle-outline" size={24} color="#7B68EE" />
         </TouchableOpacity>
       </View>
       
+      {/* Incomes List */}
       <FlatList
         data={incomes}
         keyExtractor={(item) => item.id.toString()}
         renderItem={({ item }) => (
           <IncomeItem 
             income={item}
-            onPress={handleIncomePress}
+            onPress={() => handleIncomePress(item)}
           />
         )}
-        contentContainerStyle={styles.listContainer}
-        ListEmptyComponent={() => (
-          <View style={styles.emptyContainer}>
-            {loadingIncomes ? (
-              <ActivityIndicator size="large" color="#7B68EE" />
-            ) : incomesError ? (
-              <View>
-                <MaterialCommunityIcons name="alert-circle-outline" size={64} color="#FF6347" />
-                <Text style={styles.emptyText}>{incomesError}</Text>
-                <TouchableOpacity 
-                  style={styles.retryButton}
-                  onPress={handleRefresh}
-                >
-                  <Text style={styles.retryButtonText}>Tentar novamente</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <View>
-                <MaterialCommunityIcons name="cash-plus" size={64} color="#7B68EE" style={{ opacity: 0.6 }} />
-                <Text style={styles.emptyText}>
-                  Nenhuma receita cadastrada
-                </Text>
-                <TouchableOpacity 
-                  style={styles.createButton}
-                  onPress={() => router.push('/(panel)/finances/incomes/create')}
-                >
-                  <Text style={styles.createButtonText}>Registrar Receita</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-        )}
+        contentContainerStyle={[
+          styles.listContainer,
+          incomes.length === 0 && styles.emptyListContainer
+        ]}
+        ListEmptyComponent={renderEmptyState}
         refreshControl={
           <RefreshControl
-            refreshing={loadingIncomes}
+            refreshing={refreshing}
             onRefresh={handleRefresh}
-            colors={['#7B68EE']}
-            tintColor={'#7B68EE'}
+            colors={['#4CAF50']}
+            tintColor={'#4CAF50'}
           />
         }
       />
       
-      {/* Botão flutuante para criar receita */}
+      {/* Floating action button */}
       <TouchableOpacity 
         style={styles.floatingButton}
-        onPress={() => router.push('/(panel)/finances/incomes/create')}
+        onPress={navigateToCreateIncome}
       >
         <Ionicons name="add" size={28} color="#fff" />
       </TouchableOpacity>
@@ -156,14 +188,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 80,
+  },
+  emptyListContainer: {
     flexGrow: 1,
+    justifyContent: 'center',
   },
   emptyContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     padding: 40,
-    marginTop: 50,
+    minHeight: 300,
   },
   emptyText: {
     fontSize: 16,
@@ -171,6 +206,18 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 16,
     marginBottom: 24,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#aaa',
+    marginTop: 16,
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#FF6347',
+    textAlign: 'center',
+    marginTop: 16,
+    marginBottom: 16,
   },
   retryButton: {
     backgroundColor: 'rgba(255, 99, 71, 0.2)',

@@ -1,5 +1,5 @@
 // components/Finances/ExpenseItem.tsx
-import React from 'react';
+import React, { memo } from 'react';
 import { 
   View, 
   Text, 
@@ -18,7 +18,7 @@ interface ExpenseItemProps {
 }
 
 const ExpenseItem: React.FC<ExpenseItemProps> = ({ expense, onPress }) => {
-  // Formatar valor monetário
+  // Format currency
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
@@ -26,7 +26,7 @@ const ExpenseItem: React.FC<ExpenseItemProps> = ({ expense, onPress }) => {
     }).format(value);
   };
 
-  // Formatação de data
+  // Format date
   const formatDate = (dateString?: string) => {
     if (!dateString) return '';
     
@@ -38,56 +38,59 @@ const ExpenseItem: React.FC<ExpenseItemProps> = ({ expense, onPress }) => {
     }
   };
 
-  // Status da despesa
-  const getStatusColor = (status: string) => {
+  // Get status info
+  const getStatusInfo = (status: string) => {
     switch (status) {
       case 'PENDING':
-        return '#FFC107'; // Amarelo
+        return { 
+          color: '#FFC107', 
+          text: 'Pendente',
+          icon: 'time-outline'
+        };
       case 'APPROVED':
-        return '#4CAF50'; // Verde
+        return { 
+          color: '#4CAF50', 
+          text: 'Aprovada',
+          icon: 'checkmark-circle-outline'
+        };
       case 'REJECTED':
-        return '#FF6347'; // Vermelho
+        return { 
+          color: '#FF6347', 
+          text: 'Rejeitada',
+          icon: 'close-circle-outline'
+        };
+      case 'REIMBURSED':
+        return { 
+          color: '#2196F3', 
+          text: 'Reembolsada',
+          icon: 'cash-outline'
+        };
       default:
-        return '#aaa';
+        return { 
+          color: '#aaa', 
+          text: status,
+          icon: 'help-circle-outline'
+        };
     }
   };
 
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'PENDING':
-        return 'Pendente';
-      case 'APPROVED':
-        return 'Aprovada';
-      case 'REJECTED':
-        return 'Rejeitada';
-      default:
-        return status;
-    }
-  };
-
-  // Ícone da categoria
+  // Get category icon
   const getCategoryIcon = (category: string) => {
     switch (category?.toLowerCase()) {
       case 'alimentação':
       case 'alimentacao':
         return 'fast-food';
-      case 'transporte':
-        return 'car';
-      case 'moradia':
+      case 'aluguel':
         return 'home';
-      case 'saúde':
-      case 'saude':
-        return 'medical';
-      case 'educação':
-      case 'educacao':
-        return 'school';
-      case 'lazer':
-        return 'game-controller';
-      case 'vestuário':
-      case 'vestuario':
-        return 'shirt';
-      case 'utilidades':
-        return 'bulb';
+      case 'contas':
+        return 'document-text';
+      case 'manutenção':
+      case 'manutencao':
+        return 'construct';
+      case 'limpeza':
+        return 'water';
+      case 'eventos':
+        return 'calendar';
       case 'outros':
         return 'ellipsis-horizontal-circle';
       default:
@@ -95,15 +98,18 @@ const ExpenseItem: React.FC<ExpenseItemProps> = ({ expense, onPress }) => {
     }
   };
 
+  const statusInfo = getStatusInfo(expense.status);
+
   return (
     <TouchableOpacity 
       style={styles.container}
       onPress={() => onPress(expense)}
+      activeOpacity={0.7}
     >
       <View 
         style={[
           styles.statusIndicator, 
-          { backgroundColor: getStatusColor(expense.status) }
+          { backgroundColor: statusInfo.color }
         ]} 
       />
       
@@ -145,25 +151,31 @@ const ExpenseItem: React.FC<ExpenseItemProps> = ({ expense, onPress }) => {
                 </Text>
               </View>
             )}
-            <Text style={styles.creatorName}>
+            <Text style={styles.creatorName} numberOfLines={1}>
               {expense.creatorName}
             </Text>
           </View>
           
           <View style={styles.meta}>
             <Text style={styles.date}>
-              {formatDate(expense.date)}
+              {formatDate(expense.expenseDate)}
             </Text>
             
             <View style={[
               styles.statusBadge, 
-              { backgroundColor: `${getStatusColor(expense.status)}20` }
+              { backgroundColor: `${statusInfo.color}20` }
             ]}>
+              <Ionicons 
+                name={statusInfo.icon as any} 
+                size={10} 
+                color={statusInfo.color} 
+                style={styles.statusIcon}
+              />
               <Text style={[
                 styles.statusText, 
-                { color: getStatusColor(expense.status) }
+                { color: statusInfo.color }
               ]}>
-                {getStatusText(expense.status)}
+                {statusInfo.text}
               </Text>
             </View>
           </View>
@@ -180,6 +192,11 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 12,
     overflow: 'hidden',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
   },
   statusIndicator: {
     width: 4,
@@ -227,6 +244,7 @@ const styles = StyleSheet.create({
   creatorContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    maxWidth: '50%',
   },
   creatorAvatar: {
     width: 20,
@@ -261,9 +279,14 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingVertical: 3,
     borderRadius: 12,
+  },
+  statusIcon: {
+    marginRight: 3,
   },
   statusText: {
     fontSize: 10,
@@ -271,4 +294,5 @@ const styles = StyleSheet.create({
   }
 });
 
-export default ExpenseItem;
+// Use memo to prevent unnecessary re-renders
+export default memo(ExpenseItem);

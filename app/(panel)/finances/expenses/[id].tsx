@@ -1,5 +1,5 @@
 // app/(panel)/finances/expenses/[id].tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -11,7 +11,9 @@ import {
   ActivityIndicator,
   Alert,
   Image,
-  Share
+  Share,
+  Linking,
+  Platform
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
@@ -20,8 +22,103 @@ import { ptBR } from 'date-fns/locale';
 import { useFinances } from '../../../../src/hooks/useFinances';
 import { useAuth } from '../../../../src/context/AuthContext';
 import { ErrorHandler } from '../../../../src/utils/errorHandling';
-import { Expense } from '../../../../src/models/expense.model';
+import { Expense } from '../../../../src/models/finances.model';
 
+// Timeline status item component
+const TimelineItem = ({ 
+  title, 
+  date, 
+  isCompleted, 
+  isRejected, 
+  rejectionReason 
+}: { 
+  title: string; 
+  date?: string | null; 
+  isCompleted: boolean; 
+  isRejected?: boolean;
+  rejectionReason?: string;
+}) => {
+  const formatDate = (dateString?: string | null) => {
+    if (!dateString) return null;
+    
+    try {
+      const date = parseISO(dateString);
+      return format(date, "dd 'de' MMMM 'de' yyyy", { locale: ptBR });
+    } catch (error) {
+      return dateString;
+    }
+  };
+
+  return (
+    <View style={[
+      styles.timelineItem,
+      isRejected && styles.rejectedTimelineItem,
+      !isCompleted && !isRejected && styles.pendingTimelineItem
+    ]}>
+      <View style={[
+        styles.timelineDot,
+        isCompleted && styles.completedTimelineDot,
+        isRejected && styles.rejectedTimelineDot,
+        !isCompleted && !isRejected && styles.pendingTimelineDot
+      ]} />
+      <View style={styles.timelineContent}>
+        <Text style={[
+          styles.timelineTitle,
+          !isCompleted && !isRejected && styles.pendingTimelineText,
+          isRejected && styles.rejectedTimelineText
+        ]}>{title}</Text>
+        
+        {date && (
+          <Text style={styles.timelineDate}>{formatDate(date)}</Text>
+        )}
+        
+        {isRejected && rejectionReason && (
+          <Text style={styles.rejectionReason}>
+            Motivo: {rejectionReason}
+          </Text>
+        )}
+      </View>
+    </View>
+  );
+};
+
+// Action Button component
+const ActionButton = ({ 
+  title, 
+  iconName, 
+  color, 
+  onPress, 
+  isLoading, 
+  disabled 
+}: { 
+  title: string; 
+  iconName: string; 
+  color: string; 
+  onPress: () => void; 
+  isLoading?: boolean;
+  disabled?: boolean;
+}) => (
+  <TouchableOpacity 
+    style={[
+      styles.actionButton, 
+      { backgroundColor: color }, 
+      (isLoading || disabled) && styles.disabledButton
+    ]}
+    onPress={onPress}
+    disabled={isLoading || disabled}
+  >
+    {isLoading ? (
+      <ActivityIndicator size="small" color="#fff" />
+    ) : (
+      <>
+        <Ionicons name={iconName as any} size={20} color="#fff" style={styles.actionButtonIcon} />
+        <Text style={styles.actionButtonText}>{title}</Text>
+      </>
+    )}
+  </TouchableOpacity>
+);
+
+// Main Component
 const ExpenseDetailsScreen = () => {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -29,6 +126,7 @@ const ExpenseDetailsScreen = () => {
   const [expense, setExpense] = useState<Expense | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  
   const { 
     getExpenseById, 
     approveExpense, 
@@ -39,24 +137,26 @@ const ExpenseDetailsScreen = () => {
   } = useFinances();
 
   // Fetch expense details
-  useEffect(() => {
-    const fetchExpenseDetails = async () => {
-      if (!id) return;
-      
-      try {
-        setLoading(true);
-        const data = await getExpenseById(Number(id));
-        setExpense(data);
-      } catch (error) {
-        ErrorHandler.handle(error);
-        router.back();
-      } finally {
-        setLoading(false);
-      }
-    };
+  const fetchExpenseDetails = useCallback(async () => {
+    if (!id) return;
+    
+    try {
+      setLoading(true);
+      const data = await getExpenseById(Number(id));
+      setExpense(data);
+    } catch (error) {
+      ErrorHandler.handle(error);
+      Alert.alert('Erro', 'Não foi possível carregar os detalhes da despesa.');
+      router.back();
+    } finally {
+      setLoading(false);
+    }
+  }, [id, getExpenseById, router]);
 
+  // Initial data fetch
+  useEffect(() => {
     fetchExpenseDetails();
-  }, [id, getExpenseById]);
+  }, [fetchExpenseDetails]);
 
   // Format currency
   const formatCurrency = (value: number) => {
@@ -100,18 +200,14 @@ const ExpenseDetailsScreen = () => {
     }
   };
 
-  // Handle approve expense
+  // Action handlers
   const handleApproveExpense = async () => {
     if (!expense) return;
     
     try {
       setActionLoading(true);
       await approveExpense(expense.id);
-      
-      // Atualizar a despesa com os dados mais recentes do servidor
-      const updatedExpense = await getExpenseById(expense.id);
-      setExpense(updatedExpense);
-      
+      await fetchExpenseDetails();
       Alert.alert('Sucesso', 'Despesa aprovada com sucesso!');
     } catch (error) {
       ErrorHandler.handle(error);
@@ -120,7 +216,6 @@ const ExpenseDetailsScreen = () => {
     }
   };
 
-  // Handle reject expense
   const handleRejectExpense = async () => {
     if (!expense) return;
     
@@ -141,11 +236,7 @@ const ExpenseDetailsScreen = () => {
             try {
               setActionLoading(true);
               await rejectExpense(expense.id, { reason });
-              
-              // Atualizar a despesa com os dados mais recentes do servidor
-              const updatedExpense = await getExpenseById(expense.id);
-              setExpense(updatedExpense);
-              
+              await fetchExpenseDetails();
               Alert.alert('Sucesso', 'Despesa rejeitada com sucesso!');
             } catch (error) {
               ErrorHandler.handle(error);
@@ -159,18 +250,13 @@ const ExpenseDetailsScreen = () => {
     );
   };
 
-  // Handle reimburse expense
   const handleReimburseExpense = async () => {
     if (!expense) return;
     
     try {
       setActionLoading(true);
       await reimburseExpense(expense.id);
-      
-      // Atualizar a despesa com os dados mais recentes do servidor
-      const updatedExpense = await getExpenseById(expense.id);
-      setExpense(updatedExpense);
-      
+      await fetchExpenseDetails();
       Alert.alert('Sucesso', 'Despesa marcada como reembolsada!');
     } catch (error) {
       ErrorHandler.handle(error);
@@ -179,18 +265,13 @@ const ExpenseDetailsScreen = () => {
     }
   };
   
-  // Handle reset expense status
   const handleResetExpenseStatus = async () => {
     if (!expense) return;
     
     try {
       setActionLoading(true);
       await resetExpenseStatus(expense.id);
-      
-      // Atualizar a despesa com os dados mais recentes do servidor
-      const updatedExpense = await getExpenseById(expense.id);
-      setExpense(updatedExpense);
-      
+      await fetchExpenseDetails();
       Alert.alert('Sucesso', 'Status da despesa redefinido para pendente!');
     } catch (error) {
       ErrorHandler.handle(error);
@@ -199,7 +280,6 @@ const ExpenseDetailsScreen = () => {
     }
   };
   
-  // Handle delete expense
   const handleDeleteExpense = async () => {
     if (!expense) return;
     
@@ -241,6 +321,16 @@ const ExpenseDetailsScreen = () => {
     }
   };
 
+  // View receipt in full screen
+  const viewReceipt = () => {
+    if (!expense?.receiptUrl) return;
+    
+    // Try to open the image in the device's default image viewer
+    Linking.openURL(expense.receiptUrl).catch(() => {
+      Alert.alert('Erro', 'Não foi possível abrir o comprovante.');
+    });
+  };
+
   // Check permissions for different actions
   const canApprove = expense?.status === 'PENDING' && user?.isAdmin === true;
   const canReimburse = expense?.status === 'APPROVED' && user?.isAdmin === true;
@@ -249,6 +339,7 @@ const ExpenseDetailsScreen = () => {
   const canEdit = isCreator && (expense?.status === 'PENDING' || expense?.status === 'REJECTED');
   const canDelete = (isCreator || user?.isAdmin === true) && expense?.status !== 'REIMBURSED';
 
+  // Loading state
   if (loading) {
     return (
       <SafeAreaView style={styles.safeArea}>
@@ -261,6 +352,7 @@ const ExpenseDetailsScreen = () => {
     );
   }
 
+  // Error state
   if (!expense) {
     return (
       <SafeAreaView style={styles.safeArea}>
@@ -283,6 +375,7 @@ const ExpenseDetailsScreen = () => {
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" backgroundColor="#222" />
       
+      {/* Header */}
       <View style={styles.headerContainer}>
         <TouchableOpacity
           onPress={() => router.back()}
@@ -317,6 +410,13 @@ const ExpenseDetailsScreen = () => {
                 <Text style={styles.creatorText}>Você criou esta despesa</Text>
               </View>
             )}
+
+            {expense.category && (
+              <View style={styles.categoryChip}>
+                <FontAwesome5 name="tag" size={14} color="#7B68EE" />
+                <Text style={styles.categoryText}>{expense.category}</Text>
+              </View>
+            )}
           </View>
           
           <Text style={styles.expenseTitle}>{expense.description}</Text>
@@ -329,13 +429,6 @@ const ExpenseDetailsScreen = () => {
                 {formatDate(expense.expenseDate)}
               </Text>
             </View>
-            
-            {expense.category && (
-              <View style={styles.categoryChip}>
-                <FontAwesome5 name="tag" size={14} color="#7B68EE" />
-                <Text style={styles.categoryText}>{expense.category}</Text>
-              </View>
-            )}
           </View>
         </View>
         
@@ -374,82 +467,66 @@ const ExpenseDetailsScreen = () => {
           
           <View style={styles.timelineContainer}>
             {/* Created */}
-            <View style={styles.timelineItem}>
-              <View style={styles.timelineDot} />
-              <View style={styles.timelineContent}>
-                <Text style={styles.timelineTitle}>Criada</Text>
-                <Text style={styles.timelineDate}>{formatDate(expense.createdAt)}</Text>
-              </View>
-            </View>
+            <TimelineItem 
+              title="Criada" 
+              date={expense.createdAt} 
+              isCompleted={true} 
+            />
             
             {/* Approved */}
-            <View style={[
-              styles.timelineItem,
-              ['APPROVED', 'REIMBURSED'].includes(expense.status) ? styles.completedTimelineItem : styles.pendingTimelineItem
-            ]}>
-              <View style={[
-                styles.timelineDot,
-                ['APPROVED', 'REIMBURSED'].includes(expense.status) ? styles.completedTimelineDot : styles.pendingTimelineDot
-              ]} />
-              <View style={styles.timelineContent}>
-                <Text style={[
-                  styles.timelineTitle,
-                  !['APPROVED', 'REIMBURSED'].includes(expense.status) && styles.pendingTimelineText
-                ]}>Aprovada</Text>
-                {expense.approvalDate && (
-                  <Text style={styles.timelineDate}>{formatDate(expense.approvalDate)}</Text>
-                )}
-              </View>
-            </View>
+            <TimelineItem 
+              title="Aprovada" 
+              date={expense.approvalDate} 
+              isCompleted={['APPROVED', 'REIMBURSED'].includes(expense.status)} 
+            />
             
             {/* Reimbursed */}
-            <View style={[
-              styles.timelineItem,
-              expense.status === 'REIMBURSED' ? styles.completedTimelineItem : styles.pendingTimelineItem
-            ]}>
-              <View style={[
-                styles.timelineDot,
-                expense.status === 'REIMBURSED' ? styles.completedTimelineDot : styles.pendingTimelineDot
-              ]} />
-              <View style={styles.timelineContent}>
-                <Text style={[
-                  styles.timelineTitle,
-                  expense.status !== 'REIMBURSED' && styles.pendingTimelineText
-                ]}>Reembolsada</Text>
-                {expense.reimbursementDate && (
-                  <Text style={styles.timelineDate}>{formatDate(expense.reimbursementDate)}</Text>
-                )}
-              </View>
-            </View>
+            <TimelineItem 
+              title="Reembolsada" 
+              date={expense.reimbursementDate} 
+              isCompleted={expense.status === 'REIMBURSED'} 
+            />
             
             {/* Rejected (only show if rejected) */}
             {expense.status === 'REJECTED' && (
-              <View style={[styles.timelineItem, styles.rejectedTimelineItem]}>
-                <View style={[styles.timelineDot, styles.rejectedTimelineDot]} />
-                <View style={styles.timelineContent}>
-                  <Text style={[styles.timelineTitle, styles.rejectedTimelineText]}>Rejeitada</Text>
-                  {expense.rejectionReason && (
-                    <Text style={styles.rejectionReason}>
-                      Motivo: {expense.rejectionReason}
-                    </Text>
-                  )}
-                </View>
-              </View>
+              <TimelineItem 
+                title="Rejeitada" 
+                date={expense.updatedAt} 
+                isCompleted={true} 
+                isRejected={true}
+                rejectionReason={expense.rejectionReason}
+              />
             )}
           </View>
         </View>
+        
+        {/* Notes Section (if available) */}
+        {expense.notes && (
+          <View style={styles.sectionContainer}>
+            <Text style={styles.sectionTitle}>Observações</Text>
+            <Text style={styles.notesText}>{expense.notes}</Text>
+          </View>
+        )}
         
         {/* Receipt Section (if available) */}
         {expense.receiptUrl && (
           <View style={styles.sectionContainer}>
             <Text style={styles.sectionTitle}>Comprovante</Text>
-            <View style={styles.receiptContainer}>
+            <TouchableOpacity 
+              style={styles.receiptContainer}
+              onPress={viewReceipt}
+              activeOpacity={0.9}
+            >
               <Image 
                 source={{ uri: expense.receiptUrl }} 
                 style={styles.receiptImage}
                 resizeMode="contain"
               />
-            </View>
+              <View style={styles.viewReceiptOverlay}>
+                <Ionicons name="eye" size={24} color="#fff" />
+                <Text style={styles.viewReceiptText}>Visualizar</Text>
+              </View>
+            </TouchableOpacity>
           </View>
         )}
         
@@ -458,99 +535,63 @@ const ExpenseDetailsScreen = () => {
           {/* Admin Actions */}
           {canApprove && (
             <View style={styles.actionGroup}>
-              <TouchableOpacity 
-                style={[styles.approveButton, actionLoading && styles.disabledButton]}
-                onPress={handleApproveExpense}
-                disabled={actionLoading}
-              >
-                {actionLoading ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <>
-                    <Ionicons name="checkmark-circle" size={20} color="#fff" style={styles.actionButtonIcon} />
-                    <Text style={styles.actionButtonText}>Aprovar</Text>
-                  </>
-                )}
-              </TouchableOpacity>
+              <ActionButton 
+                title="Aprovar" 
+                iconName="checkmark-circle" 
+                color="#4CAF50" 
+                onPress={handleApproveExpense} 
+                isLoading={actionLoading} 
+              />
               
-              <TouchableOpacity 
-                style={[styles.rejectButton, actionLoading && styles.disabledButton]}
-                onPress={handleRejectExpense}
-                disabled={actionLoading}
-              >
-                {actionLoading ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <>
-                    <Ionicons name="close-circle" size={20} color="#fff" style={styles.actionButtonIcon} />
-                    <Text style={styles.actionButtonText}>Rejeitar</Text>
-                  </>
-                )}
-              </TouchableOpacity>
+              <ActionButton 
+                title="Rejeitar" 
+                iconName="close-circle" 
+                color="#FF6347" 
+                onPress={handleRejectExpense} 
+                isLoading={actionLoading} 
+              />
             </View>
           )}
           
           {canReimburse && (
-            <TouchableOpacity 
-              style={[styles.reimburseButton, actionLoading && styles.disabledButton]}
-              onPress={handleReimburseExpense}
-              disabled={actionLoading}
-            >
-              {actionLoading ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <>
-                  <MaterialCommunityIcons name="cash-refund" size={20} color="#fff" style={styles.actionButtonIcon} />
-                  <Text style={styles.actionButtonText}>Marcar como Reembolsada</Text>
-                </>
-              )}
-            </TouchableOpacity>
+            <ActionButton 
+              title="Marcar como Reembolsada" 
+              iconName="cash-outline" 
+              color="#2196F3" 
+              onPress={handleReimburseExpense} 
+              isLoading={actionLoading} 
+            />
           )}
           
           {canReset && (
-            <TouchableOpacity 
-              style={[styles.resetButton, actionLoading && styles.disabledButton]}
-              onPress={handleResetExpenseStatus}
-              disabled={actionLoading}
-            >
-              {actionLoading ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <>
-                  <Ionicons name="refresh" size={20} color="#fff" style={styles.actionButtonIcon} />
-                  <Text style={styles.actionButtonText}>Redefinir Status</Text>
-                </>
-              )}
-            </TouchableOpacity>
+            <ActionButton 
+              title="Redefinir Status" 
+              iconName="refresh" 
+              color="#FFC107" 
+              onPress={handleResetExpenseStatus} 
+              isLoading={actionLoading} 
+            />
           )}
           
           {/* Creator/User Actions */}
           {canEdit && (
-            <TouchableOpacity 
-              style={[styles.editButton, actionLoading && styles.disabledButton]}
-              onPress={() => router.push(`/(panel)/finances/expenses/edit?id=${expense.id}`)}
-              disabled={actionLoading}
-            >
-              <Ionicons name="create-outline" size={20} color="#fff" style={styles.actionButtonIcon} />
-              <Text style={styles.actionButtonText}>Editar</Text>
-            </TouchableOpacity>
+            <ActionButton 
+              title="Editar" 
+              iconName="create-outline" 
+              color="#7B68EE" 
+              onPress={() => router.push(`/(panel)/finances/expenses/edit?id=${expense.id}`)} 
+              disabled={actionLoading} 
+            />
           )}
           
           {canDelete && (
-            <TouchableOpacity 
-              style={[styles.deleteButton, actionLoading && styles.disabledButton]}
-              onPress={handleDeleteExpense}
-              disabled={actionLoading}
-            >
-              {actionLoading ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <>
-                  <Ionicons name="trash-outline" size={20} color="#fff" style={styles.actionButtonIcon} />
-                  <Text style={styles.actionButtonText}>Excluir</Text>
-                </>
-              )}
-            </TouchableOpacity>
+            <ActionButton 
+              title="Excluir" 
+              iconName="trash-outline" 
+              color="#FF6347" 
+              onPress={handleDeleteExpense} 
+              isLoading={actionLoading} 
+            />
           )}
         </View>
       </ScrollView>
@@ -655,6 +696,19 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: 'bold',
   },
+  categoryChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(123, 104, 238, 0.15)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+  },
+  categoryText: {
+    color: '#7B68EE',
+    fontSize: 12,
+    marginLeft: 6,
+  },
   expenseTitle: {
     fontSize: 22,
     fontWeight: 'bold',
@@ -682,19 +736,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginLeft: 6,
   },
-  categoryChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(123, 104, 238, 0.15)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 12,
-  },
-  categoryText: {
-    color: '#7B68EE',
-    fontSize: 12,
-    marginLeft: 6,
-  },
   sectionContainer: {
     backgroundColor: '#333',
     margin: 16,
@@ -706,6 +747,11 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#7B68EE',
     marginBottom: 16,
+  },
+  notesText: {
+    color: '#ddd',
+    fontSize: 14,
+    lineHeight: 20,
   },
   creatorContainer: {
     flexDirection: 'row',
@@ -800,6 +846,7 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
   receiptContainer: {
+    position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#444',
@@ -811,6 +858,23 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 300,
   },
+  viewReceiptOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    opacity: 0,
+  },
+  viewReceiptText: {
+    color: '#fff',
+    marginTop: 8,
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
   actionsContainer: {
     padding: 16,
     gap: 12,
@@ -821,55 +885,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 8,
   },
-  approveButton: {
-    flex: 1,
-    backgroundColor: '#4CAF50',
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'center',
-  },
-  rejectButton: {
-    flex: 1,
-    backgroundColor: '#FF6347',
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'center',
-  },
-  reimburseButton: {
-    backgroundColor: '#2196F3',
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'center',
-  },
-  resetButton: {
-    backgroundColor: '#FFC107',
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'center',
-  },
-  editButton: {
-    backgroundColor: '#7B68EE',
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'center',
-  },
-  deleteButton: {
-    backgroundColor: '#FF6347',
+  actionButton: {
     paddingVertical: 14,
     paddingHorizontal: 20,
     borderRadius: 8,

@@ -1,5 +1,5 @@
 // app/(panel)/finances/incomes/create.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -17,12 +17,13 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { format, parseISO } from 'date-fns';
+import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useFinances } from '../../../../src/hooks/useFinances';
 import { useAuth } from '../../../../src/context/AuthContext';
-import { CreateIncomeRequest } from '../../../../src/models/income.model';
+import { CreateIncomeRequest, IncomeFormData } from '../../../../src/models/finances.model';
 
+// Income source options
 const incomeSources = [
   'Contribuição',
   'Reembolso',
@@ -30,24 +31,71 @@ const incomeSources = [
   'Outros'
 ];
 
+// Source selector component
+const SourceSelector = ({ 
+  sources,
+  selectedSource,
+  onSelectSource,
+  visible,
+  onClose
+}: {
+  sources: string[];
+  selectedSource: string;
+  onSelectSource: (source: string) => void;
+  visible: boolean;
+  onClose: () => void;
+}) => {
+  if (!visible) return null;
+  
+  return (
+    <View style={styles.sourcePicker}>
+      {sources.map((source) => (
+        <TouchableOpacity
+          key={source}
+          style={[
+            styles.sourceOption,
+            selectedSource === source && styles.selectedSourceOption
+          ]}
+          onPress={() => {
+            onSelectSource(source);
+            onClose();
+          }}
+        >
+          <Text style={[
+            styles.sourceOptionText,
+            selectedSource === source && styles.selectedSourceOptionText
+          ]}>
+            {source}
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+};
+
 const CreateIncomeScreen = () => {
   const router = useRouter();
   const params = useLocalSearchParams<{ id?: string }>();
   const { user } = useAuth();
   const { createIncome, updateIncome, getIncomeById } = useFinances();
   
-  const [isEditing, setIsEditing] = useState(false);
-  const [description, setDescription] = useState('');
-  const [amount, setAmount] = useState('');
-  const [source, setSource] = useState(incomeSources[0]);
-  const [incomeDate, setIncomeDate] = useState(new Date());
-  const [showDatePicker, setShowDatePicker] = useState(false);
+  // Form state
+  const [formData, setFormData] = useState<IncomeFormData>({
+    description: '',
+    amount: '',
+    date: new Date().toISOString(),
+    source: incomeSources[0],
+    notes: ''
+  });
   
+  // UI state
+  const [isEditing, setIsEditing] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showSourcePicker, setShowSourcePicker] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadingIncome, setLoadingIncome] = useState(false);
-  const [showSourcePicker, setShowSourcePicker] = useState(false);
 
-  // Se existir um ID, então estamos editando
+  // Fetch income details if editing
   useEffect(() => {
     const fetchIncomeDetails = async () => {
       if (params.id) {
@@ -55,15 +103,17 @@ const CreateIncomeScreen = () => {
         setLoadingIncome(true);
         
         try {
-          // Buscar os detalhes da receita pelo ID
+          // Get income details by ID
           const income = await getIncomeById(Number(params.id));
           
-          // Preencher o formulário com os dados da receita
-          setDescription(income.description);
-          // Multiplicar por 100 para exibir em centavos (formatação da moeda)
-          setAmount((income.amount * 100).toString());
-          setSource(income.source || incomeSources[0]);
-          setIncomeDate(parseISO(income.incomeDate));
+          // Set form data from income
+          setFormData({
+            description: income.description,
+            amount: income.amount.toString(),
+            date: income.incomeDate,
+            source: income.source || incomeSources[0],
+            notes: income.notes || ''
+          });
         } catch (error) {
           console.error('Erro ao carregar detalhes da receita:', error);
           Alert.alert('Erro', 'Não foi possível carregar os detalhes da receita.');
@@ -75,51 +125,70 @@ const CreateIncomeScreen = () => {
     };
 
     fetchIncomeDetails();
-  }, [params.id, getIncomeById]);
+  }, [params.id, getIncomeById, router]);
+  
+  // Handle form field changes
+  const handleChange = (field: keyof IncomeFormData, value: string | number | Date) => {
+    if (field === 'date' && value instanceof Date) {
+      setFormData(prev => ({ ...prev, [field]: value.toISOString() }));
+    } else {
+      setFormData(prev => ({ ...prev, [field]: value }));
+    }
+  };
 
-  // Formatar valor monetário para exibição
-  const formatCurrency = (value: string) => {
-    // Remove tudo que não for número
-    let numberValue = value.replace(/\D/g, '');
+  // Handle amount input
+  const handleAmountChange = (text: string) => {
+    // Keep only numbers
+    const numericValue = text.replace(/\D/g, '');
+    handleChange('amount', numericValue);
+  };
+
+  // Format amount for display
+  const getFormattedAmount = () => {
+    if (!formData.amount) return '';
     
-    // Converte para float (dividindo por 100 para tratar como centavos)
-    const floatValue = parseInt(numberValue || '0', 10) / 100;
+    // Convert to number
+    const numericValue = parseInt(formData.amount.toString(), 10) / 100;
     
-    // Formata como moeda brasileira
+    // Format as BRL currency
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
       currency: 'BRL'
-    }).format(floatValue);
+    }).format(numericValue);
   };
 
-  // Manipular a entrada de valor
-  const handleAmountChange = (text: string) => {
-    // Mantém apenas os números
-    const numericValue = text.replace(/\D/g, '');
-    setAmount(numericValue);
+  // Date handling
+  const getFormattedDate = () => {
+    try {
+      const date = new Date(formData.date);
+      return format(date, "dd 'de' MMMM 'de' yyyy", { locale: ptBR });
+    } catch (error) {
+      return 'Data inválida';
+    }
   };
 
-  // Mostrar o valor formatado
-  const getFormattedAmount = () => {
-    if (!amount) return '';
+  const handleDateChange = (event: any, selectedDate?: Date) => {
+    setShowDatePicker(false);
     
-    const numericValue = parseInt(amount, 10) / 100;
-    return formatCurrency(numericValue.toString());
+    if (selectedDate) {
+      handleChange('date', selectedDate);
+    }
   };
 
-  // Validar formulário
-  const validateForm = () => {
-    if (!description.trim()) {
+  // Form validation
+  const validateForm = (): boolean => {
+    if (!formData.description.trim()) {
       Alert.alert('Erro', 'Por favor, informe uma descrição para a receita.');
       return false;
     }
     
-    if (!amount || parseInt(amount, 10) === 0) {
+    const amountValue = parseInt(formData.amount.toString(), 10);
+    if (!formData.amount || amountValue === 0) {
       Alert.alert('Erro', 'Por favor, informe um valor válido para a receita.');
       return false;
     }
     
-    if (!source) {
+    if (!formData.source) {
       Alert.alert('Erro', 'Por favor, selecione uma fonte para a receita.');
       return false;
     }
@@ -127,7 +196,7 @@ const CreateIncomeScreen = () => {
     return true;
   };
 
-  // Salvar receita
+  // Save income
   const handleSaveIncome = async () => {
     if (!validateForm() || !user?.currentRepublicId) return;
     
@@ -135,69 +204,41 @@ const CreateIncomeScreen = () => {
     
     try {
       const incomeData: CreateIncomeRequest = {
-        description,
-        amount: parseInt(amount, 10) / 100,
-        incomeDate: incomeDate.toISOString(),
-        source,
-        republicId: user.currentRepublicId
+        description: formData.description,
+        amount: parseInt(formData.amount.toString(), 10) / 100,
+        incomeDate: formData.date,
+        source: formData.source,
+        republicId: user.currentRepublicId,
+        notes: formData.notes
       };
       
       if (isEditing && params.id) {
         await updateIncome(Number(params.id), incomeData);
-        Alert.alert('Sucesso', 'Receita atualizada com sucesso!');
+        Alert.alert(
+          'Sucesso', 
+          'Receita atualizada com sucesso!',
+          [{ text: 'OK', onPress: () => router.back() }]
+        );
       } else {
         await createIncome(incomeData);
-        Alert.alert('Sucesso', 'Receita cadastrada com sucesso!');
+        Alert.alert(
+          'Sucesso', 
+          'Receita cadastrada com sucesso!',
+          [{ text: 'OK', onPress: () => router.back() }]
+        );
       }
-      
-      router.back();
     } catch (error) {
       console.error('Erro ao salvar receita:', error);
-      Alert.alert('Erro', 'Ocorreu um erro ao salvar a receita. Por favor, tente novamente.');
+      Alert.alert(
+        'Erro', 
+        'Ocorreu um erro ao salvar a receita. Por favor, tente novamente.'
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  // Lidar com a mudança de data
-  const handleDateChange = (event: any, selectedDate?: Date) => {
-    setShowDatePicker(false);
-    
-    if (selectedDate) {
-      setIncomeDate(selectedDate);
-    }
-  };
-
-  // Renderizar o seletor de fonte
-  const renderSourcePicker = () => {
-    if (!showSourcePicker) return null;
-    
-    return (
-      <View style={styles.sourcePicker}>
-        {incomeSources.map((item) => (
-          <TouchableOpacity
-            key={item}
-            style={[
-              styles.sourceOption,
-              source === item && styles.selectedSourceOption
-            ]}
-            onPress={() => {
-              setSource(item);
-              setShowSourcePicker(false);
-            }}
-          >
-            <Text style={[
-              styles.sourceOptionText,
-              source === item && styles.selectedSourceOptionText
-            ]}>
-              {item}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-    );
-  };
-
+  // Loading state
   if (loadingIncome) {
     return (
       <SafeAreaView style={styles.safeArea}>
@@ -232,21 +273,21 @@ const CreateIncomeScreen = () => {
         </View>
         
         <ScrollView style={styles.formContainer}>
-          {/* Descrição */}
+          {/* Description */}
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Descrição</Text>
             <TextInput
               style={styles.textInput}
               placeholder="Descreva a receita"
               placeholderTextColor="#999"
-              value={description}
-              onChangeText={setDescription}
+              value={formData.description}
+              onChangeText={(text) => handleChange('description', text)}
               multiline
               maxLength={100}
             />
           </View>
           
-          {/* Valor */}
+          {/* Amount */}
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Valor</Text>
             <View style={styles.amountInputContainer}>
@@ -262,7 +303,7 @@ const CreateIncomeScreen = () => {
             </View>
           </View>
           
-          {/* Data */}
+          {/* Date */}
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Data</Text>
             <TouchableOpacity
@@ -270,14 +311,12 @@ const CreateIncomeScreen = () => {
               onPress={() => setShowDatePicker(true)}
             >
               <Ionicons name="calendar-outline" size={20} color="#7B68EE" />
-              <Text style={styles.dateText}>
-                {format(incomeDate, "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
-              </Text>
+              <Text style={styles.dateText}>{getFormattedDate()}</Text>
             </TouchableOpacity>
             
             {showDatePicker && (
               <DateTimePicker
-                value={incomeDate}
+                value={new Date(formData.date)}
                 mode="date"
                 display="default"
                 onChange={handleDateChange}
@@ -286,14 +325,14 @@ const CreateIncomeScreen = () => {
             )}
           </View>
           
-          {/* Fonte */}
+          {/* Source */}
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Fonte</Text>
             <TouchableOpacity
               style={styles.sourceButton}
               onPress={() => setShowSourcePicker(!showSourcePicker)}
             >
-              <Text style={styles.sourceText}>{source}</Text>
+              <Text style={styles.sourceText}>{formData.source}</Text>
               <Ionicons
                 name={showSourcePicker ? "chevron-up" : "chevron-down"}
                 size={20}
@@ -301,10 +340,31 @@ const CreateIncomeScreen = () => {
               />
             </TouchableOpacity>
             
-            {renderSourcePicker()}
+            <SourceSelector
+              sources={incomeSources}
+              selectedSource={formData.source}
+              onSelectSource={(source) => handleChange('source', source)}
+              visible={showSourcePicker}
+              onClose={() => setShowSourcePicker(false)}
+            />
           </View>
           
-          {/* Botão de salvar */}
+          {/* Notes */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Observações (opcional)</Text>
+            <TextInput
+              style={[styles.textInput, styles.notesInput]}
+              placeholder="Adicione informações adicionais sobre a receita"
+              placeholderTextColor="#999"
+              value={formData.notes}
+              onChangeText={(text) => handleChange('notes', text)}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+            />
+          </View>
+          
+          {/* Save button */}
           <TouchableOpacity
             style={[styles.saveButton, loading && styles.disabledButton]}
             onPress={handleSaveIncome}
@@ -385,6 +445,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     borderWidth: 1,
     borderColor: '#444',
+  },
+  notesInput: {
+    minHeight: 100,
+    paddingTop: 12,
   },
   amountInputContainer: {
     flexDirection: 'row',

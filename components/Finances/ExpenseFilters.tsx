@@ -1,17 +1,21 @@
 // components/Finances/ExpenseFilters.tsx
-import React from 'react';
+import React, { memo } from 'react';
 import { 
   View, 
   Text, 
   TouchableOpacity, 
   StyleSheet, 
-  ScrollView 
+  ScrollView,
+  Dimensions
 } from 'react-native';
 import { ExpenseFilterType } from '../../src/hooks/useFinances';
+import { Ionicons } from '@expo/vector-icons';
 
+// Define the filter option interface
 interface FilterOption {
   key: ExpenseFilterType;
   label: string;
+  icon?: string;  // Optional icon for each filter
 }
 
 interface ExpenseFiltersProps {
@@ -20,17 +24,39 @@ interface ExpenseFiltersProps {
   onFilterChange: (filter: ExpenseFilterType) => void;
 }
 
+const SCREEN_WIDTH = Dimensions.get('window').width;
+
 const ExpenseFilters: React.FC<ExpenseFiltersProps> = ({ 
   filters, 
   activeFilter, 
   onFilterChange 
 }) => {
+  // Get icon for filter
+  const getFilterIcon = (filterKey: ExpenseFilterType): string => {
+    switch (filterKey) {
+      case 'ALL':
+        return 'list';
+      case 'PENDING':
+        return 'time-outline';
+      case 'APPROVED':
+        return 'checkmark-circle-outline';
+      case 'REJECTED':
+        return 'close-circle-outline';
+      case 'REIMBURSED':
+        return 'cash-outline';
+      default:
+        return 'filter';
+    }
+  };
+
   return (
     <ScrollView 
       horizontal 
       showsHorizontalScrollIndicator={false}
       style={styles.container}
       contentContainerStyle={styles.contentContainer}
+      snapToInterval={SCREEN_WIDTH / 3} // Snap to approximately 3 items per screen
+      decelerationRate="fast"
     >
       {filters.map((filter) => (
         <TouchableOpacity
@@ -40,7 +66,14 @@ const ExpenseFilters: React.FC<ExpenseFiltersProps> = ({
             activeFilter === filter.key && styles.activeFilterButton
           ]}
           onPress={() => onFilterChange(filter.key)}
+          activeOpacity={0.7}
         >
+          <Ionicons 
+            name={(filter.icon || getFilterIcon(filter.key)) as any} 
+            size={16} 
+            color={activeFilter === filter.key ? '#fff' : '#aaa'} 
+            style={styles.filterIcon}
+          />
           <Text 
             style={[
               styles.filterButtonText,
@@ -62,8 +95,11 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     paddingHorizontal: 20,
+    paddingVertical: 8
   },
   filterButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingVertical: 8,
     paddingHorizontal: 15,
     marginRight: 10,
@@ -76,9 +112,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#7B68EE',
     borderColor: '#7B68EE',
   },
+  filterIcon: {
+    marginRight: 6,
+  },
   filterButtonText: {
     color: '#aaa',
     fontSize: 14,
+    fontWeight: '500',
   },
   activeFilterButtonText: {
     color: '#fff',
@@ -86,4 +126,5 @@ const styles = StyleSheet.create({
   },
 });
 
-export default ExpenseFilters;
+// Use memo to prevent unnecessary re-renders
+export default memo(ExpenseFilters);
