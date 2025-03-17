@@ -29,7 +29,7 @@ const IncomeDetailsScreen = () => {
   const [income, setIncome] = useState<Income | null>(null);
   const [loading, setLoading] = useState(true);
   const [deleteLoading, setDeleteLoading] = useState(false);
-  const { incomes, deleteIncome } = useFinances();
+  const { deleteIncome, getIncomeById } = useFinances();
 
   // Fetch income details
   useEffect(() => {
@@ -38,9 +38,8 @@ const IncomeDetailsScreen = () => {
       
       try {
         setLoading(true);
-        // Idealmente, você teria uma função getIncomeById no hook useFinances
-        // Por enquanto, vamos buscar da lista de receitas
-        const foundIncome = incomes.find(inc => inc.id === Number(id));
+        // Usar getIncomeById em vez de buscar da lista de receitas
+        const foundIncome = await getIncomeById(Number(id));
         
         if (foundIncome) {
           setIncome(foundIncome);
@@ -56,7 +55,7 @@ const IncomeDetailsScreen = () => {
     };
 
     fetchIncomeDetails();
-  }, [id, incomes]);
+  }, [id, getIncomeById]);
 
   // Format currency
   const formatCurrency = (value: number) => {
@@ -103,6 +102,7 @@ const IncomeDetailsScreen = () => {
       });
     } catch (error) {
       console.error('Erro ao compartilhar:', error);
+      Alert.alert('Erro', 'Não foi possível compartilhar esta receita.');
     }
   };
 
@@ -136,6 +136,8 @@ const IncomeDetailsScreen = () => {
 
   // Check if user is the contributor
   const isContributor = income?.contributorId === user?.uid;
+  // Verificar se o usuário é administrador ou o contribuidor da receita
+  const canEdit = isContributor || user?.isAdmin;
   
   if (loading) {
     return (
@@ -219,15 +221,15 @@ const IncomeDetailsScreen = () => {
         <View style={styles.sectionContainer}>
           <Text style={styles.sectionTitle}>Registrado por</Text>
           <View style={styles.contributorContainer}>
-            {income.contributorProfilePictureUrl ? (
+            {income.creatorProfilePictureUrl ? (
               <Image 
-                source={{ uri: income.contributorProfilePictureUrl }} 
+                source={{ uri: income.creatorProfilePictureUrl }} 
                 style={styles.contributorAvatar}
               />
             ) : (
               <View style={styles.contributorAvatarPlaceholder}>
                 <Text style={styles.contributorInitials}>
-                  {income.contributorName.charAt(0).toUpperCase()}
+                  {income.contributorName?.charAt(0).toUpperCase()}
                 </Text>
               </View>
             )}
@@ -268,7 +270,7 @@ const IncomeDetailsScreen = () => {
         </View>
         
         {/* Action Buttons (for contributor or admin) */}
-        {(isContributor || user?.isAdmin) && (
+        {canEdit && (
           <View style={styles.actionsContainer}>
             <TouchableOpacity 
               style={styles.editButton}
@@ -298,7 +300,6 @@ const IncomeDetailsScreen = () => {
     </SafeAreaView>
   );
 };
-
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,

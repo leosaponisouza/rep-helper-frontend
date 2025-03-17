@@ -33,7 +33,9 @@ const ExpenseDetailsScreen = () => {
     getExpenseById, 
     approveExpense, 
     rejectExpense, 
-    reimburseExpense 
+    reimburseExpense,
+    resetExpenseStatus,
+    deleteExpense
   } = useFinances();
 
   // Fetch expense details
@@ -54,7 +56,7 @@ const ExpenseDetailsScreen = () => {
     };
 
     fetchExpenseDetails();
-  }, [id]);
+  }, [id, getExpenseById]);
 
   // Format currency
   const formatCurrency = (value: number) => {
@@ -106,8 +108,9 @@ const ExpenseDetailsScreen = () => {
       setActionLoading(true);
       await approveExpense(expense.id);
       
-      // Update local expense
-      setExpense(prev => prev ? { ...prev, status: 'APPROVED' } : null);
+      // Atualizar a despesa com os dados mais recentes do servidor
+      const updatedExpense = await getExpenseById(expense.id);
+      setExpense(updatedExpense);
       
       Alert.alert('Sucesso', 'Despesa aprovada com sucesso!');
     } catch (error) {
@@ -139,10 +142,9 @@ const ExpenseDetailsScreen = () => {
               setActionLoading(true);
               await rejectExpense(expense.id, { reason });
               
-              // Update local expense
-              setExpense(prev => 
-                prev ? { ...prev, status: 'REJECTED', rejectionReason: reason } : null
-              );
+              // Atualizar a despesa com os dados mais recentes do servidor
+              const updatedExpense = await getExpenseById(expense.id);
+              setExpense(updatedExpense);
               
               Alert.alert('Sucesso', 'Despesa rejeitada com sucesso!');
             } catch (error) {
@@ -165,10 +167,9 @@ const ExpenseDetailsScreen = () => {
       setActionLoading(true);
       await reimburseExpense(expense.id);
       
-      // Update local expense
-      setExpense(prev => 
-        prev ? { ...prev, status: 'REIMBURSED' } : null
-      );
+      // Atualizar a despesa com os dados mais recentes do servidor
+      const updatedExpense = await getExpenseById(expense.id);
+      setExpense(updatedExpense);
       
       Alert.alert('Sucesso', 'Despesa marcada como reembolsada!');
     } catch (error) {
@@ -176,6 +177,54 @@ const ExpenseDetailsScreen = () => {
     } finally {
       setActionLoading(false);
     }
+  };
+  
+  // Handle reset expense status
+  const handleResetExpenseStatus = async () => {
+    if (!expense) return;
+    
+    try {
+      setActionLoading(true);
+      await resetExpenseStatus(expense.id);
+      
+      // Atualizar a despesa com os dados mais recentes do servidor
+      const updatedExpense = await getExpenseById(expense.id);
+      setExpense(updatedExpense);
+      
+      Alert.alert('Sucesso', 'Status da despesa redefinido para pendente!');
+    } catch (error) {
+      ErrorHandler.handle(error);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+  
+  // Handle delete expense
+  const handleDeleteExpense = async () => {
+    if (!expense) return;
+    
+    Alert.alert(
+      'Excluir Despesa',
+      'Tem certeza que deseja excluir esta despesa? Esta ação não pode ser desfeita.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { 
+          text: 'Excluir', 
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setActionLoading(true);
+              await deleteExpense(expense.id);
+              Alert.alert('Sucesso', 'Despesa excluída com sucesso!');
+              router.back();
+            } catch (error) {
+              ErrorHandler.handle(error);
+              setActionLoading(false);
+            }
+          }
+        }
+      ]
+    );
   };
 
   // Share expense details
@@ -188,13 +237,17 @@ const ExpenseDetailsScreen = () => {
       });
     } catch (error) {
       console.error('Erro ao compartilhar:', error);
+      Alert.alert('Erro', 'Não foi possível compartilhar esta despesa.');
     }
   };
 
-  // Check if user can approve/reject
+  // Check permissions for different actions
   const canApprove = expense?.status === 'PENDING' && user?.isAdmin === true;
   const canReimburse = expense?.status === 'APPROVED' && user?.isAdmin === true;
+  const canReset = (expense?.status === 'REJECTED' || expense?.status === 'APPROVED') && user?.isAdmin === true;
   const isCreator = expense?.creatorId === user?.uid;
+  const canEdit = isCreator && (expense?.status === 'PENDING' || expense?.status === 'REJECTED');
+  const canDelete = (isCreator || user?.isAdmin === true) && expense?.status !== 'REIMBURSED';
 
   if (loading) {
     return (
@@ -400,61 +453,106 @@ const ExpenseDetailsScreen = () => {
           </View>
         )}
         
-        {/* Action Buttons (for admins) */}
-        {(canApprove || canReimburse) && (
-          <View style={styles.actionsContainer}>
-            {canApprove && (
-              <>
-                <TouchableOpacity 
-                  style={[styles.approveButton, actionLoading && styles.disabledButton]}
-                  onPress={handleApproveExpense}
-                  disabled={actionLoading}
-                >
-                  {actionLoading ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                  ) : (
-                    <>
-                      <Ionicons name="checkmark-circle" size={20} color="#fff" style={styles.actionButtonIcon} />
-                      <Text style={styles.actionButtonText}>Aprovar</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-                
-                <TouchableOpacity 
-                  style={[styles.rejectButton, actionLoading && styles.disabledButton]}
-                  onPress={handleRejectExpense}
-                  disabled={actionLoading}
-                >
-                  {actionLoading ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                  ) : (
-                    <>
-                      <Ionicons name="close-circle" size={20} color="#fff" style={styles.actionButtonIcon} />
-                      <Text style={styles.actionButtonText}>Rejeitar</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-              </>
-            )}
-            
-            {canReimburse && (
+        {/* Action Buttons (based on permissions) */}
+        <View style={styles.actionsContainer}>
+          {/* Admin Actions */}
+          {canApprove && (
+            <View style={styles.actionGroup}>
               <TouchableOpacity 
-                style={[styles.reimburseButton, actionLoading && styles.disabledButton]}
-                onPress={handleReimburseExpense}
+                style={[styles.approveButton, actionLoading && styles.disabledButton]}
+                onPress={handleApproveExpense}
                 disabled={actionLoading}
               >
                 {actionLoading ? (
                   <ActivityIndicator size="small" color="#fff" />
                 ) : (
                   <>
-                    <MaterialCommunityIcons name="cash-refund" size={20} color="#fff" style={styles.actionButtonIcon} />
-                    <Text style={styles.actionButtonText}>Marcar como Reembolsada</Text>
+                    <Ionicons name="checkmark-circle" size={20} color="#fff" style={styles.actionButtonIcon} />
+                    <Text style={styles.actionButtonText}>Aprovar</Text>
                   </>
                 )}
               </TouchableOpacity>
-            )}
-          </View>
-        )}
+              
+              <TouchableOpacity 
+                style={[styles.rejectButton, actionLoading && styles.disabledButton]}
+                onPress={handleRejectExpense}
+                disabled={actionLoading}
+              >
+                {actionLoading ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <>
+                    <Ionicons name="close-circle" size={20} color="#fff" style={styles.actionButtonIcon} />
+                    <Text style={styles.actionButtonText}>Rejeitar</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
+          
+          {canReimburse && (
+            <TouchableOpacity 
+              style={[styles.reimburseButton, actionLoading && styles.disabledButton]}
+              onPress={handleReimburseExpense}
+              disabled={actionLoading}
+            >
+              {actionLoading ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <>
+                  <MaterialCommunityIcons name="cash-refund" size={20} color="#fff" style={styles.actionButtonIcon} />
+                  <Text style={styles.actionButtonText}>Marcar como Reembolsada</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
+          
+          {canReset && (
+            <TouchableOpacity 
+              style={[styles.resetButton, actionLoading && styles.disabledButton]}
+              onPress={handleResetExpenseStatus}
+              disabled={actionLoading}
+            >
+              {actionLoading ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <>
+                  <Ionicons name="refresh" size={20} color="#fff" style={styles.actionButtonIcon} />
+                  <Text style={styles.actionButtonText}>Redefinir Status</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
+          
+          {/* Creator/User Actions */}
+          {canEdit && (
+            <TouchableOpacity 
+              style={[styles.editButton, actionLoading && styles.disabledButton]}
+              onPress={() => router.push(`/(panel)/finances/expenses/edit?id=${expense.id}`)}
+              disabled={actionLoading}
+            >
+              <Ionicons name="create-outline" size={20} color="#fff" style={styles.actionButtonIcon} />
+              <Text style={styles.actionButtonText}>Editar</Text>
+            </TouchableOpacity>
+          )}
+          
+          {canDelete && (
+            <TouchableOpacity 
+              style={[styles.deleteButton, actionLoading && styles.disabledButton]}
+              onPress={handleDeleteExpense}
+              disabled={actionLoading}
+            >
+              {actionLoading ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <>
+                  <Ionicons name="trash-outline" size={20} color="#fff" style={styles.actionButtonIcon} />
+                  <Text style={styles.actionButtonText}>Excluir</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -718,7 +816,13 @@ const styles = StyleSheet.create({
     gap: 12,
     marginBottom: 20,
   },
+  actionGroup: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
   approveButton: {
+    flex: 1,
     backgroundColor: '#4CAF50',
     paddingVertical: 14,
     paddingHorizontal: 20,
@@ -728,6 +832,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   rejectButton: {
+    flex: 1,
     backgroundColor: '#FF6347',
     paddingVertical: 14,
     paddingHorizontal: 20,
@@ -738,6 +843,33 @@ const styles = StyleSheet.create({
   },
   reimburseButton: {
     backgroundColor: '#2196F3',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+  },
+  resetButton: {
+    backgroundColor: '#FFC107',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+  },
+  editButton: {
+    backgroundColor: '#7B68EE',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+  },
+  deleteButton: {
+    backgroundColor: '#FF6347',
     paddingVertical: 14,
     paddingHorizontal: 20,
     borderRadius: 8,

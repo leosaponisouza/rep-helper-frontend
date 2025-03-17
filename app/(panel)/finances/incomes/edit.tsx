@@ -10,7 +10,7 @@ export default function EditIncomeScreen() {
   
   if (!params.id) {
     // Se não houver ID, redireciona para a lista de receitas
-    return <Redirect href="/(panel)/finances/incomes/[id]" />;
+    return <Redirect href="/(panel)/finances/incomes" />;
   }
 
   // Redireciona para a tela de criação com o ID como parâmetro

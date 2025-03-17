@@ -18,7 +18,7 @@ export interface RepublicFinances {
 
 // Base transaction interface (common properties for both expense and income)
 export interface Transaction {
-  id: number | string;
+  id: number;
   description: string;
   amount: number;
   date: string;

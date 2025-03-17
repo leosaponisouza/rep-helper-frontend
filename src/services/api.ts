@@ -52,7 +52,7 @@ api.interceptors.response.use(
         }
         
         // Tentar renovar o token
-        const response = await axios.post(`/api/v1/auth/refresh`, { 
+        const response = await axios.post(`${API_BASE_URL}/auth/refresh`, { 
           refreshToken 
         });
         
@@ -88,7 +88,7 @@ api.interceptors.response.use(
 // Função para checar conectividade
 export const checkApiConnection = async (): Promise<boolean> => {
   try {
-    await api.get('/api/v1/health', { timeout: 5000 });
+    await api.get('/health', { timeout: 5000 });
     return true;
   } catch (error) {
     console.error('Falha na verificação de conexão com API:', error);

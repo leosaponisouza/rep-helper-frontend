@@ -1,5 +1,5 @@
 // src/hooks/useFinances.ts
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import api from '../services/api';
 import { ErrorHandler } from '../utils/errorHandling';
 import { useAuth } from '../context/AuthContext';
@@ -144,6 +144,7 @@ export const useFinances = (options: UseFinancesOptions = {}) => {
     }
   }, [user?.currentRepublicId]);
   
+  // Implementação completa da função getIncomeById
   const getIncomeById = async (id: number) => {
     try {
       const response = await api.get(`/api/v1/incomes/${id}`);
@@ -154,6 +155,7 @@ export const useFinances = (options: UseFinancesOptions = {}) => {
       throw parsedError;
     }
   };
+
   // Função para buscar dados do dashboard
   const fetchDashboardData = useCallback(async () => {
     if (!user?.currentRepublicId) return;
@@ -172,30 +174,13 @@ export const useFinances = (options: UseFinancesOptions = {}) => {
       });
       setMonthlyData(monthlyResponse.data);
       
-      // Calcular despesas por categoria
-      const categories = new Map<string, number>();
-      const total = expenses.reduce((sum, expense) => {
-        if (expense.status === 'APPROVED' || expense.status === 'REIMBURSED') {
-          const category = expense.category || 'Outros';
-          const current = categories.get(category) || 0;
-          categories.set(category, current + expense.amount);
-          return sum + expense.amount;
-        }
-        return sum;
-      }, 0);
-      
-      // Converte Map em array de CategoryExpense
-      const categoryData: CategoryExpense[] = Array.from(categories.entries()).map(([category, amount]) => ({
-        category,
-        amount,
-        percentage: total > 0 ? (amount / total) * 100 : 0
-      }));
-      
-      setCategoryExpenses(categoryData);
-      
       // Buscar ações pendentes
       const pendingResponse = await api.get(`/api/v1/financial-dashboard/pending-actions/${user.currentRepublicId}`);
       setPendingActions(pendingResponse.data);
+      
+      // Calcular despesas por categoria usando as despesas já carregadas
+      calculateCategoryExpenses();
+      
     } catch (err) {
       const parsedError = ErrorHandler.parseError(err);
       setDashboardError(parsedError.message);
@@ -203,7 +188,30 @@ export const useFinances = (options: UseFinancesOptions = {}) => {
     } finally {
       setLoadingDashboard(false);
     }
-  }, [user?.currentRepublicId, expenses]);
+  }, [user?.currentRepublicId]);
+  
+  // Nova função para calcular despesas por categoria
+  const calculateCategoryExpenses = useCallback(() => {
+    const categories = new Map<string, number>();
+    const total = expenses.reduce((sum, expense) => {
+      if (expense.status === 'APPROVED' || expense.status === 'REIMBURSED') {
+        const category = expense.category || 'Outros';
+        const current = categories.get(category) || 0;
+        categories.set(category, current + expense.amount);
+        return sum + expense.amount;
+      }
+      return sum;
+    }, 0);
+    
+    // Converte Map em array de CategoryExpense
+    const categoryData: CategoryExpense[] = Array.from(categories.entries()).map(([category, amount]) => ({
+      category,
+      amount,
+      percentage: total > 0 ? (amount / total) * 100 : 0
+    }));
+    
+    setCategoryExpenses(categoryData);
+  }, [expenses]);
 
   // Aplicar filtro nas despesas
   const applyExpenseFilter = useCallback((filter: ExpenseFilterType, data: Expense[] = expenses) => {
@@ -218,15 +226,19 @@ export const useFinances = (options: UseFinancesOptions = {}) => {
 
   // Carregar dados iniciais
   useEffect(() => {
-    fetchExpenses();
-    fetchIncomes();
-    fetchFinancialSummary();
-  }, [fetchExpenses, fetchIncomes, fetchFinancialSummary]);
+    if (user?.currentRepublicId) {
+      fetchExpenses();
+      fetchIncomes();
+      fetchFinancialSummary();
+    }
+  }, [fetchExpenses, fetchIncomes, fetchFinancialSummary, user?.currentRepublicId]);
 
   // Atualizar dashboard quando outros dados mudarem
   useEffect(() => {
-    fetchDashboardData();
-  }, [fetchDashboardData, expenses, incomes]);
+    if (user?.currentRepublicId) {
+      fetchDashboardData();
+    }
+  }, [fetchDashboardData, expenses, incomes, user?.currentRepublicId]);
 
   // Operações CRUD para Despesas
   const createExpense = async (data: CreateExpenseRequest) => {
@@ -302,6 +314,31 @@ export const useFinances = (options: UseFinancesOptions = {}) => {
       throw parsedError;
     }
   };
+  
+  const resetExpenseStatus = async (id: number) => {
+    try {
+      const response = await api.post(`/api/v1/expenses/${id}/reset`);
+      await fetchExpenses(); // Recarregar após resetar
+      return response.data;
+    } catch (err) {
+      const parsedError = ErrorHandler.parseError(err);
+      ErrorHandler.handle(err);
+      throw parsedError;
+    }
+  };
+  
+  const deleteExpense = async (id: number) => {
+    try {
+      await api.delete(`/api/v1/expenses/${id}`);
+      await fetchExpenses(); // Recarregar após excluir
+      await fetchFinancialSummary(); // Atualizar saldo
+      return true;
+    } catch (err) {
+      const parsedError = ErrorHandler.parseError(err);
+      ErrorHandler.handle(err);
+      throw parsedError;
+    }
+  };
 
   // Operações CRUD para Receitas
   const createIncome = async (data: CreateIncomeRequest) => {
@@ -330,7 +367,7 @@ export const useFinances = (options: UseFinancesOptions = {}) => {
     }
   };
 
-  const deleteIncome = async (id: number) => {
+  const deleteIncome = async (id: number | string) => {
     try {
       await api.delete(`/api/v1/incomes/${id}`);
       await fetchIncomes(); // Recarregar após excluir
@@ -403,11 +440,13 @@ export const useFinances = (options: UseFinancesOptions = {}) => {
     approveExpense,
     rejectExpense,
     reimburseExpense,
+    resetExpenseStatus,
+    deleteExpense,
     
     // Operações de receitas
     createIncome,
+    getIncomeById,
     updateIncome,
-    deleteIncome,
-    getIncomeById
+    deleteIncome
   };
 };

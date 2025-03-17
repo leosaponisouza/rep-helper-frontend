@@ -34,7 +34,7 @@ const CreateIncomeScreen = () => {
   const router = useRouter();
   const params = useLocalSearchParams<{ id?: string }>();
   const { user } = useAuth();
-  const { createIncome, updateIncome } = useFinances();
+  const { createIncome, updateIncome, getIncomeById } = useFinances();
   
   const [isEditing, setIsEditing] = useState(false);
   const [description, setDescription] = useState('');
@@ -55,17 +55,15 @@ const CreateIncomeScreen = () => {
         setLoadingIncome(true);
         
         try {
-          // Aqui precisaríamos de uma função para buscar a receita pelo ID
-          // que você provavelmente implementará no hook useFinances
-          // const income = await getIncomeById(Number(params.id));
+          // Buscar os detalhes da receita pelo ID
+          const income = await getIncomeById(Number(params.id));
           
-          // Por enquanto, só estou definindo o modo de edição
-          /*
+          // Preencher o formulário com os dados da receita
           setDescription(income.description);
-          setAmount(income.amount.toString());
-          setSource(income.source);
+          // Multiplicar por 100 para exibir em centavos (formatação da moeda)
+          setAmount((income.amount * 100).toString());
+          setSource(income.source || incomeSources[0]);
           setIncomeDate(parseISO(income.incomeDate));
-          */
         } catch (error) {
           console.error('Erro ao carregar detalhes da receita:', error);
           Alert.alert('Erro', 'Não foi possível carregar os detalhes da receita.');
@@ -77,7 +75,7 @@ const CreateIncomeScreen = () => {
     };
 
     fetchIncomeDetails();
-  }, [params.id]);
+  }, [params.id, getIncomeById]);
 
   // Formatar valor monetário para exibição
   const formatCurrency = (value: string) => {
@@ -85,7 +83,7 @@ const CreateIncomeScreen = () => {
     let numberValue = value.replace(/\D/g, '');
     
     // Converte para float (dividindo por 100 para tratar como centavos)
-    const floatValue = parseInt(numberValue, 10) / 100;
+    const floatValue = parseInt(numberValue || '0', 10) / 100;
     
     // Formata como moeda brasileira
     return new Intl.NumberFormat('pt-BR', {
