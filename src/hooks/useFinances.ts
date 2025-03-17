@@ -143,7 +143,17 @@ export const useFinances = (options: UseFinancesOptions = {}) => {
       setLoadingFinances(false);
     }
   }, [user?.currentRepublicId]);
-
+  
+  const getIncomeById = async (id: number) => {
+    try {
+      const response = await api.get(`/api/v1/incomes/${id}`);
+      return response.data;
+    } catch (err) {
+      const parsedError = ErrorHandler.parseError(err);
+      ErrorHandler.handle(err);
+      throw parsedError;
+    }
+  };
   // Função para buscar dados do dashboard
   const fetchDashboardData = useCallback(async () => {
     if (!user?.currentRepublicId) return;
@@ -397,6 +407,7 @@ export const useFinances = (options: UseFinancesOptions = {}) => {
     // Operações de receitas
     createIncome,
     updateIncome,
-    deleteIncome
+    deleteIncome,
+    getIncomeById
   };
 };
