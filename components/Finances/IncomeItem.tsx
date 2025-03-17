@@ -1,42 +1,23 @@
 // components/Finances/IncomeItem.tsx
 import React from 'react';
-import {
+import { 
   View, 
   Text, 
   StyleSheet, 
-  TouchableOpacity,
-  Image
+  TouchableOpacity, 
+  Image 
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Income } from '../../src/models/finances.model';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Income } from '../../src/models/income.model';
+import { Ionicons } from '@expo/vector-icons';
 
 interface IncomeItemProps {
-  item: Income;
-  currentUserId?: string;
-  onPress: (incomeId: number) => void;
+  income: Income;
+  onPress: (income: Income) => void;
 }
 
-const IncomeItem: React.FC<IncomeItemProps> = ({ 
-  item, 
-  currentUserId,
-  onPress
-}) => {
-  const isContributor = item.contributorId === currentUserId;
-  
-  // Formatação de data
-  const formatDate = (dateString?: string) => {
-    if (!dateString) return null;
-    
-    try {
-      const date = parseISO(dateString);
-      return format(date, "dd MMM yyyy", { locale: ptBR });
-    } catch (error) {
-      return dateString;
-    }
-  };
-  
+const IncomeItem: React.FC<IncomeItemProps> = ({ income, onPress }) => {
   // Formatar valor monetário
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -45,79 +26,107 @@ const IncomeItem: React.FC<IncomeItemProps> = ({
     }).format(value);
   };
 
-  // Ícone para a fonte de receita
-  const getSourceIcon = (source: string) => {
-    switch(source.toLowerCase()) {
-      case 'contribuição':
-      case 'contribuicao':
-        return 'wallet';
+  // Formatação de data
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return '';
+    
+    try {
+      const date = parseISO(dateString);
+      return format(date, "dd MMM yyyy", { locale: ptBR });
+    } catch (error) {
+      return dateString;
+    }
+  };
+
+  // Ícone da categoria
+  const getSourceIcon = (source: string | undefined) => {
+    switch (source?.toLowerCase()) {
+      case 'mensalidade':
+        return 'calendar';
+      case 'doação':
+      case 'doacao':
+        return 'gift';
       case 'evento':
         return 'calendar';
-      case 'reembolso':
-        return 'refresh-circle';
+      case 'venda':
+        return 'cart';
+      case 'serviço':
+      case 'servico':
+        return 'construct';
+      case 'investimento':
+        return 'trending-up';
+      case 'outros':
+        return 'ellipsis-horizontal-circle';
       default:
         return 'cash';
     }
   };
 
   return (
-    <TouchableOpacity
-      style={[
-        styles.incomeItem, 
-        isContributor && styles.contributorIncomeItem
-      ]}
-      onPress={() => onPress(item.id)}
+    <TouchableOpacity 
+      style={styles.container}
+      onPress={() => onPress(income)}
     >
-      <View style={styles.incomeIconContainer}>
-        <Ionicons 
-          name={getSourceIcon(item.source) as any} 
-          size={24} 
-          color="#4CAF50" 
-        />
-      </View>
+      <View 
+        style={[
+          styles.statusIndicator, 
+          { backgroundColor: '#4CAF50' }
+        ]} 
+      />
       
-      <View style={styles.incomeContent}>
-        <View style={styles.incomeHeader}>
-          <Text style={styles.incomeTitle} numberOfLines={1}>
-            {item.description}
+      <View style={styles.content}>
+        <View style={styles.header}>
+          <View style={styles.titleContainer}>
+            <Text style={styles.title} numberOfLines={1}>
+              {income.description}
+            </Text>
+            
+            <View style={styles.sourceContainer}>
+              <Ionicons 
+                name={getSourceIcon(income.source) as any} 
+                size={12} 
+                color="#aaa" 
+              />
+              <Text style={styles.source}>
+                {income.source || 'Sem fonte'}
+              </Text>
+            </View>
+          </View>
+          
+          <Text style={styles.amount}>
+            {formatCurrency(income.amount)}
           </Text>
         </View>
         
-        <View style={styles.incomeDetails}>
-          <View style={styles.incomeDateContainer}>
-            <Ionicons name="calendar-outline" size={14} color="#aaa" />
-            <Text style={styles.incomeDateText}>
-              {formatDate(item.incomeDate)}
-            </Text>
-          </View>
-          
-          {item.source && (
-            <View style={styles.sourceChip}>
-              <Text style={styles.sourceText}>{item.source}</Text>
-            </View>
-          )}
-        </View>
-        
-        <View style={styles.incomeFooter}>
-          <Text style={styles.incomeAmount}>{formatCurrency(item.amount)}</Text>
-          
-          <View style={styles.contributorContainer}>
-            {item.contributorProfilePictureUrl ? (
+        <View style={styles.footer}>
+          <View style={styles.creatorContainer}>
+            {income.creatorProfilePictureUrl ? (
               <Image 
-                source={{ uri: item.contributorProfilePictureUrl }} 
-                style={styles.contributorAvatar}
+                source={{ uri: income.creatorProfilePictureUrl }} 
+                style={styles.creatorAvatar}
               />
             ) : (
-              <View style={styles.contributorAvatarPlaceholder}>
-                <Text style={styles.contributorInitials}>
-                  {item.contributorName.charAt(0).toUpperCase()}
+              <View style={styles.creatorAvatarPlaceholder}>
+                <Text style={styles.creatorInitials}>
+                  {income.creatorName?.charAt(0).toUpperCase() || '?'}
                 </Text>
               </View>
             )}
-            <Text style={styles.contributorName}>
-              {item.contributorName}
-              {isContributor ? ' (Você)' : ''}
+            <Text style={styles.creatorName}>
+              {income.creatorName}
             </Text>
+          </View>
+          
+          <View style={styles.meta}>
+            <Text style={styles.date}>
+              {formatDate(income.date)}
+            </Text>
+            
+            <View style={styles.statusBadge}>
+              <Text style={styles.statusText}>
+                Recebido
+              </Text>
+            </View>
           </View>
         </View>
       </View>
@@ -126,95 +135,67 @@ const IncomeItem: React.FC<IncomeItemProps> = ({
 };
 
 const styles = StyleSheet.create({
-  incomeItem: {
+  container: {
+    flexDirection: 'row',
     backgroundColor: '#333',
     borderRadius: 12,
     marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
     overflow: 'hidden',
-    flexDirection: 'row',
   },
-  incomeIconContainer: {
-    width: 50,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingLeft: 10,
+  statusIndicator: {
+    width: 4,
+    height: '100%',
   },
-  incomeContent: {
+  content: {
     flex: 1,
     padding: 16,
-    paddingLeft: 10,
   },
-  incomeHeader: {
+  header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
+    alignItems: 'flex-start',
+    marginBottom: 12,
   },
-  incomeTitle: {
+  titleContainer: {
     flex: 1,
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#fff',
     marginRight: 8,
   },
-  incomeDetails: {
+  title: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#fff',
+    marginBottom: 4,
+  },
+  sourceContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
-    flexWrap: 'wrap',
-    gap: 10,
   },
-  incomeDateContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  incomeDateText: {
-    marginLeft: 4,
-    fontSize: 14,
-    color: '#ccc',
-  },
-  sourceChip: {
-    backgroundColor: 'rgba(76, 175, 80, 0.15)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 12,
-  },
-  sourceText: {
-    color: '#4CAF50',
+  source: {
     fontSize: 12,
+    color: '#aaa',
+    marginLeft: 4,
   },
-  incomeFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  incomeAmount: {
-    fontSize: 18,
+  amount: {
+    fontSize: 16,
     fontWeight: 'bold',
     color: '#4CAF50',
   },
-  contributorIncomeItem: {
-    borderLeftWidth: 3,
-    borderLeftColor: '#4CAF50',
-    borderRadius: 10
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
-  contributorContainer: {
+  creatorContainer: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  contributorAvatar: {
+  creatorAvatar: {
     width: 20,
     height: 20,
     borderRadius: 10,
     marginRight: 6,
   },
-  contributorAvatarPlaceholder: {
+  creatorAvatarPlaceholder: {
     width: 20,
     height: 20,
     borderRadius: 10,
@@ -223,14 +204,33 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: 6,
   },
-  contributorInitials: {
+  creatorInitials: {
     color: '#fff',
     fontSize: 10,
     fontWeight: 'bold',
   },
-  contributorName: {
+  creatorName: {
     fontSize: 12,
     color: '#ccc',
+  },
+  meta: {
+    alignItems: 'flex-end',
+  },
+  date: {
+    fontSize: 12,
+    color: '#aaa',
+    marginBottom: 4,
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
+    backgroundColor: 'rgba(76, 175, 80, 0.2)',
+  },
+  statusText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: '#4CAF50',
   }
 });
 

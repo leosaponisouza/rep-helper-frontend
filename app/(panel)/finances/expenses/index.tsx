@@ -16,6 +16,7 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFinances } from '../../../../src/hooks/useFinances';
 import ExpenseItem from '../../../../components/Finances/ExpenseItem';
 import ExpenseFilters from '../../../../components/Finances/ExpenseFilters';
+import { FilterOption } from '@/components/TaskFilter';
 
 const ExpensesScreen = () => {
   const router = useRouter();
@@ -42,7 +43,7 @@ const ExpensesScreen = () => {
   }, [urlFilter, applyExpenseFilter, expenseFilter]);
 
   // Configurar os filtros disponíveis
-  const availableFilters = [
+  const availableFilters: FilterOption[] = [
     { key: 'ALL', label: 'Todas' },
     { key: 'PENDING', label: 'Pendentes' },
     { key: 'APPROVED', label: 'Aprovadas' },

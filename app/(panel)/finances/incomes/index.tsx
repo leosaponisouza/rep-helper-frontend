@@ -15,6 +15,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFinances } from '../../../../src/hooks/useFinances';
 import IncomeItem from '../../../../components/Finances/IncomeItem';
+import { Income } from '@/src/models/finances.model';
 
 const IncomesScreen = () => {
   const router = useRouter();
@@ -38,8 +39,8 @@ const IncomesScreen = () => {
   }, [fetchIncomes]);
 
   // Navegação para detalhes da receita
-  const handleIncomePress = (incomeId: number) => {
-    router.push(`/(panel)/finances/incomes/${incomeId}`);
+  const handleIncomePress = (income: Income) => {
+    router.push(`/(panel)/finances/incomes/${income.id}`);
   };
 
   return (
@@ -68,9 +69,8 @@ const IncomesScreen = () => {
         keyExtractor={(item) => item.id.toString()}
         renderItem={({ item }) => (
           <IncomeItem 
-            item={item}
+            income={item}
             onPress={handleIncomePress}
-            currentUserId={undefined} // Pode ser obtido do contexto de autenticação
           />
         )}
         contentContainerStyle={styles.listContainer}

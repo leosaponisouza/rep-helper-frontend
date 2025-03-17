@@ -1,68 +1,23 @@
 // components/Finances/ExpenseItem.tsx
 import React from 'react';
-import {
+import { 
   View, 
   Text, 
   StyleSheet, 
-  TouchableOpacity,
-  ActivityIndicator,
-  Image
+  TouchableOpacity, 
+  Image 
 } from 'react-native';
-import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
+import { Expense } from '../../src/models/finances.model';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Expense } from '../../src/models/expense.model';
+import { Ionicons } from '@expo/vector-icons';
 
 interface ExpenseItemProps {
-  item: Expense;
-  currentUserId?: string;
-  pendingExpenseIds?: number[];
-  onPress: (expenseId: number) => void;
+  expense: Expense;
+  onPress: (expense: Expense) => void;
 }
 
-const ExpenseItem: React.FC<ExpenseItemProps> = ({ 
-  item, 
-  currentUserId,
-  pendingExpenseIds = [],
-  onPress
-}) => {
-  const isCreator = item.creatorId === currentUserId;
-  const isPending = pendingExpenseIds.includes(item.id);
-  
-  // Determinando a cor do status
-  const getStatusColor = (status: string) => {
-    switch(status) {
-      case 'APPROVED': return '#4CAF50';
-      case 'PENDING': return '#FFC107';
-      case 'REJECTED': return '#FF6347';
-      case 'REIMBURSED': return '#2196F3';
-      default: return '#9E9E9E';
-    }
-  };
-
-  // Texto amigável do status
-  const getStatusText = (status: string) => {
-    switch(status) {
-      case 'APPROVED': return 'Aprovada';
-      case 'PENDING': return 'Pendente';
-      case 'REJECTED': return 'Rejeitada';
-      case 'REIMBURSED': return 'Reembolsada';
-      default: return status;
-    }
-  };
-
-  // Formatação de data
-  const formatDate = (dateString?: string) => {
-    if (!dateString) return null;
-    
-    try {
-      const date = parseISO(dateString);
-      return format(date, "dd MMM yyyy", { locale: ptBR });
-    } catch (error) {
-      return dateString;
-    }
-  };
-  
+const ExpenseItem: React.FC<ExpenseItemProps> = ({ expense, onPress }) => {
   // Formatar valor monetário
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -71,173 +26,203 @@ const ExpenseItem: React.FC<ExpenseItemProps> = ({
     }).format(value);
   };
 
+  // Formatação de data
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return '';
+    
+    try {
+      const date = parseISO(dateString);
+      return format(date, "dd MMM yyyy", { locale: ptBR });
+    } catch (error) {
+      return dateString;
+    }
+  };
+
+  // Status da despesa
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'PENDING':
+        return '#FFC107'; // Amarelo
+      case 'APPROVED':
+        return '#4CAF50'; // Verde
+      case 'REJECTED':
+        return '#FF6347'; // Vermelho
+      default:
+        return '#aaa';
+    }
+  };
+
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case 'PENDING':
+        return 'Pendente';
+      case 'APPROVED':
+        return 'Aprovada';
+      case 'REJECTED':
+        return 'Rejeitada';
+      default:
+        return status;
+    }
+  };
+
+  // Ícone da categoria
+  const getCategoryIcon = (category: string) => {
+    switch (category?.toLowerCase()) {
+      case 'alimentação':
+      case 'alimentacao':
+        return 'fast-food';
+      case 'transporte':
+        return 'car';
+      case 'moradia':
+        return 'home';
+      case 'saúde':
+      case 'saude':
+        return 'medical';
+      case 'educação':
+      case 'educacao':
+        return 'school';
+      case 'lazer':
+        return 'game-controller';
+      case 'vestuário':
+      case 'vestuario':
+        return 'shirt';
+      case 'utilidades':
+        return 'bulb';
+      case 'outros':
+        return 'ellipsis-horizontal-circle';
+      default:
+        return 'cash';
+    }
+  };
+
   return (
-    <TouchableOpacity
-      style={[
-        styles.expenseItem, 
-        isPending && styles.pendingExpenseItem,
-        isCreator && styles.creatorExpenseItem
-      ]}
-      onPress={() => onPress(item.id)}
-      disabled={isPending}
+    <TouchableOpacity 
+      style={styles.container}
+      onPress={() => onPress(expense)}
     >
-      {/* Status indicator */}
-      <View style={[styles.statusBar, { backgroundColor: getStatusColor(item.status) }]} />
+      <View 
+        style={[
+          styles.statusIndicator, 
+          { backgroundColor: getStatusColor(expense.status) }
+        ]} 
+      />
       
-      <View style={styles.expenseContent}>
-        <View style={styles.expenseHeader}>
-          <Text style={styles.expenseTitle} numberOfLines={1}>
-            {item.description}
-          </Text>
-          
-          <View style={[styles.statusBadge, { backgroundColor: `${getStatusColor(item.status)}20` }]}>
-            <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>
-              {getStatusText(item.status)}
+      <View style={styles.content}>
+        <View style={styles.header}>
+          <View style={styles.titleContainer}>
+            <Text style={styles.title} numberOfLines={1}>
+              {expense.description}
             </Text>
-          </View>
-        </View>
-        
-        <View style={styles.expenseDetails}>
-          <View style={styles.expenseDateContainer}>
-            <Ionicons name="calendar-outline" size={14} color="#aaa" />
-            <Text style={styles.expenseDateText}>
-              {formatDate(item.expenseDate)}
-            </Text>
-          </View>
-          
-          {item.category && (
-            <View style={styles.categoryChip}>
-              <FontAwesome5 name="tag" size={12} color="#7B68EE" />
-              <Text style={styles.categoryText}>{item.category}</Text>
+            
+            <View style={styles.categoryContainer}>
+              <Ionicons 
+                name={getCategoryIcon(expense.category) as any} 
+                size={12} 
+                color="#aaa" 
+              />
+              <Text style={styles.category}>
+                {expense.category || 'Sem categoria'}
+              </Text>
             </View>
-          )}
+          </View>
+          
+          <Text style={styles.amount}>
+            {formatCurrency(expense.amount)}
+          </Text>
         </View>
         
-        <View style={styles.expenseFooter}>
-          <Text style={styles.expenseAmount}>{formatCurrency(item.amount)}</Text>
-          
+        <View style={styles.footer}>
           <View style={styles.creatorContainer}>
-            {item.creatorProfilePictureUrl ? (
+            {expense.creatorProfilePictureUrl ? (
               <Image 
-                source={{ uri: item.creatorProfilePictureUrl }} 
+                source={{ uri: expense.creatorProfilePictureUrl }} 
                 style={styles.creatorAvatar}
               />
             ) : (
               <View style={styles.creatorAvatarPlaceholder}>
                 <Text style={styles.creatorInitials}>
-                  {item.creatorName.charAt(0).toUpperCase()}
+                  {expense.creatorName?.charAt(0).toUpperCase() || '?'}
                 </Text>
               </View>
             )}
             <Text style={styles.creatorName}>
-              {item.creatorName}
-              {isCreator ? ' (Você)' : ''}
+              {expense.creatorName}
             </Text>
+          </View>
+          
+          <View style={styles.meta}>
+            <Text style={styles.date}>
+              {formatDate(expense.date)}
+            </Text>
+            
+            <View style={[
+              styles.statusBadge, 
+              { backgroundColor: `${getStatusColor(expense.status)}20` }
+            ]}>
+              <Text style={[
+                styles.statusText, 
+                { color: getStatusColor(expense.status) }
+              ]}>
+                {getStatusText(expense.status)}
+              </Text>
+            </View>
           </View>
         </View>
       </View>
-      
-      {isPending && (
-        <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="small" color="#7B68EE" />
-        </View>
-      )}
     </TouchableOpacity>
   );
 };
 
 const styles = StyleSheet.create({
-  expenseItem: {
+  container: {
+    flexDirection: 'row',
     backgroundColor: '#333',
     borderRadius: 12,
     marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
     overflow: 'hidden',
-    flexDirection: 'row',
-    position: 'relative',
   },
-  statusBar: {
-    width: 5,
+  statusIndicator: {
+    width: 4,
     height: '100%',
   },
-  expenseContent: {
+  content: {
     flex: 1,
     padding: 16,
   },
-  expenseHeader: {
+  header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
+    alignItems: 'flex-start',
+    marginBottom: 12,
   },
-  expenseTitle: {
+  titleContainer: {
     flex: 1,
+    marginRight: 8,
+  },
+  title: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#fff',
+    marginBottom: 4,
+  },
+  categoryContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  category: {
+    fontSize: 12,
+    color: '#aaa',
+    marginLeft: 4,
+  },
+  amount: {
     fontSize: 16,
     fontWeight: 'bold',
     color: '#fff',
-    marginRight: 8,
   },
-  expenseDetails: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  expenseDateContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  expenseDateText: {
-    marginLeft: 4,
-    fontSize: 14,
-    color: '#ccc',
-  },
-  categoryChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(123, 104, 238, 0.15)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 12,
-  },
-  categoryText: {
-    color: '#7B68EE',
-    fontSize: 12,
-    marginLeft: 4,
-  },
-  expenseFooter: {
+  footer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 4,
-  },
-  expenseAmount: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#fff',
-  },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 12,
-  },
-  statusText: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    textTransform: 'uppercase',
-  },
-  pendingExpenseItem: {
-    opacity: 0.7,
-  },
-  creatorExpenseItem: {
-    borderLeftWidth: 3,
-    borderLeftColor: '#7B68EE',
-    borderRadius: 10
   },
   creatorContainer: {
     flexDirection: 'row',
@@ -267,12 +252,22 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#ccc',
   },
-  loadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
-    justifyContent: 'center',
-    alignItems: 'center',
+  meta: {
+    alignItems: 'flex-end',
+  },
+  date: {
+    fontSize: 12,
+    color: '#aaa',
+    marginBottom: 4,
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
     borderRadius: 12,
+  },
+  statusText: {
+    fontSize: 10,
+    fontWeight: 'bold',
   }
 });
 

@@ -1,30 +1,4 @@
-// src/models/income.model.ts
+// This file is deprecated. Please import from finances.model.ts instead.
+// All income-related types and interfaces have been moved to finances.model.ts
 
-export interface Income {
-    id: number;
-    description: string;
-    amount: number;
-    incomeDate: string; // ISO string date format
-    source: string;
-    republicId: string;
-    republicName: string;
-    contributorId: string;
-    contributorName: string;
-    contributorProfilePictureUrl?: string;
-    createdAt: string;
-  }
-  
-  export interface CreateIncomeRequest {
-    description: string;
-    amount: number;
-    incomeDate: string;
-    source: string;
-    republicId: string;
-  }
-  
-  export interface UpdateIncomeRequest {
-    description?: string;
-    amount?: number;
-    incomeDate?: string;
-    source?: string;
-  }
+export * from './finances.model';
