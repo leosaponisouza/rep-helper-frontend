@@ -13,10 +13,16 @@ import {
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useFinances } from '../../../../src/hooks/useFinances';
+import { useFinances, ExpenseFilterType } from '../../../../src/hooks/useFinances';
 import ExpenseItem from '../../../../components/Finances/ExpenseItem';
 import ExpenseFilters from '../../../../components/Finances/ExpenseFilters';
-import { FilterOption } from '@/components/TaskFilter';
+import { Expense } from '@/src/models/finances.model';
+
+// Define a proper FilterOption interface that matches ExpenseFilters component
+interface FilterOption {
+  key: ExpenseFilterType;
+  label: string;
+}
 
 const ExpensesScreen = () => {
   const router = useRouter();
@@ -32,13 +38,13 @@ const ExpensesScreen = () => {
     applyExpenseFilter,
     expenseFilter
   } = useFinances({
-    initialFilter: (urlFilter as any) || 'ALL'
+    initialFilter: (urlFilter as ExpenseFilterType) || 'ALL'
   });
 
   // Atualizar filtro a partir da URL
   useEffect(() => {
     if (urlFilter && urlFilter !== expenseFilter) {
-      applyExpenseFilter(urlFilter as any);
+      applyExpenseFilter(urlFilter as ExpenseFilterType);
     }
   }, [urlFilter, applyExpenseFilter, expenseFilter]);
 
@@ -63,13 +69,13 @@ const ExpensesScreen = () => {
   }, [fetchExpenses]);
 
   // Navegação para detalhes da despesa
-  const handleExpensePress = (expenseId: number) => {
-    router.push(`/(panel)/finances/expenses/${expenseId}`);
+  const handleExpensePress = (expense: Expense) => {
+    router.push(`/(panel)/finances/expenses/${expense.id}`);
   };
 
   // Lidar com mudança de filtro
-  const handleFilterChange = (newFilter: string) => {
-    applyExpenseFilter(newFilter as any);
+  const handleFilterChange = (newFilter: ExpenseFilterType) => {
+    applyExpenseFilter(newFilter);
     
     // Atualiza a URL sem recarregar a página
     router.setParams({ filter: newFilter });
@@ -109,10 +115,8 @@ const ExpensesScreen = () => {
         keyExtractor={(item) => item.id.toString()}
         renderItem={({ item }) => (
           <ExpenseItem 
-            item={item}
+            expense={item}
             onPress={handleExpensePress}
-            currentUserId={undefined} // Pode ser obtido do contexto de autenticação
-            pendingExpenseIds={pendingExpenseIds}
           />
         )}
         contentContainerStyle={styles.listContainer}
