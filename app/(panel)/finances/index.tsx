@@ -20,6 +20,13 @@ import { PendingAction, Transaction } from '../../../src/models/finances.model';
 import FinancialSummary from '../../../components/Finances/FinancialSummary';
 import MonthlyChart from '../../../components/Finances/MonthlyChart';
 
+// Interface para os dados mensais
+interface MonthlyData {
+  month: string;
+  expenses: number;
+  incomes: number;
+}
+
 const FinancesDashboardScreen = () => {
   const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
@@ -188,9 +195,10 @@ const FinancesDashboardScreen = () => {
           </View>
           
           {/* Gráfico Mensal */}
-          <MonthlyChart 
-            data={monthlyData}
+          <MonthlyChart
+            data={Array.isArray(monthlyData) ? monthlyData : []}
             title="Movimentação Financeira"
+            loading={loadingDashboard}
           />
           
           {/* Ações Pendentes */}

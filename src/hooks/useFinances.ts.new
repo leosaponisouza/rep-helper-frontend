@@ -71,7 +71,7 @@ export const useFinances = (options: UseFinancesOptions = {}) => {
       setExpenses(response.data);
       applyExpenseFilter(expenseFilter, response.data);
     } catch (err) {
-      const parsedError = await ErrorHandler.parseError(err);
+      const parsedError = ErrorHandler.parseError(err);
       setExpensesError(parsedError.message);
       ErrorHandler.logError(parsedError);
     } finally {
@@ -93,7 +93,7 @@ export const useFinances = (options: UseFinancesOptions = {}) => {
       
       return response.data;
     } catch (err) {
-      const parsedError = await ErrorHandler.parseError(err);
+      const parsedError = ErrorHandler.parseError(err);
       setExpensesError(parsedError.message);
       ErrorHandler.logError(parsedError);
       return [];
@@ -117,8 +117,8 @@ export const useFinances = (options: UseFinancesOptions = {}) => {
       setIncomes(response.data);
     } catch (err) {
       const parsedError = ErrorHandler.parseError(err);
-      setIncomesError((await parsedError).message);
-      ErrorHandler.logError(await parsedError);
+      setIncomesError(parsedError.message);
+      ErrorHandler.logError(parsedError);
     } finally {
       setLoadingIncomes(false);
     }
@@ -136,7 +136,7 @@ export const useFinances = (options: UseFinancesOptions = {}) => {
       
       setFinances(response.data);
     } catch (err) {
-      const parsedError = await ErrorHandler.parseError(err);
+      const parsedError = ErrorHandler.parseError(err);
       setFinancesError(parsedError.message);
       ErrorHandler.logError(parsedError);
     } finally {
@@ -205,8 +205,8 @@ export const useFinances = (options: UseFinancesOptions = {}) => {
       
     } catch (err) {
       const parsedError = ErrorHandler.parseError(err);
-      setDashboardError((await parsedError).message);
-      ErrorHandler.logError(await parsedError);
+      setDashboardError(parsedError.message);
+      ErrorHandler.logError(parsedError);
       
       // Set default values on error to avoid undefined data
       setMonthlyData([]);
