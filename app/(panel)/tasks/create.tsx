@@ -14,7 +14,8 @@ import {
   Alert,
   Modal,
   ActivityIndicator,
-  Image
+  Image,
+  Switch
 } from 'react-native';
 import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -26,6 +27,7 @@ import api from '../../../src/services/api';
 import { ErrorHandler } from '../../../src/utils/errorHandling';
 import { useAuth } from '../../../src/context/AuthContext';
 import { useTasks } from '../../../src/hooks/useTasks';
+import { RecurrenceType } from '../../../src/models/task.model';
 
 // Common categories that users might want to use
 const COMMON_CATEGORIES = [
@@ -37,23 +39,47 @@ const COMMON_CATEGORIES = [
   'Outros'
 ];
 
+// Recurrence types
+const RECURRENCE_TYPES = [
+  { key: 'DAILY', label: 'Diária' },
+  { key: 'WEEKLY', label: 'Semanal' },
+  { key: 'MONTHLY', label: 'Mensal' },
+  { key: 'YEARLY', label: 'Anual' }
+];
+
 // Enhanced schema to match backend expectations
 const taskSchema = z.object({
   title: z.string().min(3, "Título deve ter pelo menos 3 caracteres"),
   description: z.string().optional(),
   dueDate: z.date().optional(),
   category: z.string().optional(),
+  is_recurring: z.boolean().optional(),
+  recurrence_type: z.string().optional(),
+  recurrence_interval: z.number().min(1).optional(),
+  recurrence_end_date: z.date().optional(),
+}).refine(data => {
+  // Se a tarefa for recorrente, a data de vencimento é obrigatória
+  if (data.is_recurring && !data.dueDate) {
+    return false;
+  }
+  return true;
+}, {
+  message: "Para tarefas recorrentes, a data da primeira ocorrência é obrigatória",
+  path: ["dueDate"]
 });
 
 const CreateTaskScreen = () => {
   const router = useRouter();
   const { user } = useAuth();
   const [isDatePickerVisible, setDatePickerVisibility] = useState(false);
+  const [isEndDatePickerVisible, setEndDatePickerVisibility] = useState(false);
   const [datePickerMode, setDatePickerMode] = useState<'date' | 'time'>('date');
+  const [endDatePickerMode, setEndDatePickerMode] = useState<'date' | 'time'>('date');
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
   const [availableUsers, setAvailableUsers] = useState<{uid: string, name: string, nickname:string, email: string, profilePictureUrl?: string}[]>([]);
   const [isUserModalVisible, setUserModalVisible] = useState(false);
   const [isCategoryModalVisible, setCategoryModalVisible] = useState(false);
+  const [isRecurrenceModalVisible, setRecurrenceModalVisible] = useState(false);
   const [customCategory, setCustomCategory] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const { createTask, assignMultipleUsers } = useTasks();
@@ -71,45 +97,80 @@ const CreateTaskScreen = () => {
       title: '',
       description: '',
       dueDate: undefined,
-      category: ''
+      category: '',
+      is_recurring: false,
+      recurrence_type: 'WEEKLY',
+      recurrence_interval: 1,
+      recurrence_end_date: undefined
     }
   });
+  
+  const isRecurring = watch('is_recurring');
+  const recurrenceType = watch('recurrence_type');
+  const recurrenceInterval = watch('recurrence_interval');
+  
+  // Limpar o formulário quando a tela for desmontada
   useEffect(() => {
+    // Inicialização única
+    const initialValues = {
+      title: '',
+      description: '',
+      dueDate: undefined,
+      category: '',
+      is_recurring: false,
+      recurrence_type: 'WEEKLY',
+      recurrence_interval: 1,
+      recurrence_end_date: undefined
+    };
+    
+    // Resetar o formulário com os valores iniciais
+    reset(initialValues);
+    
     return () => {
       // Limpar o formulário quando a tela for desmontada
-      reset({
-        title: '',
-        description: '',
-        dueDate: undefined,
-        category: ''
-      });
+      reset(initialValues);
       setSelectedUsers([]);
       // Limpar quaisquer outros estados relevantes
     };
   }, [reset]);
+  
   // Fetch republic users
   useEffect(() => {
+    // Referência para controlar se o componente está montado
+    let isMounted = true;
+    
     const fetchRepublicUsers = async () => {
       try {
         if (user?.currentRepublicId) {
           const republicId = user.currentRepublicId;
           const response = await api.get(`/api/v1/republics/${republicId}/members`);
-          setAvailableUsers(response.data);
           
-          // Auto-select current user
-          if (user.uid) {
-            setSelectedUsers([user.uid]);
+          // Verifica se o componente ainda está montado antes de atualizar o estado
+          if (isMounted) {
+            setAvailableUsers(response.data);
+            
+            // Auto-select current user
+            if (user.uid) {
+              setSelectedUsers([user.uid]);
+            }
           }
         } else {
           console.warn("current_republic_id não encontrado para o usuário.");
         }
       } catch (error) {
-        ErrorHandler.handle(error);
+        if (isMounted) {
+          ErrorHandler.handle(error);
+        }
       }
     };
 
     fetchRepublicUsers();
-  }, []);
+    
+    // Função de limpeza para evitar atualizações de estado após desmontagem
+    return () => {
+      isMounted = false;
+    };
+  }, [user?.currentRepublicId, user?.uid]);
 
   const toggleUserSelection = (userId: string) => {
     // Verificar se o usuário está atualmente selecionado
@@ -127,6 +188,10 @@ const CreateTaskScreen = () => {
   const selectCategory = (category: string) => {
     setValue('category', category);
     setCategoryModalVisible(false);
+  };
+
+  const selectRecurrenceType = (type: RecurrenceType) => {
+    setValue('recurrence_type', type);
   };
 
   const handleCustomCategory = () => {
@@ -173,6 +238,42 @@ const CreateTaskScreen = () => {
     }
   };
 
+  const handleEndDatePickerChange = (event: any, selectedDate?: Date) => {
+    setEndDatePickerVisibility(Platform.OS === 'ios');
+    
+    if (selectedDate) {
+      const currentDate = watch('recurrence_end_date') || new Date();
+      
+      if (endDatePickerMode === 'date') {
+        // Keep time part from current selection or current time
+        const mergedDate = new Date(
+          selectedDate.getFullYear(),
+          selectedDate.getMonth(),
+          selectedDate.getDate(),
+          currentDate.getHours(),
+          currentDate.getMinutes()
+        );
+        setValue('recurrence_end_date', mergedDate);
+        
+        // If it's iOS, we'll now show the time picker
+        if (Platform.OS === 'ios') {
+          setEndDatePickerMode('time');
+          setEndDatePickerVisibility(true);
+        }
+      } else { // time mode
+        // Keep date part from current selection but update time
+        const mergedDate = new Date(
+          currentDate.getFullYear(),
+          currentDate.getMonth(),
+          currentDate.getDate(),
+          selectedDate.getHours(),
+          selectedDate.getMinutes()
+        );
+        setValue('recurrence_end_date', mergedDate);
+      }
+    }
+  };
+
   const showDatePicker = () => {
     setDatePickerMode('date');
     setDatePickerVisibility(true);
@@ -183,10 +284,26 @@ const CreateTaskScreen = () => {
     setDatePickerVisibility(true);
   };
 
+  const showEndDatePicker = () => {
+    setEndDatePickerMode('date');
+    setEndDatePickerVisibility(true);
+  };
+
+  const showEndTimePicker = () => {
+    setEndDatePickerMode('time');
+    setEndDatePickerVisibility(true);
+  };
+
   const onSubmit = async (data: z.infer<typeof taskSchema>) => {
     try {
       if (selectedUsers.length === 0) {
         Alert.alert('Atenção', 'Selecione pelo menos um responsável para a tarefa.');
+        return;
+      }
+      
+      // Verificar se a tarefa é recorrente e tem data de vencimento
+      if (data.is_recurring && !data.dueDate) {
+        Alert.alert('Atenção', 'Para tarefas recorrentes, é necessário definir a data da primeira ocorrência.');
         return;
       }
       
@@ -197,7 +314,11 @@ const CreateTaskScreen = () => {
         description: data.description || '',
         republicId: user?.currentRepublicId || '',
         dueDate: data.dueDate ? data.dueDate.toISOString() : undefined,
-        category: data.category
+        category: data.category,
+        is_recurring: data.is_recurring,
+        recurrenceType: data.is_recurring ? data.recurrence_type as RecurrenceType : undefined,
+        recurrenceInterval: data.is_recurring ? data.recurrence_interval : undefined,
+        recurrenceEndDate: data.is_recurring && data.recurrence_end_date ? data.recurrence_end_date.toISOString() : undefined
       };
   
       const createdTask = await createTask(taskData);
@@ -211,7 +332,10 @@ const CreateTaskScreen = () => {
           'Tarefa criada com sucesso!', 
           [{ 
             text: 'OK', 
-            onPress: () => router.replace('/(panel)/tasks') // Isso vai direto para a lista de tarefas
+            onPress: () => {
+              // Usar replace em vez de push para evitar problemas de navegação
+              router.replace('/(panel)/tasks');
+            }
           }]
         );
       }
@@ -221,6 +345,7 @@ const CreateTaskScreen = () => {
       setIsLoading(false);
     }
   };
+  
   const renderUserSelectionModal = () => (
     <Modal
       animationType="slide"
@@ -312,6 +437,7 @@ const CreateTaskScreen = () => {
       </View>
     </Modal>
   );
+  
   const renderCategoryModal = () => (
     <Modal
       animationType="slide"
@@ -386,6 +512,127 @@ const CreateTaskScreen = () => {
     </Modal>
   );
 
+  const renderRecurrenceModal = () => (
+    <Modal
+      animationType="slide"
+      transparent={true}
+      visible={isRecurrenceModalVisible}
+      onRequestClose={() => setRecurrenceModalVisible(false)}
+    >
+      <View style={styles.modalContainer}>
+        <View style={styles.modalContent}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Configurar Recorrência</Text>
+            <Text style={styles.modalSubtitle}>
+              Defina como esta tarefa deve se repetir
+            </Text>
+          </View>
+          
+          <ScrollView style={styles.modalScrollView}>
+            <View style={styles.recurrenceTypeContainer}>
+              <Text style={styles.recurrenceLabel}>Tipo de Recorrência</Text>
+              <View style={styles.recurrenceTypeGrid}>
+                {RECURRENCE_TYPES.map(type => (
+                  <TouchableOpacity
+                    key={type.key}
+                    style={[
+                      styles.recurrenceTypeChip,
+                      recurrenceType === type.key && styles.selectedRecurrenceTypeChip
+                    ]}
+                    onPress={() => selectRecurrenceType(type.key as RecurrenceType)}
+                  >
+                    <Text 
+                      style={[
+                        styles.recurrenceTypeText,
+                        recurrenceType === type.key && styles.selectedRecurrenceTypeText
+                      ]}
+                    >
+                      {type.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+            
+            <View style={styles.recurrenceIntervalContainer}>
+              <Text style={styles.recurrenceLabel}>Intervalo</Text>
+              <View style={styles.recurrenceIntervalRow}>
+                <TouchableOpacity
+                  style={styles.intervalButton}
+                  onPress={() => setValue('recurrence_interval', Math.max(1, recurrenceInterval ?? - 1))}
+                >
+                  <Ionicons name="remove" size={20} color="#fff" />
+                </TouchableOpacity>
+                
+                <View style={styles.intervalValueContainer}>
+                  <Text style={styles.intervalValue}>{recurrenceInterval}</Text>
+                </View>
+                
+                <TouchableOpacity
+                  style={styles.intervalButton}
+                  onPress={() => setValue('recurrence_interval', recurrenceInterval ?? + 1)}
+                >
+                  <Ionicons name="add" size={20} color="#fff" />
+                </TouchableOpacity>
+                
+                <Text style={styles.intervalText}>
+                  {recurrenceType === 'DAILY' ? 'dia(s)' :
+                   recurrenceType === 'WEEKLY' ? 'semana(s)' :
+                   recurrenceType === 'MONTHLY' ? 'mês(es)' : 'ano(s)'}
+                </Text>
+              </View>
+            </View>
+            
+            <View style={styles.recurrenceEndDateContainer}>
+              <Text style={styles.recurrenceLabel}>Data de Término (opcional)</Text>
+              <View style={styles.dateTimeContainer}>
+                <TouchableOpacity 
+                  style={styles.dateButton}
+                  onPress={showEndDatePicker}
+                >
+                  <View style={styles.dateButtonContent}>
+                    <Ionicons name="calendar" size={20} color="#7B68EE" />
+                    <Text style={styles.dateTimeText}>
+                      {watch('recurrence_end_date') ? formatDate(watch('recurrence_end_date')) : 'Selecionar data'}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  style={styles.timeButton}
+                  onPress={showEndTimePicker}
+                >
+                  <View style={styles.dateButtonContent}>
+                    <Ionicons name="time" size={20} color="#7B68EE" />
+                    <Text style={styles.dateTimeText}>
+                      {watch('recurrence_end_date') ? formatTime(watch('recurrence_end_date')) : 'Hora'}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              </View>
+              
+              {watch('recurrence_end_date') && (
+                <TouchableOpacity
+                  style={styles.clearEndDateButton}
+                  onPress={() => setValue('recurrence_end_date', undefined)}
+                >
+                  <Text style={styles.clearEndDateText}>Limpar data de término</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </ScrollView>
+          
+          <TouchableOpacity
+            style={styles.modalCloseButton}
+            onPress={() => setRecurrenceModalVisible(false)}
+          >
+            <Text style={styles.modalCloseButtonText}>Concluir</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+
   const formatDate = (date?: Date) => {
     if (!date) return null;
     return date.toLocaleDateString('pt-BR', {
@@ -412,7 +659,13 @@ const CreateTaskScreen = () => {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         <View style={styles.headerContainer}>
-          <TouchableOpacity onPress={() =>{router.replace('/(panel)/tasks');}} style={styles.backButton}>
+          <TouchableOpacity 
+            onPress={() => {
+              // Usar replace em vez de push para evitar problemas de navegação
+              router.back();
+            }} 
+            style={styles.backButton}
+          >
             <Ionicons name="arrow-back" size={24} color="#7B68EE" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Criar Tarefa</Text>
@@ -518,7 +771,14 @@ const CreateTaskScreen = () => {
           </View>
 
           <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>Prazo (opcional)</Text>
+            <Text style={styles.inputLabel}>
+              {isRecurring ? 'Prazo da primeira ocorrência' : 'Prazo (opcional)'}
+            </Text>
+            {isRecurring && (
+              <Text style={styles.recurrenceDescription}>
+                Defina a data e hora da primeira ocorrência desta tarefa recorrente
+              </Text>
+            )}
             <View style={styles.dateTimeContainer}>
               <TouchableOpacity 
                 style={styles.dateButton}
@@ -588,6 +848,53 @@ const CreateTaskScreen = () => {
             )}
           />
 
+          <Controller
+            control={control}
+            name="is_recurring"
+            render={({ field: { onChange, value } }) => (
+              <View style={styles.inputContainer}>
+                <View style={styles.recurrenceToggleContainer}>
+                  <View>
+                    <Text style={styles.inputLabel}>Tarefa Recorrente</Text>
+                    <Text style={styles.recurrenceDescription}>
+                      Ative para criar uma tarefa que se repete automaticamente
+                    </Text>
+                  </View>
+                  <Switch
+                    value={value}
+                    onValueChange={onChange}
+                    trackColor={{ false: '#444', true: 'rgba(76, 175, 80, 0.4)' }}
+                    thumbColor={value ? '#4CAF50' : '#aaa'}
+                  />
+                </View>
+                
+                {value && (
+                  <TouchableOpacity 
+                    style={styles.recurrenceConfigButton}
+                    onPress={() => setRecurrenceModalVisible(true)}
+                  >
+                    <View style={styles.recurrenceConfigContent}>
+                      <View>
+                        <Text style={styles.recurrenceConfigLabel}>Configurar Recorrência</Text>
+                        <Text style={styles.recurrenceConfigValue}>
+                          {recurrenceType === 'DAILY' ? 'Diária' :
+                           recurrenceType === 'WEEKLY' ? 'Semanal' :
+                           recurrenceType === 'MONTHLY' ? 'Mensal' : 'Anual'}
+                          {(recurrenceInterval ?? 1) > 1 ? ` (a cada ${recurrenceInterval} ${
+                            recurrenceType === 'DAILY' ? 'dias' :
+                            recurrenceType === 'WEEKLY' ? 'semanas' :
+                            recurrenceType === 'MONTHLY' ? 'meses' : 'anos'
+                          })` : ''}
+                        </Text>
+                      </View>
+                      <Ionicons name="repeat" size={24} color="#4CAF50" />
+                    </View>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+          />
+
           <TouchableOpacity 
             style={[
               styles.submitButton, 
@@ -610,6 +917,17 @@ const CreateTaskScreen = () => {
 
       {renderUserSelectionModal()}
       {renderCategoryModal()}
+      {renderRecurrenceModal()}
+      
+      {isEndDatePickerVisible && (
+        <DateTimePicker
+          value={watch('recurrence_end_date') || new Date()}
+          mode={endDatePickerMode}
+          display="default"
+          onChange={handleEndDatePickerChange}
+          minimumDate={new Date()}
+        />
+      )}
     </SafeAreaView>
   );
 };
@@ -781,6 +1099,117 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
   },
+  recurrenceToggleContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  recurrenceDescription: {
+    color: '#aaa',
+    fontSize: 12,
+    marginTop: 4,
+  },
+  recurrenceConfigButton: {
+    backgroundColor: '#333',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#444',
+    overflow: 'hidden',
+  },
+  recurrenceConfigContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 15,
+    paddingVertical: 16,
+  },
+  recurrenceConfigLabel: {
+    color: '#aaa',
+    fontSize: 12,
+    marginBottom: 4,
+  },
+  recurrenceConfigValue: {
+    color: '#fff',
+    fontSize: 16,
+  },
+  recurrenceTypeContainer: {
+    marginBottom: 20,
+  },
+  recurrenceLabel: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '500',
+    marginBottom: 12,
+  },
+  recurrenceTypeGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  recurrenceTypeChip: {
+    backgroundColor: '#444',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    margin: 6,
+  },
+  selectedRecurrenceTypeChip: {
+    backgroundColor: '#4CAF50',
+  },
+  recurrenceTypeText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  selectedRecurrenceTypeText: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  recurrenceIntervalContainer: {
+    marginBottom: 20,
+  },
+  recurrenceIntervalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  intervalButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#444',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  intervalValueContainer: {
+    width: 60,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#333',
+    borderRadius: 8,
+    marginHorizontal: 10,
+  },
+  intervalValue: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  intervalText: {
+    color: '#fff',
+    fontSize: 16,
+    marginLeft: 10,
+  },
+  recurrenceEndDateContainer: {
+    marginBottom: 20,
+  },
+  clearEndDateButton: {
+    marginTop: 10,
+    alignSelf: 'flex-start',
+  },
+  clearEndDateText: {
+    color: '#FF6347',
+    fontSize: 14,
+  },
   submitButton: {
     flexDirection: 'row',
     backgroundColor: '#7B68EE',
@@ -843,6 +1272,7 @@ const styles = StyleSheet.create({
   },
   modalScrollView: {
     maxHeight: 400,
+    padding: 20,
   },
   userSelectItem: {
     flexDirection: 'row',
@@ -931,8 +1361,6 @@ const styles = StyleSheet.create({
   categoryGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    paddingHorizontal: 16,
-    paddingTop: 16,
   },
   categoryChip: {
     backgroundColor: '#444',
@@ -954,7 +1382,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   customCategoryContainer: {
-    margin: 16,
     marginTop: 24,
     backgroundColor: '#2A2A2A',
     borderRadius: 10,

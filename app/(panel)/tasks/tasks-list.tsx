@@ -1,5 +1,5 @@
 // app/(panel)/tasks/tasks-list.tsx
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   View, 
   Text, 
@@ -9,30 +9,158 @@ import {
   RefreshControl,
   SafeAreaView,
   StatusBar,
-  ScrollView
+  ScrollView,
+  Alert
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useTasks } from '../../../src/hooks/useTasks';
 import { useAuth } from '../../../src/context/AuthContext';
-import EnhancedTaskItem from '../../../components/TaskItem';
+import TaskItem from '../../../components/TaskItem';
+import { Task } from '../../../src/models/task.model';
+
+// Componente otimizado para o filtro
+const FilterButton = React.memo(({ 
+  label, 
+  isActive, 
+  onPress 
+}: { 
+  label: string; 
+  isActive: boolean; 
+  onPress: () => void 
+}) => (
+  <TouchableOpacity
+    style={[
+      styles.filterButton,
+      isActive && styles.activeFilterButton
+    ]}
+    onPress={onPress}
+  >
+    <Text style={[
+      styles.filterText,
+      isActive && styles.activeFilterText
+    ]}>
+      {label}
+    </Text>
+  </TouchableOpacity>
+));
+
+  // Componente para ordenação
+const SortButton = React.memo(({ 
+  field, 
+  label, 
+  currentSortBy, 
+  currentDirection,
+  onSort 
+}: { 
+  field: string;
+  label: string; 
+  currentSortBy: string;
+  currentDirection: string;
+  onSort: (field: string, direction: 'ASC' | 'DESC') => void;
+}) => {
+  const isActive = currentSortBy === field;
+  const nextDirection = isActive && currentDirection === 'ASC' ? 'DESC' : 'ASC';
+  
+  const handleSort = useCallback(() => {
+    console.log(`SortButton clicked: ${field}, next direction: ${nextDirection}`);
+    onSort(field, nextDirection);
+  }, [field, nextDirection, onSort]);
+  
+  return (
+    <TouchableOpacity
+      style={[
+        styles.sortButton,
+        isActive && styles.activeSortButton
+      ]}
+      onPress={handleSort}
+    >
+      <Text style={[
+        styles.sortText,
+        isActive && styles.activeSortText
+      ]}>
+        {label} {isActive && (currentDirection === 'ASC' ? '↑' : '↓')}
+      </Text>
+    </TouchableOpacity>
+  );
+});
+
+// Componente otimizado para o estado vazio
+const EmptyState = React.memo(({ 
+  isLoading, 
+  filter 
+}: { 
+  isLoading: boolean; 
+  filter: string 
+}) => (
+  <View style={styles.emptyStateContainer}>
+    <MaterialCommunityIcons 
+      name="checkbox-marked-outline" 
+      size={64} 
+      color="#7B68EE" 
+    />
+    <Text style={styles.emptyStateText}>
+      {isLoading ? 'Carregando tarefas...' : 
+       filter === 'my-tasks' ? 'Nenhuma tarefa atribuída a você' : 
+       filter === 'recurring' ? 'Nenhuma tarefa recorrente encontrada' :
+       'Nenhuma tarefa encontrada'}
+    </Text>
+    <Text style={styles.emptyStateSubtext}>
+      {!isLoading && filter !== 'my-tasks' && filter !== 'recurring' && 'Crie sua primeira tarefa clicando no botão "+"'}
+      {!isLoading && filter === 'my-tasks' && 'As tarefas atribuídas a você aparecerão aqui'}
+      {!isLoading && filter === 'recurring' && 'Crie tarefas recorrentes para visualizá-las aqui'}
+    </Text>
+  </View>
+));
 
 const TasksListScreen = () => {
   const router = useRouter();
   const { filter: urlFilter } = useLocalSearchParams<{ filter?: string }>();
   const { user } = useAuth();
-  const [filter, setFilter] = useState<string>(urlFilter || 'all');
+  
+  // Inicializa o estado do filtro apenas uma vez
+  const [filter, setFilter] = useState<string>(() => urlFilter || 'all');
   const [pendingTaskIds, setPendingTaskIds] = useState<number[]>([]);
   const scrollViewRef = useRef(null);
-
-  const taskFilters = [
+  
+  // Referência para controlar a inicialização
+  const isInitialized = useRef(false);
+  
+  // Efeito para sincronizar o filtro da URL com o estado local apenas na inicialização
+  useEffect(() => {
+    // Executa apenas uma vez na montagem do componente
+    if (!isInitialized.current && urlFilter) {
+      setFilter(urlFilter);
+      // Não chame applyFilter aqui, pois o hook useTasks já aplica o filtro inicial
+      isInitialized.current = true;
+    }
+  }, [urlFilter]);
+  
+  
+  // Evita re-renderizações desnecessárias
+  const taskFilters = useMemo(() => [
     { key: 'all', label: 'Todas' },
     { key: 'my-tasks', label: 'Minhas' },
     { key: 'PENDING', label: 'Pendentes' },
     { key: 'IN_PROGRESS', label: 'Em Andamento' },
     { key: 'COMPLETED', label: 'Concluídas' },
-    { key: 'OVERDUE', label: 'Atrasadas' }
-  ];
+    { key: 'OVERDUE', label: 'Atrasadas' },
+    { key: 'recurring', label: 'Recorrentes' }
+  ], []);
+
+  // Usando useRef para garantir que o objeto de opções não mude entre renderizações
+  const taskOptionsRef = useRef({
+    initialFilterStatus: urlFilter as any || 'all',
+    pageSize: 20
+  });
+  
+  // Apenas atualize o valor de referência quando urlFilter mudar, não durante a renderização
+  useEffect(() => {
+    taskOptionsRef.current = {
+      ...taskOptionsRef.current,
+      initialFilterStatus: urlFilter as any || 'all'
+    };
+  }, [urlFilter]);
 
   const {
     tasks,
@@ -45,29 +173,35 @@ const TasksListScreen = () => {
     applyFilter,
     completeTask,
     deleteTask,
-    updateTask
-  } = useTasks();
+    updateTask,
+    // Novos estados e funções de paginação
+    currentPage,
+    pageSize,
+    totalPages,
+    totalElements,
+    isLastPage,
+    loadMoreTasks,
+    changePageSize,
+    // Novos estados e funções de ordenação
+    sortBy,
+    sortDirection,
+    changeSorting
+  } = useTasks(taskOptionsRef.current);
 
-  // Inicializar o filtro a partir da URL, se fornecido
-  useEffect(() => {
-    if (urlFilter) {
-      handleFilterChange(urlFilter);
-    }
-  }, [urlFilter]);
-
+    
   // Função para mudar filtro localmente
   const handleFilterChange = useCallback((newFilter: string) => {
-    setFilter(newFilter);
-    applyFilter(newFilter);
+    // Evita aplicar o mesmo filtro novamente
+    if (filter === newFilter) return;
     
-    // Se o filtro for "my-tasks", certifique-se de que temos os últimos dados
-    if (newFilter === 'my-tasks') {
-      fetchMyTasks();
-    }
-  }, [applyFilter, fetchMyTasks]);
-
+    console.log(`Changing filter to: ${newFilter}`);
+    setFilter(newFilter);
+    
+    // Aplica o filtro imediatamente
+    applyFilter(newFilter);
+  }, [applyFilter, filter]);
   // Implementação da atualização otimista
-  const handleToggleTaskStatus = useCallback(async (task: any) => {
+  const handleToggleTaskStatus = useCallback(async (task: Task) => {
     // Evita operações duplas
     if (pendingTaskIds.includes(task.id)) return;
     
@@ -75,29 +209,14 @@ const TasksListScreen = () => {
       // Adiciona o ID da tarefa à lista de pendentes
       setPendingTaskIds(prev => [...prev, task.id]);
       
-      // Atualiza otimisticamente o estado local primeiro
-      const updatedStatus = task.status === 'COMPLETED' ? 'PENDING' : 'COMPLETED';
-      
       // Faz a requisição para o backend
       if (task.status === 'COMPLETED') {
         await updateTask(task.id, { status: 'PENDING' });
       } else {
         await completeTask(task.id);
       }
-      
-      // Se o filtro atual for "my-tasks", recarregue as tarefas do usuário
-      if (filter === 'my-tasks') {
-        fetchMyTasks();
-      } else {
-        fetchTasks();
-      }
     } catch (error) {
-      // Se falhar, recarrega os dados
-      if (filter === 'my-tasks') {
-        fetchMyTasks();
-      } else {
-        fetchTasks();
-      }
+      console.error('Erro ao alterar status da tarefa:', error);
     } finally {
       // Remove o ID da tarefa da lista de pendentes após um pequeno delay
       // para evitar uma transição abrupta
@@ -105,25 +224,205 @@ const TasksListScreen = () => {
         setPendingTaskIds(prev => prev.filter(id => id !== task.id));
       }, 300);
     }
-  }, [pendingTaskIds, updateTask, completeTask, fetchTasks, fetchMyTasks, filter]);
+  }, [pendingTaskIds, updateTask, completeTask]);
+
+  // Função para interromper a recorrência de uma tarefa
+  const handleStopRecurrence = useCallback((taskId: number) => {
+    Alert.alert(
+      "Interromper recorrência",
+      "Deseja interromper a recorrência desta tarefa?",
+      [
+        {
+          text: "Cancelar",
+          style: "cancel"
+        },
+        {
+          text: "Interromper",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              setPendingTaskIds(prev => [...prev, taskId]);
+              await updateTask(taskId, { is_recurring: false });
+              
+              Alert.alert(
+                "Sucesso",
+                "A recorrência da tarefa foi interrompida com sucesso."
+              );
+            } catch (error) {
+              Alert.alert(
+                "Erro",
+                "Não foi possível interromper a recorrência da tarefa."
+              );
+            } finally {
+              setTimeout(() => {
+                setPendingTaskIds(prev => prev.filter(id => id !== taskId));
+              }, 300);
+            }
+          }
+        }
+      ]
+    );
+  }, [updateTask]);
 
   // Função para navegar para os detalhes da tarefa
-  const navigateToTaskDetails = (taskId: number) => {
+  const navigateToTaskDetails = useCallback((taskId: number) => {
     router.push(`/(panel)/tasks/${taskId}`);
-  };
+  }, [router]);
 
   // Determina qual conjunto de tarefas exibir com base no filtro
-  const displayTasks = filter === 'my-tasks' ? myTasks : tasks;
-  const isLoading = filter === 'my-tasks' ? loadingMyTasks : loading;
+  const displayTasks = useMemo((): Task[] => {
+    // Se não há tarefas, retorna array vazio para evitar erros
+    if (!tasks && !myTasks) return [];
+    
+    // Retorna diretamente as tarefas já filtradas pelo backend
+    // O hook useTasks já aplica os filtros no servidor
+    return tasks || [];
+  }, [tasks, myTasks]);
+  
+  const isLoading = useMemo(() => 
+    filter === 'my-tasks' ? loadingMyTasks : loading,
+    [filter, loadingMyTasks, loading]
+  );
 
-  // Função de atualização para o componente
+  // Função de atualização para o componente com proteção contra múltiplas chamadas
   const refreshTasks = useCallback(() => {
+    // Evita múltiplas chamadas simultâneas
+    if (isLoading) return;
+    
     if (filter === 'my-tasks') {
-      fetchMyTasks();
+      fetchMyTasks(true, 0); // força atualização e reseta para a primeira página
     } else {
-      fetchTasks();
+      fetchTasks(true, 0); // força atualização e reseta para a primeira página
     }
-  }, [fetchMyTasks, fetchTasks, filter]);
+  }, [fetchMyTasks, fetchTasks, filter, isLoading]);
+  
+  // Otimização para o renderItem da FlatList
+  const renderTaskItem = useCallback(({ item }: { item: Task }) => (
+    <TaskItem 
+      item={item}
+      onToggleStatus={handleToggleTaskStatus}
+      currentUserId={user?.uid}
+      pendingTaskIds={pendingTaskIds}
+      onPress={navigateToTaskDetails}
+      onStopRecurrence={item.is_recurring ? handleStopRecurrence : undefined}
+    />
+  ), [handleToggleTaskStatus, user?.uid, pendingTaskIds, navigateToTaskDetails, handleStopRecurrence]);
+  
+  // Otimização para o keyExtractor da FlatList
+  const keyExtractor = useCallback((item: Task) => item.id?.toString() || '', []);
+  
+  // Otimização para o ListEmptyComponent da FlatList
+  const renderEmptyComponent = useCallback(() => (
+    <EmptyState isLoading={isLoading} filter={filter} />
+  ), [isLoading, filter]);
+  
+  // Otimização para o contentContainerStyle da FlatList
+  const getContentContainerStyle = useCallback((isEmpty: boolean) => {
+    if (isEmpty) {
+      return {
+        ...styles.listContainer,
+        flex: 1,
+        justifyContent: 'center' as const
+      };
+    }
+    return styles.listContainer;
+  }, []);
+  
+  // Otimização para o ListFooterComponent da FlatList
+  const renderFooterComponent = useCallback(() => {
+    // Se não há tarefas, não mostra footer
+    if (displayTasks.length === 0) {
+      return null;
+    }
+    
+    // Se chegamos na última página e temos tarefas
+    if (isLastPage && totalElements > 0) {
+      return (
+        <View style={styles.footerContainer}>
+          <Text style={styles.footerText}>
+            Fim da lista • {totalElements} tarefas encontradas
+          </Text>
+        </View>
+      );
+    }
+    
+    // Se estamos carregando mais tarefas
+    if (loading && !isLoading && currentPage > 0) {
+      return (
+        <View style={styles.loadingFooter}>
+          <Text style={styles.loadingText}>Carregando mais tarefas...</Text>
+        </View>
+      );
+    }
+    
+    return null;
+  }, [isLastPage, displayTasks.length, totalElements, loading, isLoading, currentPage]);
+  
+  // Função para alterar a ordenação
+  const handleChangeSorting = useCallback((field: string, direction: 'ASC' | 'DESC') => {
+    console.log(`Sorting by ${field} in ${direction} direction`);
+    console.log(`Current sort state - Field: ${sortBy}, Direction: ${sortDirection}`);
+    console.log(`Changing sort to - Field: ${field}, Direction: ${direction}`);
+    
+    // Converter campos com underscore para camelCase
+    const fieldCamelCase = field === 'due_date' ? 'dueDate' : 
+                          field === 'created_at' ? 'createdAt' : field;
+    
+    if (changeSorting && typeof changeSorting === 'function') {
+      // Verificar se a ordenação está sendo aplicada corretamente
+      changeSorting(fieldCamelCase, direction);
+      
+      // Adicionar um log após a chamada para verificar se a função foi executada
+      console.log(`Sort function called with ${fieldCamelCase}, ${direction}`);
+      
+      // Adicionar um log para verificar a URL e os parâmetros enviados para o backend
+      console.log('Check the network request in developer tools to see the parameters sent to the backend');
+      console.log('The backend should receive these parameters:');
+      console.log(`- sort: ${fieldCamelCase},${direction}`);
+      // ou
+      console.log(`- sortBy: ${fieldCamelCase}`);
+      console.log(`- sortDirection: ${direction}`);
+    } else {
+      console.warn('changeSorting function is not available');
+    }
+  }, [changeSorting, sortBy, sortDirection]);
+
+  // Função para alterar o tamanho da página
+  const handleChangePageSize = useCallback((newSize: number) => {
+    if (changePageSize && typeof changePageSize === 'function') {
+      changePageSize(newSize);
+    }
+  }, [changePageSize]);
+  
+  // Componente para seleção de tamanho de página
+  const renderPageSizeSelector = useCallback(() => {
+    const pageSizeOptions = [10, 20, 50, 100];
+    
+    return (
+      <View style={styles.pageSizeSelectorContainer}>
+        <Text style={styles.pageSizeSelectorLabel}>Itens por página:</Text>
+        <View style={styles.pageSizeOptions}>
+          {pageSizeOptions.map(size => (
+            <TouchableOpacity
+              key={size}
+              style={[
+                styles.pageSizeOption,
+                pageSize === size && styles.activePageSizeOption
+              ]}
+              onPress={() => handleChangePageSize(size)}
+            >
+              <Text style={[
+                styles.pageSizeOptionText,
+                pageSize === size && styles.activePageSizeOptionText
+              ]}>
+                {size}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+    );
+  }, [pageSize, handleChangePageSize]);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -143,69 +442,91 @@ const TasksListScreen = () => {
           contentContainerStyle={styles.filtersContainer}
         >
           {taskFilters.map((filterItem) => (
-            <TouchableOpacity
+            <FilterButton
               key={filterItem.key}
-              style={[
-                styles.filterButton,
-                filter === filterItem.key && styles.activeFilterButton
-              ]}
+              label={filterItem.label}
+              isActive={filter === filterItem.key}
               onPress={() => handleFilterChange(filterItem.key)}
-            >
-              <Text style={[
-                styles.filterText,
-                filter === filterItem.key && styles.activeFilterText
-              ]}>
-                {filterItem.label}
-              </Text>
-            </TouchableOpacity>
+            />
           ))}
         </ScrollView>
       </View>
+      
+      {/* Ordenação */}
+      <View style={styles.sortSection}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.sortContainer}
+        >
+          <SortButton
+            field="dueDate"
+            label="Data"
+            currentSortBy={sortBy}
+            currentDirection={sortDirection}
+            onSort={handleChangeSorting}
+          />
+          <SortButton
+            field="title"
+            label="Título"
+            currentSortBy={sortBy}
+            currentDirection={sortDirection}
+            onSort={handleChangeSorting}
+          />
+          <SortButton
+            field="createdAt"
+            label="Criação"
+            currentSortBy={sortBy}
+            currentDirection={sortDirection}
+            onSort={handleChangeSorting}
+          />
+          <SortButton
+            field="status"
+            label="Status"
+            currentSortBy={sortBy}
+            currentDirection={sortDirection}
+            onSort={handleChangeSorting}
+          />
+        </ScrollView>
+        
+        {totalElements > 0 && (
+          <Text style={styles.paginationInfo}>
+            Mostrando {Math.min(pageSize * (currentPage + 1), totalElements)} de {totalElements} tarefas
+          </Text>
+        )}
+      </View>
 
       {/* Lista de tarefas */}
-      <FlatList
+      <FlatList<Task>
         data={displayTasks}
-        keyExtractor={(item) => item.id?.toString() || ''}
-        renderItem={({ item }) => (
-          <EnhancedTaskItem 
-            item={item}
-            onToggleStatus={handleToggleTaskStatus}
-            currentUserId={user?.uid}
-            pendingTaskIds={pendingTaskIds}
-            onPress={navigateToTaskDetails}
-          />
-        )}
-        ListEmptyComponent={() => (
-          <View style={styles.emptyStateContainer}>
-            <MaterialCommunityIcons 
-              name="checkbox-marked-outline" 
-              size={64} 
-              color="#7B68EE" 
-            />
-            <Text style={styles.emptyStateText}>
-              {isLoading ? 'Carregando tarefas...' : 
-               filter === 'my-tasks' ? 'Nenhuma tarefa atribuída a você' : 
-               'Nenhuma tarefa encontrada'}
-            </Text>
-            <Text style={styles.emptyStateSubtext}>
-              {!isLoading && filter !== 'my-tasks' && 'Crie sua primeira tarefa clicando no botão "+"'}
-              {!isLoading && filter === 'my-tasks' && 'As tarefas atribuídas a você aparecerão aqui'}
-            </Text>
-          </View>
-        )}
+        keyExtractor={keyExtractor}
+        renderItem={renderTaskItem}
+        ListEmptyComponent={renderEmptyComponent}
         refreshControl={
           <RefreshControl
-            refreshing={isLoading && pendingTaskIds.length === 0}
+            refreshing={isLoading && pendingTaskIds.length === 0 && currentPage === 0}
             onRefresh={refreshTasks}
             colors={['#7B68EE']}
             tintColor={'#7B68EE'}
           />
         }
-        contentContainerStyle={[
-          styles.listContainer,
-          displayTasks.length === 0 && { flex: 1, justifyContent: 'center' }
-        ]}
+        contentContainerStyle={getContentContainerStyle(displayTasks.length === 0)}
+        removeClippedSubviews={true}
+        maxToRenderPerBatch={10}
+        windowSize={10}
+        initialNumToRender={10}
+        onEndReached={() => {
+          // Evita múltiplas chamadas durante o carregamento
+          if (!isLoading && !isLastPage && !loading) {
+            loadMoreTasks();
+          }
+        }}
+        onEndReachedThreshold={0.5}
+        ListFooterComponent={renderFooterComponent}
       />
+
+      {/* Seletor de tamanho de página */}
+      {!isLoading && displayTasks.length > 0 && totalElements > pageSize && renderPageSizeSelector()}
 
       {/* Botão de adicionar */}
       <TouchableOpacity 
@@ -271,6 +592,44 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: 'bold',
   },
+  // Ordenação
+  sortSection: {
+    backgroundColor: '#2A2A2A',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#444',
+  },
+  sortContainer: {
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+  },
+  sortButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    marginRight: 8,
+    borderRadius: 16,
+    backgroundColor: '#333',
+    borderWidth: 1,
+    borderColor: '#444',
+  },
+  activeSortButton: {
+    backgroundColor: '#555',
+    borderColor: '#7B68EE',
+  },
+  sortText: {
+    color: '#aaa',
+    fontSize: 12,
+  },
+  activeSortText: {
+    color: '#fff',
+  },
+  paginationInfo: {
+    color: '#aaa',
+    fontSize: 12,
+    textAlign: 'center',
+    marginTop: 8,
+    paddingHorizontal: 16,
+  },
   // Lista
   listContainer: {
     flexGrow: 1,
@@ -314,6 +673,67 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 4.65,
     elevation: 8,
+  },
+  // Footer de carregamento
+  loadingFooter: {
+    paddingVertical: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    color: '#aaa',
+    fontSize: 14,
+  },
+  // Footer da lista
+  footerContainer: {
+    paddingVertical: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderTopWidth: 1,
+    borderTopColor: '#333',
+    marginTop: 10,
+  },
+  footerText: {
+    color: '#888',
+    fontSize: 12,
+  },
+  // Seletor de tamanho de página
+  pageSizeSelectorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    backgroundColor: '#2A2A2A',
+    borderTopWidth: 1,
+    borderTopColor: '#444',
+  },
+  pageSizeSelectorLabel: {
+    color: '#aaa',
+    fontSize: 12,
+    marginRight: 10,
+  },
+  pageSizeOptions: {
+    flexDirection: 'row',
+  },
+  pageSizeOption: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    marginHorizontal: 4,
+    borderRadius: 12,
+    backgroundColor: '#333',
+    borderWidth: 1,
+    borderColor: '#444',
+  },
+  activePageSizeOption: {
+    backgroundColor: '#555',
+    borderColor: '#7B68EE',
+  },
+  pageSizeOptionText: {
+    color: '#aaa',
+    fontSize: 12,
+  },
+  activePageSizeOptionText: {
+    color: '#fff',
   },
 });
   

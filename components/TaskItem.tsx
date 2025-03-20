@@ -1,5 +1,5 @@
-// components/EnhancedTaskItem.tsx
-import React from 'react';
+// components/TaskItem.tsx
+import React, { memo, useMemo } from 'react';
 import {
   View, 
   Text, 
@@ -11,7 +11,7 @@ import {
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { format, parseISO, isToday, isTomorrow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Task } from '../src/hooks/useTasks';
+import { Task } from '../src/models/task.model';
 
 interface TaskItemProps {
   item: Task;
@@ -19,21 +19,29 @@ interface TaskItemProps {
   currentUserId?: string;
   pendingTaskIds: number[];
   onPress: (taskId: number) => void;
+  onStopRecurrence?: (taskId: number) => void;
 }
 
-const EnhancedTaskItem: React.FC<TaskItemProps> = ({ 
+// Componente otimizado com memo para evitar re-renderizações desnecessárias
+const TaskItem: React.FC<TaskItemProps> = memo(({ 
   item, 
   onToggleStatus, 
   currentUserId,
   pendingTaskIds,
-  onPress
+  onPress,
+  onStopRecurrence
 }) => {
-  const isAssignedToCurrentUser = item.assignedUsers?.some(user => user.id === currentUserId);
+  // Memoize valores calculados para evitar recálculos em cada renderização
+  const isAssignedToCurrentUser = useMemo(() => 
+    item.assigned_users?.some(user => user === currentUserId),
+    [item.assigned_users, currentUserId]
+  );
+  
   const isPending = pendingTaskIds.includes(item.id);
   
-  // Determinando a cor do status
-  const getStatusColor = (status: string) => {
-    switch(status) {
+  // Determinando a cor do status - memoizado
+  const statusColor = useMemo(() => {
+    switch(item.status) {
       case 'COMPLETED': return '#4CAF50';
       case 'IN_PROGRESS': return '#2196F3';
       case 'PENDING': return '#FFC107';
@@ -41,25 +49,25 @@ const EnhancedTaskItem: React.FC<TaskItemProps> = ({
       case 'CANCELLED': return '#9E9E9E';
       default: return '#9E9E9E';
     }
-  };
+  }, [item.status]);
 
-  // Texto amigável do status
-  const getStatusText = (status: string) => {
-    switch(status) {
+  // Texto amigável do status - memoizado
+  const statusText = useMemo(() => {
+    switch(item.status) {
       case 'COMPLETED': return 'Concluída';
       case 'IN_PROGRESS': return 'Em andamento';
       case 'PENDING': return 'Pendente';
       case 'OVERDUE': return 'Atrasada';
       case 'CANCELLED': return 'Cancelada';
-      default: return status;
+      default: return item.status;
     }
-  };
+  }, [item.status]);
 
-  // Formatação de data
-  const formatDate = (dateString?: string) => {
-    if (!dateString) return null;
+  // Formatação de data - memoizada
+  const formattedDate = useMemo(() => {
+    if (!item.due_date) return null;
     
-    const date = new Date(dateString);
+    const date = new Date(item.due_date);
     const today = new Date();
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
@@ -85,13 +93,41 @@ const EnhancedTaskItem: React.FC<TaskItemProps> = ({
       isOverdue: isOverdue,
       color: isOverdue ? '#F44336' : '#7B68EE'
     };
+  }, [item.due_date]);
+  
+  // Verificar se há descrição - memoizado
+  const hasDescription = useMemo(() => 
+    item.description && item.description.trim().length > 0,
+    [item.description]
+  );
+
+  // Texto amigável para o tipo de recorrência - memoizado
+  const recurrenceText = useMemo(() => {
+    switch(item.recurrence_type) {
+      case 'DAILY': return 'Diária';
+      case 'WEEKLY': return 'Semanal';
+      case 'MONTHLY': return 'Mensal';
+      case 'YEARLY': return 'Anual';
+      default: return 'Recorrente';
+    }
+  }, [item.recurrence_type]);
+
+  // Handler para toggle status
+  const handleToggleStatus = () => {
+    onToggleStatus(item);
   };
-  
-  // Formatar a data para exibição
-  const formattedDate = item.dueDate ? formatDate(item.dueDate) : null;
-  
-  // Verificar se há descrição
-  const hasDescription = item.description && item.description.trim().length > 0;
+
+  // Handler para stop recurrence
+  const handleStopRecurrence = () => {
+    if (onStopRecurrence) {
+      onStopRecurrence(item.id);
+    }
+  };
+
+  // Handler para press
+  const handlePress = () => {
+    onPress(item.id);
+  };
 
   return (
     <TouchableOpacity
@@ -99,17 +135,18 @@ const EnhancedTaskItem: React.FC<TaskItemProps> = ({
         styles.taskItem, 
         item.status === 'COMPLETED' && styles.completedTask,
         isPending && styles.pendingTaskItem,
-        isAssignedToCurrentUser && styles.myTaskItem
+        isAssignedToCurrentUser && styles.myTaskItem,
+        item.is_recurring && styles.recurringTaskItem
       ]}
-      onPress={() => onPress(item.id)}
+      onPress={handlePress}
       disabled={isPending}
     >
       {/* Status indicator */}
-      <View style={[styles.statusBar, { backgroundColor: getStatusColor(item.status) }]} />
+      <View style={[styles.statusBar, { backgroundColor: statusColor }]} />
       
       <View style={styles.taskContent}>
         <TouchableOpacity 
-          onPress={() => onToggleStatus(item)}
+          onPress={handleToggleStatus}
           style={styles.checkboxContainer}
           disabled={isPending || item.status === 'CANCELLED'}
         >
@@ -117,7 +154,7 @@ const EnhancedTaskItem: React.FC<TaskItemProps> = ({
             <ActivityIndicator size="small" color="#7B68EE" />
           ) : (
             <Ionicons 
-              name={item.status === 'COMPLETED' ? 'checkbox' : 'checkbox-outline'} 
+              name={item.status === 'COMPLETED' ? 'checkbox' : 'square-outline'} 
               size={24} 
               color={item.status === 'COMPLETED' ? '#4CAF50' : 
                      item.status === 'CANCELLED' ? '#9E9E9E' : '#7B68EE'} 
@@ -136,11 +173,14 @@ const EnhancedTaskItem: React.FC<TaskItemProps> = ({
               numberOfLines={1}
             >
               {item.title}
+              {item.is_recurring && (
+                <Text style={styles.recurringIndicator}> {" "} <Ionicons name="repeat" size={14} color="#4CAF50" /></Text>
+              )}
             </Text>
             
-            <View style={[styles.statusBadge, { backgroundColor: `${getStatusColor(item.status)}20` }]}>
-              <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>
-                {getStatusText(item.status)}
+            <View style={[styles.statusBadge, { backgroundColor: `${statusColor}20` }]}>
+              <Text style={[styles.statusText, { color: statusColor }]}>
+                {statusText}
               </Text>
             </View>
           </View>
@@ -190,37 +230,46 @@ const EnhancedTaskItem: React.FC<TaskItemProps> = ({
               </View>
             )}
             
+            {/* Recurrence indicator */}
+            {item.is_recurring && (
+              <View style={styles.recurrenceChip}>
+                <Ionicons name="repeat" size={12} color="#4CAF50" />
+                <Text style={styles.recurrenceText}>
+                  {recurrenceText}
+                </Text>
+                {onStopRecurrence && (
+                  <TouchableOpacity 
+                    style={styles.stopRecurrenceButton}
+                    onPress={handleStopRecurrence}
+                  >
+                    <Ionicons name="close-circle" size={14} color="#FF6347" />
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+            
             {/* Assigned Users */}
-            {item.assignedUsers && item.assignedUsers.length > 0 && (
+            {item.assigned_users && item.assigned_users.length > 0 && (
               <View style={styles.assigneesContainer}>
-                {item.assignedUsers.slice(0, 3).map((assignee, index) => (
+                {item.assigned_users.slice(0, 3).map((assigneeId, index) => (
                   <View 
-                    key={assignee.id} 
+                    key={assigneeId} 
                     style={[
                       styles.assigneeAvatar, 
                       { zIndex: 10 - index, marginLeft: index > 0 ? -10 : 0 },
-                      assignee.id === currentUserId && styles.currentUserAvatar
+                      assigneeId === currentUserId && styles.currentUserAvatar
                     ]}
                   >
-                    {assignee.profilePictureUrl ? (
-                      <Image 
-                        source={{ uri: assignee.profilePictureUrl }} 
-                        style={styles.avatarImage}
-                      />
-                    ) : (
-                      <Text style={styles.avatarInitial}>
-                        {assignee.nickname
-                          ? assignee.nickname.charAt(0).toUpperCase()
-                          : assignee.name?.charAt(0).toUpperCase() || '?'}
-                      </Text>
-                    )}
+                    <Text style={styles.avatarInitial}>
+                      {assigneeId === currentUserId ? 'Y' : assigneeId.charAt(0).toUpperCase()}
+                    </Text>
                   </View>
                 ))}
                 
-                {item.assignedUsers.length > 3 && (
+                {item.assigned_users.length > 3 && (
                   <View style={[styles.assigneeAvatar, styles.moreAssigneesAvatar]}>
                     <Text style={styles.moreAssigneesText}>
-                      +{item.assignedUsers.length - 3}
+                      +{item.assigned_users.length - 3}
                     </Text>
                   </View>
                 )}
@@ -231,7 +280,23 @@ const EnhancedTaskItem: React.FC<TaskItemProps> = ({
       </View>
     </TouchableOpacity>
   );
-};
+}, (prevProps, nextProps) => {
+  // Função de comparação personalizada para o memo
+  // Retorna true se as props não mudaram (não precisa re-renderizar)
+  return (
+    prevProps.item.id === nextProps.item.id &&
+    prevProps.item.title === nextProps.item.title &&
+    prevProps.item.description === nextProps.item.description &&
+    prevProps.item.status === nextProps.item.status &&
+    prevProps.item.due_date === nextProps.item.due_date &&
+    prevProps.item.category === nextProps.item.category &&
+    prevProps.item.is_recurring === nextProps.item.is_recurring &&
+    prevProps.item.recurrence_type === nextProps.item.recurrence_type &&
+    JSON.stringify(prevProps.item.assigned_users) === JSON.stringify(nextProps.item.assigned_users) &&
+    prevProps.currentUserId === nextProps.currentUserId &&
+    JSON.stringify(prevProps.pendingTaskIds) === JSON.stringify(nextProps.pendingTaskIds)
+  );
+});
 
 const styles = StyleSheet.create({
   taskItem: {
@@ -314,6 +379,23 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginLeft: 4,
   },
+  recurrenceChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(76, 175, 80, 0.15)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+  },
+  recurrenceText: {
+    color: '#4CAF50',
+    fontSize: 12,
+    marginLeft: 4,
+  },
+  stopRecurrenceButton: {
+    marginLeft: 4,
+    padding: 2,
+  },
   statusBadge: {
     paddingHorizontal: 8,
     paddingVertical: 3,
@@ -342,6 +424,13 @@ const styles = StyleSheet.create({
     borderLeftWidth: 3,
     borderLeftColor: '#7B68EE',
     borderRadius: 10
+  },
+  recurringTaskItem: {
+    borderRightWidth: 3,
+    borderRightColor: '#4CAF50',
+  },
+  recurringIndicator: {
+    color: '#4CAF50',
   },
   checkboxContainer: {
     justifyContent: 'center',
@@ -389,4 +478,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default EnhancedTaskItem;
+export default TaskItem;
