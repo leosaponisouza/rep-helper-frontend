@@ -1,5 +1,5 @@
-// app/(panel)/events/create.tsx
-import React, { useState, useEffect } from 'react';
+// app/(panel)/events/create.tsx - Versão otimizada com melhor UX e performance
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -13,27 +13,53 @@ import {
   Platform,
   Alert,
   ActivityIndicator,
-  Keyboard
+  Keyboard,
+  Animated
 } from 'react-native';
-import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useEvents } from '../../../src/hooks/useEvents';
 import { useAuth } from '../../../src/context/AuthContext';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { format, addHours, parseISO, isBefore } from 'date-fns';
+import { format, addHours, parseISO, isBefore, startOfDay, setHours, setMinutes } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 const CreateEventScreen: React.FC = () => {
   const router = useRouter();
+  const params = useLocalSearchParams<{ date?: string }>();
   const { user } = useAuth();
   const { createEvent } = useEvents();
+  
+  // Animações
+  const fadeAnim = useState(new Animated.Value(0))[0];
   
   // Form states
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [location, setLocation] = useState('');
-  const [startDate, setStartDate] = useState(new Date());
-  const [endDate, setEndDate] = useState(addHours(new Date(), 2));
+  
+  // Inicializar datas com base no parâmetro recebido ou data atual
+  const [startDate, setStartDate] = useState(() => {
+    if (params.date) {
+      try {
+        // Se recebemos uma data do calendário, usamos ela como base
+        const baseDate = parseISO(params.date);
+        // Definir hora para o próximo horário redondo (ex: 10:00, 11:00)
+        const now = new Date();
+        const roundedHour = Math.ceil(now.getHours() / 1) * 1;
+        return setHours(setMinutes(baseDate, 0), roundedHour);
+      } catch (error) {
+        console.error('Error parsing date parameter:', error);
+        return new Date();
+      }
+    }
+    return new Date();
+  });
+  
+  const [endDate, setEndDate] = useState(() => {
+    // Definir data de término como 2 horas após a data de início
+    return addHours(startDate, 2);
+  });
   
   // Date picker states
   const [showStartDatePicker, setShowStartDatePicker] = useState(false);
@@ -47,8 +73,17 @@ const CreateEventScreen: React.FC = () => {
   const [descriptionFocused, setDescriptionFocused] = useState(false);
   const [locationFocused, setLocationFocused] = useState(false);
   
-  // Funções para manipular o DateTimePicker
-  const showDatePicker = (forDate: 'start' | 'end', mode: 'date' | 'time') => {
+  // Efeito de entrada com animação
+  useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+  }, []);
+  
+  // Funções para manipular o DateTimePicker - otimizadas
+  const showDatePicker = useCallback((forDate: 'start' | 'end', mode: 'date' | 'time') => {
     setDatePickerFor(forDate);
     setDatePickerMode(mode);
     if (forDate === 'start') {
@@ -56,9 +91,9 @@ const CreateEventScreen: React.FC = () => {
     } else {
       setShowEndDatePicker(true);
     }
-  };
+  }, []);
   
-  const handleDateChange = (event: any, selectedDate?: Date) => {
+  const handleDateChange = useCallback((event: any, selectedDate?: Date) => {
     if (Platform.OS === 'android') {
       setShowStartDatePicker(false);
       setShowEndDatePicker(false);
@@ -91,7 +126,50 @@ const CreateEventScreen: React.FC = () => {
         }
       } else {
         // Atualiza apenas a hora, mantendo a data
-        const currentEndDate = new Date(endDate);
+        const newDate = new Date(
+          currentStartDate.getFullYear(),
+          currentStartDate.getMonth(),
+          currentStartDate.getDate(),
+          selectedDate.getHours(),
+          selectedDate.getMinutes()
+        );
+        setStartDate(newDate);
+        
+        // Ajustar a data de término para ser 2 horas após a nova data de início
+        setEndDate(addHours(newDate, 2));
+        
+        if (Platform.OS === 'ios') {
+          setShowStartDatePicker(false);
+        }
+      }
+    } else {
+      // Para a data de término
+      const currentEndDate = new Date(endDate);
+      
+      if (datePickerMode === 'date') {
+        // Atualiza apenas a data, mantendo a hora
+        const newDate = new Date(
+          selectedDate.getFullYear(),
+          selectedDate.getMonth(),
+          selectedDate.getDate(),
+          currentEndDate.getHours(),
+          currentEndDate.getMinutes()
+        );
+        
+        // Verificar se a nova data é posterior à data de início
+        if (isBefore(newDate, startDate)) {
+          Alert.alert('Atenção', 'A data de término deve ser posterior à data de início');
+          return;
+        }
+        
+        setEndDate(newDate);
+        
+        // No iOS, após selecionar a data, mostra o seletor de hora
+        if (Platform.OS === 'ios') {
+          setDatePickerMode('time');
+        }
+      } else {
+        // Atualiza apenas a hora, mantendo a data
         const newDate = new Date(
           currentEndDate.getFullYear(),
           currentEndDate.getMonth(),
@@ -100,14 +178,14 @@ const CreateEventScreen: React.FC = () => {
           selectedDate.getMinutes()
         );
         
-        // Não permite hora de término anterior à hora de início no mesmo dia
+        // Verificar se a nova hora é posterior à hora de início no mesmo dia
         if (
           currentEndDate.getFullYear() === startDate.getFullYear() &&
           currentEndDate.getMonth() === startDate.getMonth() &&
           currentEndDate.getDate() === startDate.getDate() &&
           isBefore(newDate, startDate)
         ) {
-          Alert.alert('Atenção', 'O horário de término não pode ser anterior ao horário de início');
+          Alert.alert('Atenção', 'O horário de término deve ser posterior ao horário de início');
           return;
         }
         
@@ -118,19 +196,19 @@ const CreateEventScreen: React.FC = () => {
         }
       }
     }
-  };
+  }, [startDate, endDate, datePickerFor, datePickerMode]);
   
-  // Formatação das datas para exibição
-  const formatDate = (date: Date) => {
+  // Formatação das datas para exibição - otimizada
+  const formatDate = useCallback((date: Date) => {
     return format(date, "dd 'de' MMMM 'de' yyyy", { locale: ptBR });
-  };
+  }, []);
   
-  const formatTime = (date: Date) => {
+  const formatTime = useCallback((date: Date) => {
     return format(date, "HH:mm", { locale: ptBR });
-  };
+  }, []);
   
-  // Validar formulário antes de submeter
-  const validateForm = () => {
+  // Validar formulário antes de submeter - otimizada
+  const validateForm = useCallback(() => {
     if (!title.trim()) {
       Alert.alert('Erro', 'Por favor, informe um título para o evento');
       return false;
@@ -142,10 +220,10 @@ const CreateEventScreen: React.FC = () => {
     }
     
     return true;
-  };
+  }, [title, startDate, endDate]);
   
-  // Criar evento
-  const handleCreateEvent = async () => {
+  // Criar evento - otimizada
+  const handleCreateEvent = useCallback(async () => {
     Keyboard.dismiss();
     
     if (!validateForm()) return;
@@ -164,30 +242,37 @@ const CreateEventScreen: React.FC = () => {
       
       const createdEvent = await createEvent(eventData);
       
-      Alert.alert(
-        'Sucesso',
-        'Evento criado com sucesso!',
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              // Ir para a tela de convites ou para detalhes do evento
-              if (createdEvent && createdEvent.id) {
-                router.push(`/(panel)/events/${createdEvent.id}`);
-              } else {
-                router.push('/(panel)/events/index');
+      // Animação de saída
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }).start(() => {
+        Alert.alert(
+          'Sucesso',
+          'Evento criado com sucesso!',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                // Ir para a tela de convites ou para detalhes do evento
+                if (createdEvent && createdEvent.id) {
+                  router.push(`/(panel)/events/${createdEvent.id}`);
+                } else {
+                  router.push('/(panel)/events/index');
+                }
               }
             }
-          }
-        ]
-      );
+          ]
+        );
+      });
     } catch (error) {
       console.error('Erro ao criar evento:', error);
       Alert.alert('Erro', 'Não foi possível criar o evento. Tente novamente.');
     } finally {
       setLoading(false);
     }
-  };
+  }, [title, description, startDate, endDate, location, user, createEvent, validateForm, fadeAnim, router]);
   
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -201,15 +286,18 @@ const CreateEventScreen: React.FC = () => {
           <TouchableOpacity 
             onPress={() => router.back()}
             style={styles.backButton}
+            accessibilityRole="button"
+            accessibilityLabel="Voltar"
           >
             <Ionicons name="arrow-back" size={24} color="#7B68EE" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Criar Evento</Text>
         </View>
         
-        <ScrollView 
-          style={styles.scrollContainer}
+        <Animated.ScrollView 
+          style={[styles.scrollContainer, { opacity: fadeAnim }]}
           keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
           {/* Título */}
           <View style={styles.inputGroup}>
@@ -228,6 +316,8 @@ const CreateEventScreen: React.FC = () => {
                 maxLength={100}
                 onFocus={() => setTitleFocused(true)}
                 onBlur={() => setTitleFocused(false)}
+                returnKeyType="next"
+                autoFocus={true}
               />
             </View>
           </View>
@@ -262,6 +352,8 @@ const CreateEventScreen: React.FC = () => {
               <TouchableOpacity 
                 style={styles.dateButton}
                 onPress={() => showDatePicker('start', 'date')}
+                accessibilityRole="button"
+                accessibilityLabel="Selecionar data de início"
               >
                 <Ionicons name="calendar" size={20} color="#7B68EE" style={styles.inputIcon} />
                 <Text style={styles.dateTimeText}>{formatDate(startDate)}</Text>
@@ -270,6 +362,8 @@ const CreateEventScreen: React.FC = () => {
               <TouchableOpacity 
                 style={styles.timeButton}
                 onPress={() => showDatePicker('start', 'time')}
+                accessibilityRole="button"
+                accessibilityLabel="Selecionar hora de início"
               >
                 <Ionicons name="time" size={20} color="#7B68EE" style={styles.inputIcon} />
                 <Text style={styles.dateTimeText}>{formatTime(startDate)}</Text>
@@ -284,6 +378,8 @@ const CreateEventScreen: React.FC = () => {
               <TouchableOpacity 
                 style={styles.dateButton}
                 onPress={() => showDatePicker('end', 'date')}
+                accessibilityRole="button"
+                accessibilityLabel="Selecionar data de término"
               >
                 <Ionicons name="calendar" size={20} color="#7B68EE" style={styles.inputIcon} />
                 <Text style={styles.dateTimeText}>{formatDate(endDate)}</Text>
@@ -292,6 +388,8 @@ const CreateEventScreen: React.FC = () => {
               <TouchableOpacity 
                 style={styles.timeButton}
                 onPress={() => showDatePicker('end', 'time')}
+                accessibilityRole="button"
+                accessibilityLabel="Selecionar hora de término"
               >
                 <Ionicons name="time" size={20} color="#7B68EE" style={styles.inputIcon} />
                 <Text style={styles.dateTimeText}>{formatTime(endDate)}</Text>
@@ -315,8 +413,26 @@ const CreateEventScreen: React.FC = () => {
                 onChangeText={setLocation}
                 onFocus={() => setLocationFocused(true)}
                 onBlur={() => setLocationFocused(false)}
+                returnKeyType="done"
               />
             </View>
+          </View>
+          
+          {/* Dicas */}
+          <View style={styles.tipsContainer}>
+            <View style={styles.tipHeader}>
+              <Ionicons name="information-circle" size={20} color="#7B68EE" />
+              <Text style={styles.tipTitle}>Dicas</Text>
+            </View>
+            <Text style={styles.tipText}>
+              • Eventos criados são automaticamente compartilhados com todos os membros da república
+            </Text>
+            <Text style={styles.tipText}>
+              • Você poderá convidar pessoas específicas após criar o evento
+            </Text>
+            <Text style={styles.tipText}>
+              • Defina um local para facilitar a localização do evento
+            </Text>
           </View>
           
           {/* Botão de Criar */}
@@ -324,6 +440,9 @@ const CreateEventScreen: React.FC = () => {
             style={[styles.createButton, loading && styles.buttonDisabled]}
             onPress={handleCreateEvent}
             disabled={loading}
+            accessibilityRole="button"
+            accessibilityLabel="Criar evento"
+            accessibilityHint="Cria um novo evento com as informações fornecidas"
           >
             {loading ? (
               <ActivityIndicator size="small" color="#fff" />
@@ -334,7 +453,7 @@ const CreateEventScreen: React.FC = () => {
               </>
             )}
           </TouchableOpacity>
-        </ScrollView>
+        </Animated.ScrollView>
         
         {/* Date Pickers */}
         {showStartDatePicker && (
@@ -344,6 +463,7 @@ const CreateEventScreen: React.FC = () => {
             display="default"
             onChange={handleDateChange}
             minimumDate={new Date()}
+            textColor="#fff"
           />
         )}
         
@@ -354,6 +474,7 @@ const CreateEventScreen: React.FC = () => {
             display="default"
             onChange={handleDateChange}
             minimumDate={datePickerMode === 'date' ? startDate : undefined}
+            textColor="#fff"
           />
         )}
       </KeyboardAvoidingView>
@@ -380,6 +501,7 @@ const styles = StyleSheet.create({
   },
   backButton: {
     marginRight: 15,
+    padding: 5,
   },
   headerTitle: {
     fontSize: 20,
@@ -409,6 +531,17 @@ const styles = StyleSheet.create({
     borderColor: '#444',
     height: 56,
     paddingHorizontal: 16,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+      },
+      android: {
+        elevation: 1,
+      },
+    }),
   },
   textAreaContainer: {
     height: 120,
@@ -446,6 +579,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#444',
     marginRight: 8,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+      },
+      android: {
+        elevation: 1,
+      },
+    }),
   },
   timeButton: {
     flex: 0.32,
@@ -457,10 +601,46 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderWidth: 1,
     borderColor: '#444',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+      },
+      android: {
+        elevation: 1,
+      },
+    }),
   },
   dateTimeText: {
     color: '#fff',
     fontSize: 16,
+  },
+  tipsContainer: {
+    backgroundColor: 'rgba(123, 104, 238, 0.1)',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(123, 104, 238, 0.2)',
+  },
+  tipHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  tipTitle: {
+    color: '#7B68EE',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginLeft: 8,
+  },
+  tipText: {
+    color: '#ccc',
+    fontSize: 14,
+    marginBottom: 8,
+    lineHeight: 20,
   },
   createButton: {
     flexDirection: 'row',
@@ -471,19 +651,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 10,
     marginBottom: 30,
-    shadowColor: '#7B68EE',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 4.65,
-    elevation: 8,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#7B68EE',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 4.65,
+      },
+      android: {
+        elevation: 8,
+      },
+    }),
   },
   buttonDisabled: {
     backgroundColor: '#5a5a5a',
-    shadowOpacity: 0,
-    elevation: 0,
+    ...Platform.select({
+      ios: {
+        shadowOpacity: 0,
+      },
+      android: {
+        elevation: 0,
+      },
+    }),
   },
   buttonIcon: {
     marginRight: 8,

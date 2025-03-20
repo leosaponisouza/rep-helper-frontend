@@ -1,61 +1,34 @@
 // src/hooks/useEvents.ts
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import api from '../services/api';
-import { ErrorHandler } from '../utils/errorHandling';
 import { useAuth } from '../context/AuthContext';
 import { format, parseISO, isAfter, isBefore, isToday } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-
-export type InvitationStatus = 'INVITED' | 'CONFIRMED' | 'DECLINED';
-
-export interface EventInvitation {
-  userId: string;
-  userName: string;
-  userEmail: string;
-  userProfilePicture: string | null;
-  status: InvitationStatus;
-}
-
-export interface Event {
-  id: number;
-  title: string;
-  description: string;
-  startDate: string;
-  endDate: string;
-  location: string;
-  republicId: string;
-  republicName: string;
-  creatorId: string;
-  creatorName: string;
-  invitations: EventInvitation[];
-  createdAt: string;
-  isFinished: boolean;
-  isHappening: boolean;
-}
-
-export interface EventFormData {
-  title: string;
-  description: string;
-  startDate: string;
-  endDate: string;
-  location: string;
-  republicId: string;
-}
+import { 
+  Event, 
+  EventFormData, 
+  InvitationStatus, 
+  EventFilterType,
+  EventStats,
+  EventsService
+} from '../services/events';
 
 interface UseEventsOptions {
-  initialFilter?: 'all' | 'upcoming' | 'invited' | 'confirmed' | 'past' | 'today';
+  initialFilter?: EventFilterType;
 }
 
+/**
+ * Custom hook for managing events with improved performance and type safety
+ */
 export const useEvents = (options: UseEventsOptions = {}) => {
   const { user } = useAuth();
   const [allEvents, setAllEvents] = useState<Event[]>([]);
   const [filteredEvents, setFilteredEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [filterType, setFilterType] = useState<string>(options.initialFilter || 'all');
+  const [filterType, setFilterType] = useState<EventFilterType>(options.initialFilter || 'all');
 
-  // Funções utilitárias para verificar status dos eventos
-  const checkEventIsHappening = (event: Event): boolean => {
+  // Utility functions to check event status
+  const checkEventIsHappening = useCallback((event: Event): boolean => {
     try {
       const now = new Date();
       const startDate = parseISO(event.startDate);
@@ -66,9 +39,9 @@ export const useEvents = (options: UseEventsOptions = {}) => {
       console.error('Error checking if event is happening:', error);
       return false;
     }
-  };
+  }, []);
 
-  const checkEventIsFinished = (event: Event): boolean => {
+  const checkEventIsFinished = useCallback((event: Event): boolean => {
     try {
       const now = new Date();
       const endDate = parseISO(event.endDate);
@@ -78,55 +51,68 @@ export const useEvents = (options: UseEventsOptions = {}) => {
       console.error('Error checking if event is finished:', error);
       return false;
     }
-  };
+  }, []);
 
-  // Função unificada para buscar eventos
-  const fetchEvents = useCallback(async (filter?: string) => {
+  // Process events to ensure all required properties exist
+  const processEvents = useCallback((events: Event[]): Event[] => {
+    return events.map(event => {
+      // Ensure invitations is never null
+      const processedEvent = {
+        ...event,
+        invitations: event.invitations || [],
+      };
+      
+      // Add status flags if not present
+      if (typeof processedEvent.isHappening !== 'boolean') {
+        processedEvent.isHappening = checkEventIsHappening(processedEvent);
+      }
+      
+      if (typeof processedEvent.isFinished !== 'boolean') {
+        processedEvent.isFinished = checkEventIsFinished(processedEvent);
+      }
+      
+      return processedEvent;
+    });
+  }, [checkEventIsHappening, checkEventIsFinished]);
+
+  // Unified function to fetch events
+  const fetchEvents = useCallback(async (filter?: EventFilterType) => {
     try {
       setLoading(true);
       setError(null);
 
-      let endpoint = '/api/v1/events';
+      let events: Event[] = [];
       
-      // Determinar endpoint baseado no filtro
-      if (filter === 'upcoming') endpoint = '/api/v1/events/upcoming';
-      else if (filter === 'invited') endpoint = '/api/v1/events/invited';
-      else if (filter === 'confirmed') endpoint = '/api/v1/events/confirmed';
+      // Determine which API to call based on filter
+      switch (filter) {
+        case 'upcoming':
+          events = await EventsService.fetchUpcomingEvents();
+          break;
+        case 'invited':
+          events = await EventsService.fetchInvitedEvents();
+          break;
+        case 'confirmed':
+          events = await EventsService.fetchConfirmedEvents();
+          break;
+        default:
+          events = await EventsService.fetchAllEvents();
+          break;
+      }
       
-      const response = await api.get(endpoint);
-      
-      const normalizedEvents = response.data.map((event: any) => {
-        // Garantir que propriedades importantes existam
-        const processedEvent = {
-          ...event,
-          invitations: event.invitations || [], // Garante que nunca seja null
-        };
-        
-        // Adicionar flags de status se não estiverem presentes
-        if (typeof processedEvent.isHappening !== 'boolean') {
-          processedEvent.isHappening = checkEventIsHappening(processedEvent);
-        }
-        
-        if (typeof processedEvent.isFinished !== 'boolean') {
-          processedEvent.isFinished = checkEventIsFinished(processedEvent);
-        }
-        
-        return processedEvent;
-      });
+      const normalizedEvents = processEvents(events);
       
       setAllEvents(normalizedEvents);
       applyFilter(filter || filterType, normalizedEvents);
-    } catch (err) {
-      const parsedError = ErrorHandler.parseError(err);
-      setError(parsedError.message);
-      ErrorHandler.logError(parsedError);
+    } catch (err: any) {
+      setError(err.message || 'Failed to fetch events');
+      console.error('Error fetching events:', err);
     } finally {
       setLoading(false);
     }
-  }, [filterType]);
+  }, [filterType, processEvents]);
 
-  // Função para aplicar filtro aos eventos
-  const applyFilter = useCallback((filter: string, events: Event[] = allEvents) => {
+  // Function to apply filter to events
+  const applyFilter = useCallback((filter: EventFilterType, events: Event[] = allEvents) => {
     setFilterType(filter);
     
     const now = new Date();
@@ -169,13 +155,13 @@ export const useEvents = (options: UseEventsOptions = {}) => {
     }
   }, [allEvents, user?.uid]);
 
-  // Carregar eventos no mount do componente
+  // Load events on component mount
   useEffect(() => {
     fetchEvents(filterType);
   }, [fetchEvents, filterType]);
 
-  // Função para atualizar eventos
-  const refreshEvents = useCallback(async (specificFilter?: string) => {
+  // Function to refresh events
+  const refreshEvents = useCallback(async (specificFilter?: EventFilterType) => {
     const filterToUse = specificFilter || filterType;
     
     try {
@@ -190,68 +176,69 @@ export const useEvents = (options: UseEventsOptions = {}) => {
     }
   }, [fetchEvents, filterType]);
 
-  // Função para criar evento
-  const createEvent = async (eventData: EventFormData) => {
+  // Function to create event
+  const createEvent = useCallback(async (eventData: EventFormData) => {
     try {
-      const response = await api.post('/api/v1/events', eventData);
+      const newEvent = await EventsService.createEvent(eventData);
       
-      // Atualizar lista de eventos
+      // Update events list
       await refreshEvents();
       
-      return response.data;
+      return newEvent;
     } catch (err) {
-      const parsedError = ErrorHandler.parseError(err);
-      ErrorHandler.handle(err);
-      throw parsedError;
+      console.error('Error creating event:', err);
+      throw err;
     }
-  };
+  }, [refreshEvents]);
 
-  // Função para atualizar evento
-  const updateEvent = async (eventId: number, updateData: Partial<EventFormData>) => {
+  // Function to update event
+  const updateEvent = useCallback(async (eventId: number, updateData: Partial<EventFormData>) => {
     try {
-      const response = await api.put(`/api/v1/events/${eventId}`, updateData);
+      const updatedEvent = await EventsService.updateEvent(eventId, updateData);
       
-      // Atualizar lista de eventos
+      // Update events list
       await refreshEvents();
       
-      return response.data;
+      return updatedEvent;
     } catch (err) {
-      const parsedError = ErrorHandler.parseError(err);
-      ErrorHandler.handle(err);
-      throw parsedError;
+      console.error('Error updating event:', err);
+      throw err;
     }
-  };
+  }, [refreshEvents]);
 
-  // Função para excluir evento
-  const deleteEvent = async (eventId: number) => {
+  // Function to delete event
+  const deleteEvent = useCallback(async (eventId: number) => {
     try {
-      await api.delete(`/api/v1/events/${eventId}`);
+      await EventsService.deleteEvent(eventId);
       
-      // Atualizar lista de eventos após exclusão
+      // Update events list after deletion
       setAllEvents(prev => prev.filter(event => event.id !== eventId));
       setFilteredEvents(prev => prev.filter(event => event.id !== eventId));
       
       return true;
     } catch (err) {
-      const parsedError = ErrorHandler.parseError(err);
-      ErrorHandler.handle(err);
-      throw parsedError;
+      console.error('Error deleting event:', err);
+      throw err;
     }
-  };
+  }, []);
 
-  // Função para responder a um convite
-  const respondToInvite = async (eventId: number, status: 'CONFIRMED' | 'DECLINED') => {
+  // Function to respond to an invitation
+  const updateInvitationStatus = useCallback(async (
+    eventId: number | string, 
+    userId: string, 
+    status: InvitationStatus
+  ) => {
     try {
-      const response = await api.put(`/api/v1/events/${eventId}/respond`, { status });
+      const response = await EventsService.updateInvitationStatus(eventId, userId, status);
       
-      // Atualizar apenas o evento alterado na lista atual
+      // Update only the changed event in the current list
       setAllEvents(prev => 
         prev.map(event => 
-          event.id === eventId 
+          event.id === Number(eventId) 
             ? {
                 ...event, 
                 invitations: event.invitations.map(inv => 
-                  inv.userId === user?.uid 
+                  inv.userId === userId 
                     ? { ...inv, status } 
                     : inv
                 )
@@ -260,50 +247,61 @@ export const useEvents = (options: UseEventsOptions = {}) => {
         )
       );
       
-      // Aplicar novamente o filtro para atualizar a lista filtrada
+      // Apply filter again to update filtered list
       applyFilter(filterType);
       
-      return response.data;
+      return response;
     } catch (err) {
-      const parsedError = ErrorHandler.parseError(err);
-      ErrorHandler.handle(err);
-      throw parsedError;
+      console.error('Error updating invitation status:', err);
+      throw err;
     }
-  };
+  }, [applyFilter, filterType]);
 
-  const inviteUsers = async (eventId: number, userIds: string[]) => {
+  // Function to invite users to an event
+  const inviteUsers = useCallback(async (eventId: number, userIds: string[]) => {
     try {
       if (!userIds.length) return null;
       
-      const response = await api.post(`/api/v1/events/${eventId}/invite`, { userIds });
+      const response = await EventsService.inviteUsers(eventId, userIds);
       
-      // Após convidar usuários, buscar novamente o evento específico
+      // After inviting users, fetch the specific event again
       try {
-        const eventResponse = await api.get(`/api/v1/events/${eventId}`);
+        const updatedEvent = await EventsService.getEventById(eventId);
         
-        // Atualizar o evento na lista
+        // Update the event in the list
         setAllEvents(prev => 
           prev.map(event => 
-            event.id === eventId ? eventResponse.data : event
+            event.id === eventId ? updatedEvent : event
           )
         );
         
-        // Aplicar novamente o filtro
+        // Apply filter again
         applyFilter(filterType);
       } catch (error) {
         console.error('Error fetching updated event data:', error);
       }
       
-      return response.data;
+      return response;
     } catch (err) {
-      const parsedError = ErrorHandler.parseError(err);
-      ErrorHandler.handle(err);
-      throw parsedError;
+      console.error('Error inviting users:', err);
+      throw err;
     }
-  };
+  }, [applyFilter, filterType]);
 
-  // Formatar data para exibição
-  const formatEventDate = (dateString: string, includeTime: boolean = true) => {
+  // Function to get event by ID
+  const getEventById = useCallback(async (eventId: string | number): Promise<Event | null> => {
+    try {
+      return await EventsService.getEventById(eventId);
+    } catch (err) {
+      console.error('Error getting event by ID:', err);
+      return null;
+    }
+  }, []);
+
+  // Format date for display
+  const formatEventDate = useCallback((dateString?: string, includeTime: boolean = true): string => {
+    if (!dateString) return '';
+    
     try {
       const date = parseISO(dateString);
       if (includeTime) {
@@ -314,16 +312,18 @@ export const useEvents = (options: UseEventsOptions = {}) => {
       console.error('Error formatting event date:', error, dateString);
       return dateString;
     }
-  };
+  }, []);
 
-  const getCurrentUserEventStatus = (event: Event): InvitationStatus | null => {
+  // Get current user's status for an event
+  const getCurrentUserEventStatus = useCallback((event: Event): InvitationStatus | null => {
     if (!user || !event || !event.invitations) return null;
     
     const invitation = event.invitations.find(inv => inv.userId === user.uid);
     return invitation ? invitation.status : null;
-  };
+  }, [user]);
   
-  const getInvitationStats = (event: Event) => {
+  // Get invitation statistics for an event
+  const getInvitationStats = useCallback((event: Event): EventStats => {
     if (!event || !event.invitations) {
       return { confirmed: 0, pending: 0, declined: 0 };
     }
@@ -333,14 +333,15 @@ export const useEvents = (options: UseEventsOptions = {}) => {
       pending: event.invitations.filter(inv => inv.status === 'INVITED').length,
       declined: event.invitations.filter(inv => inv.status === 'DECLINED').length
     };
-  };
+  }, []);
   
-  // Verificar se o usuário atual é o criador do evento
-  const isCurrentUserCreator = (event: Event): boolean => {
+  // Check if current user is the creator of the event
+  const isCurrentUserCreator = useCallback((event: Event): boolean => {
     return !!user && user.uid === event.creatorId;
-  };
+  }, [user]);
 
-  return {
+  // Memoize the return value to prevent unnecessary re-renders
+  return useMemo(() => ({
     events: filteredEvents,
     allEvents,
     loading,
@@ -351,12 +352,39 @@ export const useEvents = (options: UseEventsOptions = {}) => {
     createEvent,
     updateEvent,
     deleteEvent,
-    respondToInvite,
+    respondToInvite: updateInvitationStatus, // Alias for backward compatibility
+    updateInvitationStatus,
     inviteUsers,
     formatEventDate,
     getCurrentUserEventStatus,
     getInvitationStats,
     isCurrentUserCreator,
-    filterType
-  };
+    filterType,
+    getEventById
+  }), [
+    filteredEvents,
+    allEvents,
+    loading,
+    error,
+    fetchEvents,
+    refreshEvents,
+    applyFilter,
+    createEvent,
+    updateEvent,
+    deleteEvent,
+    updateInvitationStatus,
+    inviteUsers,
+    formatEventDate,
+    getCurrentUserEventStatus,
+    getInvitationStats,
+    isCurrentUserCreator,
+    filterType,
+    getEventById
+  ]);
 };
+
+// Re-export types from the service for backward compatibility
+export type { Event, EventFormData, InvitationStatus, EventFilterType, EventStats, EventInvitation } from '../services/events';
+
+// Re-export the EventsProvider from the context
+export { EventsProvider } from '../context/EventsContext';

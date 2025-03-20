@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import { ErrorHandler } from '../utils/errorHandling';
 import { parseISO, isAfter, isBefore } from 'date-fns';
-import { Task } from './useTasks';
+import { Task } from '@/src/models/task.model';
 import { Event } from './useEvents';
 
 interface HomeStats {
@@ -67,7 +67,7 @@ export function useHomeData(): HomeData {
       }
     } catch (error) {
       console.error("Erro ao carregar estatísticas:", error);
-      const parsedError = ErrorHandler.parseError(error);
+      const parsedError = await ErrorHandler.parseError(error);
       setErrors(prev => ({ ...prev, stats: parsedError.message }));
     } finally {
       setLoading(prev => ({ ...prev, stats: false }));
@@ -94,7 +94,7 @@ export function useHomeData(): HomeData {
       
       // Filtrar apenas tarefas ativas
       const activeTasks = tasks.filter(task => 
-        task && task.status && ['PENDING', 'IN_PROGRESS', 'OVERDUE'].includes(task.status)
+        task && task.status && ['pending', 'in_progress', 'overdue'].includes(task.status)
       );
       
       // Adicionar informação de atraso
@@ -134,7 +134,7 @@ export function useHomeData(): HomeData {
       setUserTasks(sortedTasks.slice(0, 3)); // Mostrar apenas as 3 primeiras
     } catch (error) {
       console.error("Erro em fetchUserTasks:", error);
-      const parsedError = ErrorHandler.parseError(error);
+      const parsedError = await ErrorHandler.parseError(error);
       setErrors(prev => ({ ...prev, tasks: parsedError.message }));
     } finally {
       setLoading(prev => ({ ...prev, tasks: false }));
@@ -195,7 +195,7 @@ export function useHomeData(): HomeData {
       setUpcomingEvents(sortedEvents.slice(0, 3)); // Mostrar apenas os 3 próximos
     } catch (error) {
       console.error("Erro em fetchUpcomingEvents:", error);
-      const parsedError = ErrorHandler.parseError(error);
+      const parsedError = await ErrorHandler.parseError(error);
       setErrors(prev => ({ ...prev, events: parsedError.message }));
     } finally {
       setLoading(prev => ({ ...prev, events: false }));

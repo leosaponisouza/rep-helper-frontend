@@ -1,185 +1,283 @@
-// app/(panel)/events/events-list.tsx
-import React, { useState, useEffect, useCallback } from 'react';
+// app/(panel)/events/events-list.tsx - Versão otimizada com melhor UX e performance
+import React, { useState, useCallback, useMemo } from 'react';
 import {
-  View, 
-  Text, 
-  StyleSheet, 
-  FlatList, 
-  TouchableOpacity, 
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  TouchableOpacity,
+  ActivityIndicator,
   RefreshControl,
-  ActivityIndicator
+  Dimensions,
+  Platform,
+  Animated,
+  Image
 } from 'react-native';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import { useEvents, Event } from '../../../src/hooks/useEvents';
+import { useEventsContext, Event, EventFilterType } from '../../../src/context/EventsContext';
 import { useAuth } from '../../../src/context/AuthContext';
-import { format, parseISO, isToday, isTomorrow, isPast } from 'date-fns';
+import { format, parseISO, isToday, isTomorrow, isPast, isAfter, isBefore, addDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { useFocusEffect } from '@react-navigation/native';
 
-// Interface de tipos para as propriedades do EventItem
-interface EventItemProps {
-  item: Event;
-  currentUserId?: string;
-  onPress: (eventId: number) => void;
-}
+const { width } = Dimensions.get('window');
 
-
-const EventItem: React.FC<EventItemProps> = ({ 
-  item, 
-  currentUserId,
-  onPress
-}) => {
-  // Verificar se o usuário atual está atribuído a este evento
-  const isAssignedToCurrentUser = item.invitations?.some(
-    user => user.userId === currentUserId
+// Componente otimizado para a lista de eventos
+const EventsListScreen: React.FC = () => {
+  const router = useRouter();
+  const { user } = useAuth();
+  const { events, loading, refreshEvents } = useEventsContext();
+  
+  // Estados
+  const [refreshing, setRefreshing] = useState<boolean>(false);
+  const [filter, setFilter] = useState<EventFilterType>('upcoming');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  
+  // Animações
+  const scrollY = useState(new Animated.Value(0))[0];
+  const headerOpacity = scrollY.interpolate({
+    inputRange: [0, 50],
+    outputRange: [1, 0.9],
+    extrapolate: 'clamp'
+  });
+  
+  // Recarregar eventos quando a tela receber foco
+  useFocusEffect(
+    useCallback(() => {
+      refreshEventsList();
+    }, [])
   );
   
-  // Determinar a cor do status do evento
-  const getStatusColor = (event: Event) => {
-    if (!event) return '#7B68EE'; // Cor padrão caso o evento seja nulo
+  // Função para recarregar a lista de eventos - otimizada
+  const refreshEventsList = useCallback(async () => {
+    try {
+      setRefreshing(true);
+      setErrorMessage(null);
+      await refreshEvents(filter);
+    } catch (error) {
+      console.error('Error refreshing events list:', error);
+      setErrorMessage('Não foi possível carregar os eventos. Tente novamente.');
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refreshEvents, filter]);
+  
+  // Filtrar eventos com base no filtro selecionado - otimizado com useMemo
+  const filteredEvents = useMemo(() => {
+    if (!events || events.length === 0) return [];
     
+    const now = new Date();
+    const tomorrow = addDays(now, 1);
+    
+    switch (filter) {
+      case 'upcoming':
+        return events
+          .filter(event => {
+            if (!event.startDate) return false;
+            const eventDate = parseISO(event.startDate);
+            return isAfter(eventDate, now) || isToday(eventDate);
+          })
+          .sort((a, b) => {
+            if (!a.startDate || !b.startDate) return 0;
+            return new Date(a.startDate).getTime() - new Date(b.startDate).getTime();
+          });
+      
+      case 'past':
+        return events
+          .filter(event => {
+            if (!event.startDate) return false;
+            const eventDate = parseISO(event.startDate);
+            return isBefore(eventDate, now) && !isToday(eventDate);
+          })
+          .sort((a, b) => {
+            if (!a.startDate || !b.startDate) return 0;
+            return new Date(b.startDate).getTime() - new Date(a.startDate).getTime();
+          });
+      
+      case 'mine':
+        return events
+          .filter(event => {
+            // Verificar se o usuário é o criador ou está confirmado
+            const isCreator = event.creatorId === user?.uid;
+            const isConfirmed = event.invitations?.some(
+              inv => inv.userId === user?.uid && inv.status === 'CONFIRMED'
+            );
+            return isCreator || isConfirmed;
+          })
+          .sort((a, b) => {
+            if (!a.startDate || !b.startDate) return 0;
+            return new Date(a.startDate).getTime() - new Date(b.startDate).getTime();
+          });
+      
+      default: // 'all'
+        return events.sort((a, b) => {
+          if (!a.startDate || !b.startDate) return 0;
+          return new Date(a.startDate).getTime() - new Date(b.startDate).getTime();
+        });
+    }
+  }, [events, filter, user]);
+  
+  // Agrupar eventos por data - otimizado com useMemo
+  const groupedEvents = useMemo(() => {
+    if (!filteredEvents || filteredEvents.length === 0) return [];
+    
+    const groups: { title: string, data: Event[] }[] = [];
+    const now = new Date();
+    const tomorrow = addDays(now, 1);
+    
+    // Função para obter o título da seção
+    const getSectionTitle = (date: Date): string => {
+      if (isToday(date)) return 'Hoje';
+      if (isTomorrow(date)) return 'Amanhã';
+      return format(date, "EEEE, dd 'de' MMMM", { locale: ptBR });
+    };
+    
+    // Agrupar eventos por data
+    filteredEvents.forEach(event => {
+      if (!event.startDate) return;
+      
+      try {
+        const eventDate = parseISO(event.startDate);
+        const dateStr = format(eventDate, 'yyyy-MM-dd');
+        
+        // Verificar se já existe um grupo para esta data
+        const existingGroup = groups.find(group => {
+          const firstEvent = group.data[0];
+          if (!firstEvent.startDate) return false;
+          
+          const firstEventDate = parseISO(firstEvent.startDate);
+          return format(firstEventDate, 'yyyy-MM-dd') === dateStr;
+        });
+        
+        if (existingGroup) {
+          existingGroup.data.push(event);
+        } else {
+          groups.push({
+            title: getSectionTitle(eventDate),
+            data: [event]
+          });
+        }
+      } catch (error) {
+        console.error('Error processing event date for grouping:', error);
+      }
+    });
+    
+    return groups;
+  }, [filteredEvents]);
+  
+  // Formatar hora do evento - otimizada
+  const formatEventTime = useCallback((dateString?: string): string => {
+    if (!dateString) return '';
+    
+    try {
+      const date = parseISO(dateString);
+      return format(date, "HH:mm", { locale: ptBR });
+    } catch (error) {
+      return '';
+    }
+  }, []);
+  
+  // Função para determinar a cor do evento com tratamento seguro
+  const getEventColor = useCallback((event: Event): string => {
+    if (!event) return '#7B68EE';
+    
+    // Verificar se é um evento atrasado ou cancelado
     if (event.isFinished) return '#9E9E9E';
+    
+    // Verificar se está acontecendo agora
     if (event.isHappening) return '#4CAF50';
     
     // Verificar status do convite para o usuário atual
-    if (currentUserId && event.invitations) {
-      const userInvitation = event.invitations.find(inv => inv.userId === currentUserId);
+    if (user && event.invitations && Array.isArray(event.invitations)) {
+      const userInvitation = event.invitations.find(inv => inv.userId === user.uid);
       
       if (userInvitation) {
         switch (userInvitation.status) {
-          case 'CONFIRMED': return '#7B68EE'; // Confirmado pelo usuário
-          case 'INVITED': return '#FFC107';   // Convite pendente
-          case 'DECLINED': return '#FF6347';  // Recusado pelo usuário
+          case 'CONFIRMED': return '#7B68EE';
+          case 'INVITED': return '#FFC107';
+          case 'DECLINED': return '#FF6347';
+          default: return '#7B68EE';
         }
       }
     }
     
     return '#7B68EE';
-  };
-
-  // Formatar data para exibição
-  const formatDate = (dateString?: string) => {
-    if (!dateString) return null;
-    
-    try {
-      const date = parseISO(dateString);
-      const today = new Date();
-      const tomorrow = new Date(today);
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      
-      const isEventToday = isToday(date);
-      const isEventTomorrow = isTomorrow(date);
-      const isEventPast = isPast(date) && !isEventToday;
-      
-      const formattedDate = format(date, "dd/MM", { locale: ptBR });
-      const formattedTime = format(date, "HH:mm", { locale: ptBR });
-      
-      if (isEventToday) return { 
-        text: `Hoje, ${formattedTime}`, 
-        isSpecial: true, 
-        isOverdue: false 
-      };
-      
-      if (isEventTomorrow) return { 
-        text: `Amanhã, ${formattedTime}`, 
-        isSpecial: true, 
-        isOverdue: false 
-      };
-      
-      return { 
-        text: `${formattedDate}, ${formattedTime}`, 
-        isSpecial: false, 
-        isOverdue: isEventPast 
-      };
-    } catch (error) {
-      console.error('Erro ao formatar data:', error);
-      return { text: dateString, isSpecial: false, isOverdue: false };
+  }, [user]);
+  
+  // Renderizar item de evento com tratamento seguro - otimizado
+  const renderEventItem = useCallback(({ item }: { item: Event }): React.ReactElement => {
+    // Calcular contagem de confirmados com segurança
+    let confirmedCount = 0;
+    if (item.invitations && Array.isArray(item.invitations)) {
+      confirmedCount = item.invitations.filter(inv => inv.status === 'CONFIRMED').length;
     }
-  };
-  
-  // Formatar a data para exibição
-  const formattedDate = formatDate(item.startDate);
-  
-  // Contar participantes confirmados com segurança
-  const confirmedCount = item.invitations 
-    ? item.invitations.filter(inv => inv.status === 'CONFIRMED').length 
-    : 0;
-  
-  return (
-    <TouchableOpacity
-      style={[
-        styles.eventItem, 
-        { borderLeftColor: getStatusColor(item) }
-      ]}
-      onPress={() => onPress(item.id)}
-      accessibilityRole="button"
-      accessibilityLabel={`Evento: ${item.title}`}
-      accessibilityHint="Toque para ver detalhes do evento"
-    >
-      <View style={styles.eventContent}>
-        <View style={styles.eventMainContent}>
+    
+    // Verificar status do usuário atual
+    const userStatus = user && item.invitations ? 
+      item.invitations.find(inv => inv.userId === user.uid)?.status : null;
+    
+    return (
+      <TouchableOpacity
+        style={[
+          styles.eventItem,
+          { borderLeftColor: getEventColor(item) }
+        ]}
+        onPress={() => {
+          router.push(`/(panel)/events/${item.id}`);
+        }}
+        activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityLabel={`Evento: ${item.title}`}
+        accessibilityHint="Toque para ver detalhes do evento"
+      >
+        <View style={styles.eventTimeContainer}>
+          <Text style={styles.eventTime}>
+            {formatEventTime(item.startDate)}
+          </Text>
+          {item.isHappening && (
+            <View style={styles.happeningNowBadge}>
+              <Text style={styles.happeningNowText}>Agora</Text>
+            </View>
+          )}
+        </View>
+        
+        <View style={styles.eventContent}>
           <Text style={styles.eventTitle} numberOfLines={1}>
-            {item.title || 'Sem título'}
+            {item.title || 'Evento sem título'}
           </Text>
           
-          <View style={styles.eventDateTimeContainer}>
-            <View style={styles.dateTimeRow}>
-              <Ionicons name="time-outline" size={16} color="#7B68EE" style={styles.eventIcon} />
-              <Text style={[
-                styles.eventDateTime,
-                formattedDate?.isSpecial && styles.specialDateText,
-                formattedDate?.isOverdue && styles.overdueDateText
-              ]}>
-                {formattedDate?.text || 'Data não disponível'}
+          {item.location && (
+            <View style={styles.locationContainer}>
+              <Ionicons name="location-outline" size={14} color="#aaa" />
+              <Text style={styles.locationText} numberOfLines={1}>
+                {item.location}
               </Text>
             </View>
-            
-            {item.location && (
-              <View style={styles.locationContainer}>
-                <Ionicons name="location-outline" size={16} color="#aaa" style={styles.eventIcon} />
-                <Text style={styles.eventLocation} numberOfLines={1}>{item.location}</Text>
-              </View>
-            )}
-          </View>
+          )}
           
-          <View style={styles.eventFooter}>
-            <View style={styles.participantsContainer}>
-              <Ionicons name="people-outline" size={16} color="#aaa" style={styles.eventIcon} />
-              <Text style={styles.participantsText}>
+          <View style={styles.eventMeta}>
+            <View style={styles.attendeesInfo}>
+              <Ionicons name="people-outline" size={14} color="#7B68EE" />
+              <Text style={styles.attendeesText}>
                 {confirmedCount} {confirmedCount === 1 ? 'confirmado' : 'confirmados'}
               </Text>
             </View>
             
-            {currentUserId && item.creatorId === currentUserId && (
-              <View style={styles.creatorBadge}>
-                <Text style={styles.creatorText}>Criador</Text>
-              </View>
-            )}
-            
-            {isAssignedToCurrentUser && currentUserId !== item.creatorId && (
+            {userStatus && (
               <View style={[
-                styles.participantBadge,
-                item.invitations?.find(inv => inv.userId === currentUserId)?.status === 'CONFIRMED' 
-                  ? styles.confirmedBadge
-                  : item.invitations?.find(inv => inv.userId === currentUserId)?.status === 'DECLINED'
-                    ? styles.declinedBadge
-                    : styles.invitedBadge
+                styles.statusBadge,
+                userStatus === 'CONFIRMED' ? styles.confirmedBadge :
+                userStatus === 'INVITED' ? styles.invitedBadge :
+                styles.declinedBadge
               ]}>
                 <Text style={[
-                  styles.participantBadgeText,
-                  item.invitations?.find(inv => inv.userId === currentUserId)?.status === 'CONFIRMED'
-                    ? styles.confirmedBadgeText
-                    : item.invitations?.find(inv => inv.userId === currentUserId)?.status === 'DECLINED'
-                      ? styles.declinedBadgeText
-                      : styles.invitedBadgeText
+                  styles.statusBadgeText,
+                  userStatus === 'CONFIRMED' ? styles.confirmedBadgeText :
+                  userStatus === 'INVITED' ? styles.invitedBadgeText :
+                  styles.declinedBadgeText
                 ]}>
-                  {item.invitations?.find(inv => inv.userId === currentUserId)?.status === 'CONFIRMED'
-                    ? 'Confirmado'
-                    : item.invitations?.find(inv => inv.userId === currentUserId)?.status === 'DECLINED'
-                      ? 'Recusado'
-                      : 'Convidado'
-                  }
+                  {userStatus === 'CONFIRMED' ? 'Confirmado' :
+                   userStatus === 'INVITED' ? 'Convidado' : 'Recusado'}
                 </Text>
               </View>
             )}
@@ -187,129 +285,239 @@ const EventItem: React.FC<EventItemProps> = ({
         </View>
         
         <Ionicons name="chevron-forward" size={20} color="#7B68EE" />
-      </View>
-    </TouchableOpacity>
-  );
-};
-
-interface EventsListProps {
-  initialFilter?: string;
-}
-
-const EventsListScreen: React.FC<EventsListProps> = ({ initialFilter = 'all' }) => {
-  const router = useRouter();
-  const { user } = useAuth();
-  const [filter, setFilter] = useState<string>(initialFilter);
-  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
-
-  // Definição das opções de filtro
-  const eventFilters = [
-    { key: 'all', label: 'Todos' },
-    { key: 'upcoming', label: 'Próximos' },
-    { key: 'today', label: 'Hoje' },
-    { key: 'confirmed', label: 'Confirmados' },
-    { key: 'invited', label: 'Convites' },
-    { key: 'past', label: 'Passados' }
-  ];
-
-  // Obter hook de eventos
-  const {
-    events,
-    loading,
-    fetchEvents,
-    refreshEvents,
-    applyFilter,
-    filterType
-  } = useEvents();
-
-  // Recarregar eventos quando a tela receber foco
-  useFocusEffect(
-    useCallback(() => {
-      // Verificar se é necessário recarregar (tempo desde última recarga)
-      const now = new Date();
-      const timeSinceLastRefresh = now.getTime() - lastRefresh.getTime();
-      const shouldRefresh = timeSinceLastRefresh > 30000; // 30 segundos
-      
-      if (shouldRefresh) {
-        refreshEventsList();
-        setLastRefresh(now);
-      }
-    }, [lastRefresh])
-  );
-
-  // Carregar eventos inicialmente com o filtro inicial
-  useEffect(() => {
-    // Apply the initial filter when component mounts
-    applyFilter(initialFilter);
-    refreshEvents(initialFilter);
-  }, [initialFilter]);
-
-  // Função de atualização para o componente
-  const refreshEventsList = useCallback(async () => {
-    await refreshEvents(filter);
-  }, [refreshEvents, filter]);
-
-  // Função para mudar filtro e recarregar dados
-  const handleFilterChange = useCallback((newFilter: string) => {
-    setFilter(newFilter);
-    applyFilter(newFilter);
-    refreshEvents(newFilter);
-  }, [applyFilter, refreshEvents]);
+      </TouchableOpacity>
+    );
+  }, [formatEventTime, getEventColor, router, user]);
   
-  // Função para navegar para o detalhe do evento
-  const navigateToEventDetails = useCallback((eventId: number) => {
-    router.push(`/(panel)/events/${eventId}`);
-  }, [router]);
-
-  return (
-    <View style={styles.container}>
-      <FlatList
-        data={events}
-        keyExtractor={(item) => item.id?.toString() || Math.random().toString()}
-        renderItem={({ item }) => (
-          <EventItem 
-            item={item}
-            currentUserId={user?.uid}
-            onPress={navigateToEventDetails}
+  // Renderizar cabeçalho de seção - otimizado
+  const renderSectionHeader = useCallback(({ section }: { section: { title: string } }) => (
+    <View style={styles.sectionHeader}>
+      <Text style={styles.sectionHeaderText}>{section.title}</Text>
+    </View>
+  ), []);
+  
+  // Renderizar separador entre seções - otimizado
+  const renderSectionSeparator = useCallback(() => (
+    <View style={styles.sectionSeparator} />
+  ), []);
+  
+  // Renderizar estado vazio - otimizado
+  const renderEmptyState = useCallback(() => {
+    if (loading && !refreshing) {
+      return (
+        <View style={styles.emptyContainer}>
+          <ActivityIndicator size="large" color="#7B68EE" />
+          <Text style={styles.emptyText}>Carregando eventos...</Text>
+        </View>
+      );
+    }
+    
+    let message = 'Nenhum evento encontrado';
+    let subMessage = 'Crie um novo evento para começar';
+    let icon = 'calendar-outline';
+    
+    switch (filter) {
+      case 'upcoming':
+        message = 'Nenhum evento futuro';
+        subMessage = 'Crie um novo evento para começar';
+        break;
+      case 'past':
+        message = 'Nenhum evento passado';
+        subMessage = 'Os eventos passados aparecerão aqui';
+        icon = 'time-outline';
+        break;
+      case 'mine':
+        message = 'Você não tem eventos';
+        subMessage = 'Crie um evento ou confirme presença em um';
+        icon = 'person-outline';
+        break;
+    }
+    
+    return (
+      <View style={styles.emptyContainer}>
+        <Ionicons name={icon} size={64} color="#7B68EE" />
+        <Text style={styles.emptyTitle}>{message}</Text>
+        <Text style={styles.emptyText}>{subMessage}</Text>
+        
+        <TouchableOpacity 
+          style={styles.createEventButton}
+          onPress={() => router.push('/(panel)/events/create')}
+        >
+          <Text style={styles.createEventButtonText}>
+            Criar Evento
+          </Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }, [loading, refreshing, filter, router]);
+  
+  // Renderizar cabeçalho da lista - otimizado
+  const renderListHeader = useCallback(() => (
+    <Animated.View style={[styles.filtersContainer, { opacity: headerOpacity }]}>
+      <Text style={styles.filtersTitle}>Filtrar por:</Text>
+      <View style={styles.filterButtons}>
+        <TouchableOpacity 
+          style={[
+            styles.filterButton,
+            filter === 'upcoming' && styles.filterButtonActive
+          ]}
+          onPress={() => setFilter('upcoming')}
+          accessibilityRole="button"
+          accessibilityLabel="Filtrar por eventos futuros"
+          accessibilityState={{ selected: filter === 'upcoming' }}
+        >
+          <Ionicons 
+            name="calendar"
+            size={16} 
+            color={filter === 'upcoming' ? '#7B68EE' : '#aaa'} 
+            style={styles.filterIcon}
           />
+          <Text style={[
+            styles.filterButtonText,
+            filter === 'upcoming' && styles.filterButtonTextActive
+          ]}>
+            Próximos
+          </Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={[
+            styles.filterButton,
+            filter === 'past' && styles.filterButtonActive
+          ]}
+          onPress={() => setFilter('past')}
+          accessibilityRole="button"
+          accessibilityLabel="Filtrar por eventos passados"
+          accessibilityState={{ selected: filter === 'past' }}
+        >
+          <Ionicons 
+            name="time"
+            size={16} 
+            color={filter === 'past' ? '#7B68EE' : '#aaa'} 
+            style={styles.filterIcon}
+          />
+          <Text style={[
+            styles.filterButtonText,
+            filter === 'past' && styles.filterButtonTextActive
+          ]}>
+            Passados
+          </Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={[
+            styles.filterButton,
+            filter === 'mine' && styles.filterButtonActive
+          ]}
+          onPress={() => setFilter('mine')}
+          accessibilityRole="button"
+          accessibilityLabel="Filtrar por meus eventos"
+          accessibilityState={{ selected: filter === 'mine' }}
+        >
+          <Ionicons 
+            name="person"
+            size={16} 
+            color={filter === 'mine' ? '#7B68EE' : '#aaa'} 
+            style={styles.filterIcon}
+          />
+          <Text style={[
+            styles.filterButtonText,
+            filter === 'mine' && styles.filterButtonTextActive
+          ]}>
+            Meus
+          </Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={[
+            styles.filterButton,
+            filter === 'all' && styles.filterButtonActive
+          ]}
+          onPress={() => setFilter('all')}
+          accessibilityRole="button"
+          accessibilityLabel="Mostrar todos os eventos"
+          accessibilityState={{ selected: filter === 'all' }}
+        >
+          <Ionicons 
+            name="apps"
+            size={16} 
+            color={filter === 'all' ? '#7B68EE' : '#aaa'} 
+            style={styles.filterIcon}
+          />
+          <Text style={[
+            styles.filterButtonText,
+            filter === 'all' && styles.filterButtonTextActive
+          ]}>
+            Todos
+          </Text>
+        </TouchableOpacity>
+      </View>
+    </Animated.View>
+  ), [filter, headerOpacity]);
+  
+  // Renderizar lista de eventos agrupados - otimizado
+  const renderEventsList = useCallback(() => {
+    if (groupedEvents.length === 0) {
+      return renderEmptyState();
+    }
+    
+    return (
+      <Animated.SectionList
+        sections={groupedEvents}
+        keyExtractor={(item) => String(item.id)}
+        renderItem={({ item }) => renderEventItem({ item })}
+        renderSectionHeader={({ section }) => renderSectionHeader({ section })}
+        SectionSeparatorComponent={renderSectionSeparator}
+        stickySectionHeadersEnabled={true}
+        showsVerticalScrollIndicator={false}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: true }
         )}
-        ListEmptyComponent={() => (
-          <View style={styles.emptyStateContainer}>
-            <MaterialCommunityIcons 
-              name="calendar-blank" 
-              size={64} 
-              color="#7B68EE" 
-            />
-            <Text style={styles.emptyStateText}>
-              {loading ? 'Carregando eventos...' : 
-              filter === 'invited' ? 'Nenhum convite pendente' : 
-              filter === 'confirmed' ? 'Nenhum evento confirmado' :
-              filter === 'today' ? 'Nenhum evento para hoje' :
-              filter === 'upcoming' ? 'Nenhum evento próximo' :
-              filter === 'past' ? 'Nenhum evento passado' :
-              'Nenhum evento encontrado'}
-            </Text>
-            <Text style={styles.emptyStateSubtext}>
-              {!loading && (
-                filter === 'all' ? 'Crie seu primeiro evento clicando no botão "+' : 
-                'Ajuste os filtros ou crie um novo evento'
-              )}
-            </Text>
-          </View>
-        )}
+        scrollEventThrottle={16}
         refreshControl={
           <RefreshControl
-            refreshing={loading}
+            refreshing={refreshing}
             onRefresh={refreshEventsList}
             colors={['#7B68EE']}
             tintColor={'#7B68EE'}
+            progressBackgroundColor="#333"
           />
         }
-        contentContainerStyle={[
-          styles.listContainer,
-          events.length === 0 && { flex: 1, justifyContent: 'center' }
-        ]}
+        contentContainerStyle={styles.listContent}
+        ListHeaderComponent={renderListHeader}
+        ListFooterComponent={<View style={{ height: 80 }} />}
       />
+    );
+  }, [groupedEvents, renderEmptyState, renderEventItem, renderSectionHeader, 
+       renderSectionSeparator, refreshing, refreshEventsList, renderListHeader, scrollY]);
+  
+  return (
+    <View style={styles.container}>
+      {/* Exibir mensagem de erro se houver */}
+      {errorMessage && (
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>{errorMessage}</Text>
+          <TouchableOpacity 
+            style={styles.retryButton}
+            onPress={refreshEventsList}
+          >
+            <Text style={styles.retryButtonText}>Tentar novamente</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+      
+      {renderEventsList()}
+      
+      {/* Botão flutuante de adicionar */}
+      <TouchableOpacity 
+        style={styles.floatingButton}
+        onPress={() => router.push('/(panel)/events/create')}
+        accessibilityLabel="Criar evento"
+        accessibilityRole="button"
+      >
+        <Ionicons name="add" size={24} color="white" />
+      </TouchableOpacity>
     </View>
   );
 };
@@ -319,110 +527,172 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#222',
   },
-  listContainer: {
-    flexGrow: 1,
-    backgroundColor: '#222',
-    paddingHorizontal: 20,
-    paddingTop: 10,
-    paddingBottom: 20,
-  },
-  eventItem: {
+  filtersContainer: {
     backgroundColor: '#333',
-    borderRadius: 10,
-    marginBottom: 12,
-    borderLeftWidth: 4,
-    overflow: 'hidden',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginBottom: 8,
+    borderRadius: 12,
+    margin: 10,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 3,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
   },
-  eventContent: {
-    padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  eventMainContent: {
-    flex: 1,
-  },
-  eventTitle: {
-    fontSize: 18,
+  filtersTitle: {
+    color: '#fff',
+    fontSize: 16,
     fontWeight: 'bold',
-    color: '#fff',
     marginBottom: 8,
   },
-  eventDateTimeContainer: {
-    marginBottom: 8,
+  filterButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
   },
-  dateTimeRow: {
+  filterButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 4,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    backgroundColor: '#444',
   },
-  eventIcon: {
-    marginRight: 6,
+  filterButtonActive: {
+    backgroundColor: 'rgba(123, 104, 238, 0.2)',
   },
-  eventDateTime: {
-    color: '#fff',
+  filterIcon: {
+    marginRight: 4,
+  },
+  filterButtonText: {
+    color: '#aaa',
     fontSize: 14,
   },
-  specialDateText: {
+  filterButtonTextActive: {
     color: '#7B68EE',
     fontWeight: 'bold',
   },
-  overdueDateText: {
-    color: '#FF6347',
+  listContent: {
+    paddingBottom: 80, // Espaço para o botão flutuante
+  },
+  sectionHeader: {
+    backgroundColor: '#222',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#333',
+  },
+  sectionHeaderText: {
+    color: '#7B68EE',
+    fontSize: 18,
     fontWeight: 'bold',
+    textTransform: 'capitalize',
+  },
+  sectionSeparator: {
+    height: 16,
+  },
+  eventItem: {
+    flexDirection: 'row',
+    backgroundColor: '#333',
+    borderRadius: 12,
+    marginHorizontal: 16,
+    marginVertical: 8,
+    padding: 16,
+    alignItems: 'center',
+    borderLeftWidth: 4,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+      },
+      android: {
+        elevation: 2,
+      },
+    }),
+  },
+  eventTimeContainer: {
+    marginRight: 16,
+    alignItems: 'center',
+  },
+  eventTime: {
+    color: '#7B68EE',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  happeningNowBadge: {
+    backgroundColor: 'rgba(76, 175, 80, 0.2)',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    marginTop: 4,
+  },
+  happeningNowText: {
+    color: '#4CAF50',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  eventContent: {
+    flex: 1,
+    marginRight: 10,
+  },
+  eventTitle: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 6,
   },
   locationContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginBottom: 8,
   },
-  eventLocation: {
-    color: '#ccc',
+  locationText: {
+    color: '#aaa',
     fontSize: 14,
+    marginLeft: 4,
   },
-  eventFooter: {
+  eventMeta: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 6,
   },
-  participantsContainer: {
+  attendeesInfo: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  participantsText: {
+  attendeesText: {
     color: '#aaa',
     fontSize: 12,
+    marginLeft: 4,
   },
-  creatorBadge: {
-    backgroundColor: 'rgba(123, 104, 238, 0.15)',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  creatorText: {
-    color: '#7B68EE',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  participantBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
   },
   confirmedBadge: {
-    backgroundColor: 'rgba(76, 175, 80, 0.15)',
+    backgroundColor: 'rgba(123, 104, 238, 0.2)',
   },
   invitedBadge: {
-    backgroundColor: 'rgba(255, 193, 7, 0.15)',
+    backgroundColor: 'rgba(255, 193, 7, 0.2)',
   },
   declinedBadge: {
-    backgroundColor: 'rgba(255, 99, 71, 0.15)',
+    backgroundColor: 'rgba(255, 99, 71, 0.2)',
   },
-  participantBadgeText: {
-    fontSize: 12,
+  statusBadgeText: {
+    fontSize: 10,
     fontWeight: 'bold',
   },
   confirmedBadgeText: {
-    color: '#4CAF50',
+    color: '#7B68EE',
   },
   invitedBadgeText: {
     color: '#FFC107',
@@ -430,23 +700,93 @@ const styles = StyleSheet.create({
   declinedBadgeText: {
     color: '#FF6347',
   },
-  emptyStateContainer: {
+  emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 60,
+    paddingVertical: 40,
+    paddingHorizontal: 20,
   },
-  emptyStateText: {
-    fontSize: 18,
+  emptyTitle: {
     color: '#fff',
-    marginTop: 20,
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginTop: 16,
+    marginBottom: 8,
     textAlign: 'center',
   },
-  emptyStateSubtext: {
-    fontSize: 14,
+  emptyText: {
     color: '#aaa',
-    marginTop: 10,
+    fontSize: 16,
     textAlign: 'center',
+    marginBottom: 24,
+  },
+  createEventButton: {
+    backgroundColor: '#7B68EE',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#7B68EE',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 4.65,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
+  },
+  createEventButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  errorContainer: {
+    padding: 16,
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 99, 71, 0.1)',
+    margin: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 99, 71, 0.3)',
+  },
+  errorText: {
+    color: '#FF6347',
+    marginBottom: 10,
+  },
+  retryButton: {
+    backgroundColor: 'rgba(255, 99, 71, 0.2)',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 4,
+  },
+  retryButtonText: {
+    color: '#FF6347',
+    fontWeight: 'bold',
+  },
+  floatingButton: {
+    position: 'absolute',
+    bottom: 20,
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#7B68EE',
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#7B68EE',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 4.65,
+      },
+      android: {
+        elevation: 8,
+      },
+    }),
   },
 });
 
