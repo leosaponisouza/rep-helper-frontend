@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   SafeAreaView,
   StatusBar,
-  ScrollView,
   KeyboardAvoidingView,
   Platform,
   Alert,
@@ -20,12 +19,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { useEvents } from '../../../src/hooks/useEvents';
 import { useAuth } from '../../../src/context/AuthContext';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { format, addHours, parseISO, isBefore, startOfDay, setHours, setMinutes } from 'date-fns';
+import { format, addHours, parseISO, isBefore, setHours, setMinutes } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 // Importar estilos compartilhados
 import { sharedStyles, colors } from '../../../src/styles/sharedStyles';
 import eventsStyles from '@/src/styles/eventStyles';
+import { formatLocalDate, formatToBackendDateTime } from '@/src/utils/dateUtils';
 
 const CreateEventScreen: React.FC = () => {
   const router = useRouter();
@@ -201,11 +201,6 @@ const CreateEventScreen: React.FC = () => {
     }
   }, [startDate, endDate, datePickerFor, datePickerMode]);
   
-  // Formatação das datas para exibição - otimizada
-  const formatDate = useCallback((date: Date) => {
-    return format(date, "dd 'de' MMMM 'de' yyyy", { locale: ptBR });
-  }, []);
-  
   const formatTime = useCallback((date: Date) => {
     return format(date, "HH:mm", { locale: ptBR });
   }, []);
@@ -224,8 +219,6 @@ const CreateEventScreen: React.FC = () => {
     
     return true;
   }, [title, startDate, endDate]);
-  
-  // Criar evento - otimizada
   const handleCreateEvent = useCallback(async () => {
     Keyboard.dismiss();
     
@@ -237,8 +230,9 @@ const CreateEventScreen: React.FC = () => {
       const eventData = {
         title: title.trim(),
         description: description.trim() || '',
-        startDate: startDate.toISOString(),
-        endDate: endDate.toISOString(),
+        // Use a nova função que gera formato compatível com LocalDateTime do Java
+        startDate: formatToBackendDateTime(startDate),
+        endDate: formatToBackendDateTime(endDate),
         location: location.trim() || '',
         republicId: user?.currentRepublicId || ''
       };
@@ -276,6 +270,15 @@ const CreateEventScreen: React.FC = () => {
       setLoading(false);
     }
   }, [title, description, startDate, endDate, location, user, createEvent, validateForm, fadeAnim, router]);
+  
+  // Também substitua as funções formatDate e formatTime:
+  const formatDate = useCallback((date: Date) => {
+    return formatLocalDate(date);
+  }, []);
+  
+  const formatTimeDisplay = useCallback((date: Date) => {
+    return formatTime(date);
+  }, []);
   
   return (
     <SafeAreaView style={sharedStyles.safeArea}>

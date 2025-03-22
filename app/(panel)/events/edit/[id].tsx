@@ -26,6 +26,7 @@ import { ptBR } from 'date-fns/locale';
 // Importar estilos compartilhados
 import { sharedStyles, colors } from '../../../../src/styles/sharedStyles';
 import eventsStyles from '../../../../src/styles/eventStyles';
+import { formatToBackendDateTime } from '@/src/utils/dateUtils';
 
 const EditEventScreen: React.FC = () => {
   const router = useRouter();
@@ -264,8 +265,9 @@ const EditEventScreen: React.FC = () => {
       const eventData = {
         title: title.trim(),
         description: description.trim() || '',
-        startDate: startDate.toISOString(),
-        endDate: endDate.toISOString(),
+        // Use a nova função que gera formato compatível com LocalDateTime do Java
+        startDate: formatToBackendDateTime(startDate),
+        endDate: formatToBackendDateTime(endDate),
         location: location.trim() || ''
       };
       
@@ -295,6 +297,7 @@ const EditEventScreen: React.FC = () => {
       setLoading(false);
     }
   }, [title, description, startDate, endDate, location, validateForm, id, updateEvent, fadeAnim, router]);
+
   
   if (initialLoading) {
     return (
@@ -451,7 +454,20 @@ const EditEventScreen: React.FC = () => {
               />
             </View>
           </View>
-          
+           {/* Botão para gerenciar convites */}
+           <TouchableOpacity 
+            style={[
+              sharedStyles.button,
+              sharedStyles.buttonSecondary,
+              { marginBottom: 5, marginTop: 0 } // Ajuste para espaçamento adequado
+            ]}
+            onPress={() => router.push(`/(panel)/events/invitations/${id}`)}
+            accessibilityRole="button"
+            accessibilityLabel="Gerenciar convidados"
+          >
+            <Ionicons name="people" size={20} color={colors.primary.main} style={sharedStyles.buttonIcon} />
+            <Text style={[sharedStyles.buttonText, sharedStyles.buttonTextSecondary]}>Gerenciar Convidados</Text>
+          </TouchableOpacity>
           {/* Botão de Salvar */}
           <TouchableOpacity 
             style={[
@@ -475,20 +491,7 @@ const EditEventScreen: React.FC = () => {
             )}
           </TouchableOpacity>
           
-          {/* Botão para gerenciar convites */}
-          <TouchableOpacity 
-            style={[
-              sharedStyles.button,
-              sharedStyles.buttonSecondary,
-              { marginBottom: 60, marginTop: 0 } // Ajuste para espaçamento adequado
-            ]}
-            onPress={() => router.push(`/(panel)/events/invitations/${id}`)}
-            accessibilityRole="button"
-            accessibilityLabel="Gerenciar convidados"
-          >
-            <Ionicons name="people" size={20} color={colors.primary.main} style={sharedStyles.buttonIcon} />
-            <Text style={[sharedStyles.buttonText, sharedStyles.buttonTextSecondary]}>Gerenciar Convidados</Text>
-          </TouchableOpacity>
+         
         </Animated.ScrollView>
         
         {/* Date Pickers */}

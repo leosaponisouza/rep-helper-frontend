@@ -29,7 +29,7 @@ const { width } = Dimensions.get('window');
 // Componente otimizado para detalhes do evento
 const EventDetailsScreen: React.FC = () => {
   const router = useRouter();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, source } = useLocalSearchParams<{ id: string, source?: string }>();
   const { user } = useAuth();
   const { getEventById, updateInvitationStatus, deleteEvent } = useEventsContext();
   
@@ -39,7 +39,6 @@ const EventDetailsScreen: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [showConfirmDelete, setShowConfirmDelete] = useState<boolean>(false);
-  
   // Animações
   const fadeAnim = useState(new Animated.Value(0))[0];
   const scaleAnim = useState(new Animated.Value(0.95))[0];
@@ -375,7 +374,13 @@ const EventDetailsScreen: React.FC = () => {
           {isCreator && (
             <TouchableOpacity 
               style={styles.headerActionButton}
-              onPress={() => router.push(`/(panel)/events/edit/${event.id}`)}
+              onPress={() => {
+                if (source === 'home') {
+                  router.navigate('/(panel)/home');
+                } else {
+                  router.back();
+                }
+              }}
             >
               <Ionicons name="create-outline" size={24} color="#7B68EE" />
             </TouchableOpacity>

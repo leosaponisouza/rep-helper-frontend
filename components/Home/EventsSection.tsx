@@ -57,7 +57,13 @@ const EventItem = ({ event }: { event: Event }) => {
         { borderLeftColor: getStatusColor(event) }
       ]}
       onPress={() => {
-        router.push(`/(panel)/events/${event.id}`);
+        router.navigate('/(panel)/events');
+  
+        // Em seguida, depois de um pequeno atraso para garantir que a navegação anterior foi concluída
+        setTimeout(() => {
+          // Navegue para o detalhe do evento
+          router.push(`/(panel)/events/${event.id}`);
+        }, 100); // Um pequeno atraso de 100ms deve ser suficiente
       }}
     >
       <View style={styles.eventContent}>

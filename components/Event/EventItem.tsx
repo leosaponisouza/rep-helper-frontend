@@ -77,21 +77,23 @@ const EventItem: React.FC<EventItemProps> = memo(({
       return <View style={styles.inProgressBadge}><Text style={styles.badgeText}>Em Progresso</Text></View>;
     } 
     
-    if (isConfirmed) {
-      return <View style={styles.confirmedBadge}><Text style={styles.badgeText}>Confirmado</Text></View>;
-    }
-    
-    if (item.startDate) {
-      const now = new Date();
-      const eventDate = parseISO(item.startDate);
-      if (eventDate > now) {
-        return <View style={styles.pendingBadge}><Text style={styles.badgeText}>Pendente</Text></View>;
+    if (currentUserId && item.invitations && Array.isArray(item.invitations)) {
+      const userInvitation = item.invitations.find(inv => inv.userId === currentUserId);
+      
+      if (userInvitation) {
+        switch (userInvitation.status) {
+          case 'CONFIRMED':
+            return <View style={styles.confirmedBadge}><Text style={styles.badgeText}>Confirmado</Text></View>;
+          case 'DECLINED':
+            return <View style={styles.declinedBadge}><Text style={styles.badgeText}>Recusado</Text></View>;
+          case 'INVITED':
+            return <View style={styles.pendingBadge}><Text style={styles.badgeText}>Pendente</Text></View>;
+        }
       }
     }
     
     return null;
   };
-
   // Handler para clique no evento
   const handlePress = () => {
     onPress(item.id);
@@ -200,6 +202,13 @@ const styles = StyleSheet.create({
   },
   confirmedBadge: {
     backgroundColor: '#4CAF50',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 4,
+    alignSelf: 'flex-start',
+  },
+  declinedBadge: {
+    backgroundColor: '#FF6347',
     paddingVertical: 4,
     paddingHorizontal: 8,
     borderRadius: 4,
