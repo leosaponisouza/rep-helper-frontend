@@ -222,7 +222,7 @@ const updateStoredUser = useCallback(async (userData: Partial<User>) => {
         router.replace('/(republic)/choice');
       }
     } catch (error) {
-      const parsedError = ErrorHandler.parseError(error);
+      const parsedError = await ErrorHandler.parseError(error);
       setError(parsedError.message);
       ErrorHandler.logError(parsedError);
     } finally {

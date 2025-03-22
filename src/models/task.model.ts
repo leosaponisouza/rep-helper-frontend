@@ -1,8 +1,11 @@
 // src/models/task.model.ts
 
+import { User } from "./user.model";
+
 export type RecurrenceType = 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY';
 
 export interface Task {
+  [x: string]: any;
   id: number;  // Opcional, será atribuído pelo backend
   republic_id: string;
   title: string;
@@ -10,10 +13,10 @@ export interface Task {
   dueDate?: string;  // Data em formato ISO ou timestamp
   category?: string;
   status: 'PENDING' | 'COMPLETED' | 'IN_PROGRESS' | 'OVERDUE' | 'CANCELLED';
-  created_at?: string;
+  createdAt?: string;
   updated_at?: string;
-  assigned_users?: string[];  // UIDs dos usuários atribuídos
-  
+  assignedUsers?: User[];  // UIDs dos usuários atribuídos
+  completed_at?: string;
   // Campos para recorrência
   is_recurring?: boolean;
   recurrence_type?: RecurrenceType;

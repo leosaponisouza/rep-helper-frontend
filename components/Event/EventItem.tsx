@@ -10,6 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Event } from '@/src/services/events/eventsTypes';
+import { colors, createShadow } from '@/src/styles/sharedStyles';
 
 interface EventItemProps {
   item: Event;
@@ -18,51 +19,51 @@ interface EventItemProps {
 }
 
 // Componente otimizado com memo para evitar re-renderizações desnecessárias
-const EventItem: React.FC<EventItemProps> = memo(({ 
-  item, 
+const EventItem: React.FC<EventItemProps> = memo(({
+  item,
   onPress,
   currentUserId
 }) => {
 
   // Calcular contagem de confirmados
-  const confirmedCount = item.invitations ? 
+  const confirmedCount = item.invitations ?
     item.invitations.filter(inv => inv.status === 'CONFIRMED').length : 0;
-  
+
   // Verificar status do usuário atual
-  const isConfirmed = currentUserId && item.invitations && 
+  const isConfirmed = currentUserId && item.invitations &&
     item.invitations.some(inv => inv.userId === currentUserId && inv.status === 'CONFIRMED');
-  
+
   // Obter cor do status do evento
   const getEventColor = (): string => {
-    if (!item) return '#7B68EE';
-    
+    if (!item) return colors.primary.main;
+
     // Check if event is finished
-    if (item.isFinished) return '#9E9E9E';
-    
+    if (item.isFinished) return colors.grey[500];
+
     // Check if event is happening now
-    if (item.isHappening) return '#4CAF50';
-    
+    if (item.isHappening) return colors.success.main;
+
     // Check invite status for current user
     if (currentUserId && item.invitations && Array.isArray(item.invitations)) {
       const userInvitation = item.invitations.find(inv => inv.userId === currentUserId);
-      
+
       if (userInvitation) {
         switch (userInvitation.status) {
-          case 'CONFIRMED': return '#7B68EE';
-          case 'INVITED': return '#FFC107';
-          case 'DECLINED': return '#FF6347';
-          default: return '#7B68EE';
+          case 'CONFIRMED': return colors.primary.main;
+          case 'INVITED': return colors.warning.main;
+          case 'DECLINED': return colors.error.main;
+          default: return colors.primary.main;
         }
       }
     }
-    
-    return '#7B68EE';
+
+    return colors.primary.main;
   };
 
   // Formatar hora do evento
   const formatEventTime = (dateString?: string): string => {
     if (!dateString) return '';
-    
+
     try {
       const date = parseISO(dateString);
       return format(date, "HH:mm", { locale: ptBR });
@@ -75,11 +76,11 @@ const EventItem: React.FC<EventItemProps> = memo(({
   const renderStatusBadge = () => {
     if (item.isHappening) {
       return <View style={styles.inProgressBadge}><Text style={styles.badgeText}>Em Progresso</Text></View>;
-    } 
-    
+    }
+
     if (currentUserId && item.invitations && Array.isArray(item.invitations)) {
       const userInvitation = item.invitations.find(inv => inv.userId === currentUserId);
-      
+
       if (userInvitation) {
         switch (userInvitation.status) {
           case 'CONFIRMED':
@@ -91,13 +92,29 @@ const EventItem: React.FC<EventItemProps> = memo(({
         }
       }
     }
-    
+
     return null;
   };
+
+  // Obter convidados confirmados para mostrar avatares
+  const getConfirmedParticipants = () => {
+    if (!item.invitations || !Array.isArray(item.invitations)) return [];
+
+    return item.invitations
+      .filter(inv => inv.status === 'CONFIRMED')
+      .map(inv => ({
+        userId: inv.userId,
+        name: inv.userName || '',
+        status: inv.status
+      }));
+  };
+
   // Handler para clique no evento
   const handlePress = () => {
     onPress(item.id);
   };
+
+  const confirmedParticipants = getConfirmedParticipants();
 
   return (
     <TouchableOpacity
@@ -114,22 +131,60 @@ const EventItem: React.FC<EventItemProps> = memo(({
         <Text style={styles.eventTitle}>
           {item.title || 'Evento sem título'}
         </Text>
-        
+
         {item.location && (
           <View style={styles.locationRow}>
-            <Ionicons name="location-outline" size={14} color="#aaa" />
+            <Ionicons name="location-outline" size={14} color={colors.text.tertiary} />
             <Text style={styles.locationText}>{item.location}</Text>
           </View>
         )}
-        
-        <View style={styles.attendeesRow}>
-          <Ionicons name="people-outline" size={14} color="#aaa" />
-          <Text style={styles.attendeesText}>
-            {confirmedCount} {confirmedCount === 1 ? 'participante' : 'participantes'}
-          </Text>
+
+        <View style={styles.eventFooter}>
+          <View style={styles.attendeesRow}>
+            <Ionicons name="people-outline" size={14} color={colors.text.tertiary} />
+            <Text style={styles.attendeesText}>
+              {confirmedCount} {confirmedCount === 1 ? 'participante' : 'participantes'}
+            </Text>
+          </View>
+
+          {/* Participantes Confirmados (Avatares) */}
+          {confirmedParticipants.length > 0 && (
+            <View style={styles.participantsContainer}>
+              {confirmedParticipants.slice(0, 3).map((participant, index) => {
+                // Verifica se é o usuário atual
+                const isCurrentUser = participant.userId === currentUserId;
+
+                // Obtém a inicial para o avatar
+                const initial = participant.name ? participant.name.charAt(0) : participant.userId.charAt(0);
+
+                return (
+                  <View
+                    key={participant.userId || `participant-${index}`}
+                    style={[
+                      styles.participantAvatar,
+                      { zIndex: 10 - index, marginLeft: index > 0 ? -10 : 0 },
+                      isCurrentUser && styles.currentUserAvatar
+                    ]}
+                  >
+                    <Text style={styles.avatarInitial}>
+                      {initial.toUpperCase()}
+                    </Text>
+                  </View>
+                );
+              })}
+
+              {confirmedParticipants.length > 3 && (
+                <View style={[styles.participantAvatar, styles.moreParticipantsAvatar]}>
+                  <Text style={styles.moreParticipantsText}>
+                    +{confirmedParticipants.length - 3}
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
         </View>
       </View>
-      
+
       {renderStatusBadge()}
     </TouchableOpacity>
   );
@@ -152,24 +207,26 @@ const EventItem: React.FC<EventItemProps> = memo(({
 const styles = StyleSheet.create({
   eventItem: {
     flexDirection: 'row',
-    backgroundColor: '#333',
+    backgroundColor: colors.background.secondary,
     borderRadius: 12,
+    marginHorizontal: 16,
+    marginVertical: 8,
     padding: 16,
-    marginBottom: 12,
     borderLeftWidth: 5,
     overflow: 'hidden',
+    ...createShadow(2)
   },
   eventInfo: {
     flex: 1,
   },
   eventTime: {
-    color: '#7B68EE',
+    color: colors.primary.main,
     fontSize: 14,
     fontWeight: 'bold',
     marginBottom: 4,
   },
   eventTitle: {
-    color: '#fff',
+    color: colors.text.primary,
     fontSize: 16,
     fontWeight: 'bold',
     marginBottom: 8,
@@ -177,55 +234,93 @@ const styles = StyleSheet.create({
   locationRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: 8,
   },
   locationText: {
-    color: '#aaa',
+    color: colors.text.tertiary,
     fontSize: 14,
     marginLeft: 4,
+  },
+  eventFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   attendeesRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   attendeesText: {
-    color: '#aaa',
+    color: colors.text.tertiary,
     fontSize: 14,
     marginLeft: 4,
   },
   pendingBadge: {
-    backgroundColor: '#FF6347',
+    backgroundColor: colors.warning.main,
     paddingVertical: 4,
     paddingHorizontal: 8,
     borderRadius: 4,
     alignSelf: 'flex-start',
   },
   confirmedBadge: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: colors.success.main,
     paddingVertical: 4,
     paddingHorizontal: 8,
     borderRadius: 4,
     alignSelf: 'flex-start',
   },
   declinedBadge: {
-    backgroundColor: '#FF6347',
+    backgroundColor: colors.error.main,
     paddingVertical: 4,
     paddingHorizontal: 8,
     borderRadius: 4,
     alignSelf: 'flex-start',
   },
   inProgressBadge: {
-    backgroundColor: '#7B68EE',
+    backgroundColor: colors.primary.main,
     paddingVertical: 4,
     paddingHorizontal: 8,
     borderRadius: 4,
     alignSelf: 'flex-start',
   },
   badgeText: {
-    color: '#fff',
+    color: colors.text.primary,
     fontSize: 12,
     fontWeight: 'bold',
   },
+
+  // Estilos para avatares dos participantes
+  participantsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  participantAvatar: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: colors.background.tertiary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: colors.background.secondary,
+  },
+  avatarInitial: {
+    color: colors.text.primary,
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  currentUserAvatar: {
+    borderColor: colors.primary.main,
+    backgroundColor: colors.background.secondary,
+  },
+  moreParticipantsAvatar: {
+    backgroundColor: colors.primary.light,
+  },
+  moreParticipantsText: {
+    color: colors.primary.main,
+    fontSize: 10,
+    fontWeight: 'bold',
+  }
 });
 
 export default EventItem;

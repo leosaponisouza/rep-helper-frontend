@@ -315,7 +315,7 @@ const CreateTaskScreen = () => {
         republicId: user?.currentRepublicId || '',
         dueDate: data.dueDate ? data.dueDate.toISOString() : undefined,
         category: data.category,
-        is_recurring: data.is_recurring,
+        isRecurring: data.is_recurring,
         recurrenceType: data.is_recurring ? data.recurrence_type as RecurrenceType : undefined,
         recurrenceInterval: data.is_recurring ? data.recurrence_interval : undefined,
         recurrenceEndDate: data.is_recurring && data.recurrence_end_date ? data.recurrence_end_date.toISOString() : undefined

@@ -45,7 +45,7 @@ const FilterButton = React.memo(({
   </TouchableOpacity>
 ));
 
-  // Componente para ordenação
+// Componente para ordenação
 const SortButton = React.memo(({ 
   field, 
   label, 
@@ -63,7 +63,6 @@ const SortButton = React.memo(({
   const nextDirection = isActive && currentDirection === 'ASC' ? 'DESC' : 'ASC';
   
   const handleSort = useCallback(() => {
-    console.log(`SortButton clicked: ${field}, next direction: ${nextDirection}`);
     onSort(field, nextDirection);
   }, [field, nextDirection, onSort]);
   
@@ -123,19 +122,8 @@ const TasksListScreen = () => {
   const [pendingTaskIds, setPendingTaskIds] = useState<number[]>([]);
   const scrollViewRef = useRef(null);
   
-  // Referência para controlar a inicialização
-  const isInitialized = useRef(false);
-  
-  // Efeito para sincronizar o filtro da URL com o estado local apenas na inicialização
-  useEffect(() => {
-    // Executa apenas uma vez na montagem do componente
-    if (!isInitialized.current && urlFilter) {
-      setFilter(urlFilter);
-      // Não chame applyFilter aqui, pois o hook useTasks já aplica o filtro inicial
-      isInitialized.current = true;
-    }
-  }, [urlFilter]);
-  
+  // Referência para controlar debounce de ordenação
+  const sortingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   // Evita re-renderizações desnecessárias
   const taskFilters = useMemo(() => [
@@ -153,14 +141,6 @@ const TasksListScreen = () => {
     initialFilterStatus: urlFilter as any || 'all',
     pageSize: 20
   });
-  
-  // Apenas atualize o valor de referência quando urlFilter mudar, não durante a renderização
-  useEffect(() => {
-    taskOptionsRef.current = {
-      ...taskOptionsRef.current,
-      initialFilterStatus: urlFilter as any || 'all'
-    };
-  }, [urlFilter]);
 
   const {
     tasks,
@@ -188,6 +168,13 @@ const TasksListScreen = () => {
     changeSorting
   } = useTasks(taskOptionsRef.current);
 
+  // Efeito para aplicar o filtro inicial apenas uma vez na montagem
+  useEffect(() => {
+    // Aplica o filtro quando o componente é montado
+    if (filter) {
+      applyFilter(filter);
+    }
+  }, []); // Execute apenas uma vez na montagem
     
   // Função para mudar filtro localmente
   const handleFilterChange = useCallback((newFilter: string) => {
@@ -200,6 +187,7 @@ const TasksListScreen = () => {
     // Aplica o filtro imediatamente
     applyFilter(newFilter);
   }, [applyFilter, filter]);
+
   // Implementação da atualização otimista
   const handleToggleTaskStatus = useCallback(async (task: Task) => {
     // Evita operações duplas
@@ -358,41 +346,49 @@ const TasksListScreen = () => {
     return null;
   }, [isLastPage, displayTasks.length, totalElements, loading, isLoading, currentPage]);
   
-  // Função para alterar a ordenação
+  // Função para alterar a ordenação - CORRIGIDA
   const handleChangeSorting = useCallback((field: string, direction: 'ASC' | 'DESC') => {
-    console.log(`Sorting by ${field} in ${direction} direction`);
-    console.log(`Current sort state - Field: ${sortBy}, Direction: ${sortDirection}`);
-    console.log(`Changing sort to - Field: ${field}, Direction: ${direction}`);
+    // Limpa timeout anterior se existir para evitar múltiplas chamadas
+    if (sortingTimeoutRef.current) {
+      clearTimeout(sortingTimeoutRef.current);
+    }
     
     // Converter campos com underscore para camelCase
     const fieldCamelCase = field === 'due_date' ? 'dueDate' : 
-                          field === 'created_at' ? 'createdAt' : field;
+                           field === 'created_at' ? 'createdAt' : field;
     
-    if (changeSorting && typeof changeSorting === 'function') {
-      // Verificar se a ordenação está sendo aplicada corretamente
-      changeSorting(fieldCamelCase, direction);
+    // Define novo timeout para evitar múltiplas requisições em rápida sucessão
+    sortingTimeoutRef.current = setTimeout(() => {
+      if (changeSorting && typeof changeSorting === 'function') {
+        // Aplicar a mudança de ordenação
+        changeSorting(fieldCamelCase, direction);
+        
+        // Força uma atualização imediata dos dados com a nova ordenação
+        // Isto corrige o problema da lista não atualizando
+        if (filter === 'my-tasks') {
+          fetchMyTasks(true, currentPage);
+        } else {
+          fetchTasks(true, currentPage);
+        }
+      }
       
-      // Adicionar um log após a chamada para verificar se a função foi executada
-      console.log(`Sort function called with ${fieldCamelCase}, ${direction}`);
-      
-      // Adicionar um log para verificar a URL e os parâmetros enviados para o backend
-      console.log('Check the network request in developer tools to see the parameters sent to the backend');
-      console.log('The backend should receive these parameters:');
-      console.log(`- sort: ${fieldCamelCase},${direction}`);
-      // ou
-      console.log(`- sortBy: ${fieldCamelCase}`);
-      console.log(`- sortDirection: ${direction}`);
-    } else {
-      console.warn('changeSorting function is not available');
-    }
-  }, [changeSorting, sortBy, sortDirection]);
+      sortingTimeoutRef.current = null;
+    }, 300); // Delay de 300ms para debounce
+  }, [changeSorting, filter, fetchMyTasks, fetchTasks, currentPage]);
 
   // Função para alterar o tamanho da página
   const handleChangePageSize = useCallback((newSize: number) => {
     if (changePageSize && typeof changePageSize === 'function') {
       changePageSize(newSize);
+      
+      // Força atualização dos dados após mudar o tamanho da página
+      if (filter === 'my-tasks') {
+        fetchMyTasks(true, 0); // Volta para a primeira página
+      } else {
+        fetchTasks(true, 0); // Volta para a primeira página
+      }
     }
-  }, [changePageSize]);
+  }, [changePageSize, filter, fetchMyTasks, fetchTasks]);
   
   // Componente para seleção de tamanho de página
   const renderPageSizeSelector = useCallback(() => {

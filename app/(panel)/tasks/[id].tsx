@@ -1,136 +1,179 @@
-// app/(panel)/tasks/[id].tsx
-import React, { useState, useEffect } from 'react';
+// app/(panel)/tasks/[id].tsx - Versão otimizada com melhor UX e performance
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
-  StatusBar,
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
   Alert,
+  SafeAreaView,
+  StatusBar,
   Image,
-  Animated
+  Dimensions,
+  Platform,
+  Animated,
+  Share
 } from 'react-native';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons, FontAwesome5, Feather } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useTasks } from '../../../src/hooks/useTasks';
+import { useAuth } from '../../../src/context/AuthContext';
+import { format, formatDistance, parseISO, isToday, isTomorrow, isPast, differenceInMinutes } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Task } from '../../../src/models/task.model';
 import api from '../../../src/services/api';
 import { ErrorHandler } from '../../../src/utils/errorHandling';
-import { Task, useTasks } from '../../../src/hooks/useTasks';
-import { useAuth } from '../../../src/context/AuthContext';
-import { format, formatDistance, parseISO } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import {
+  formatToBackendDateTime,
+  parseISOPreservingTime,
+  formatLocalDate,
+  formatTime
+} from '../../../src/utils/dateUtils';
+const { width } = Dimensions.get('window');
 
-// Componente de crachá de status animado
-const AnimatedStatusBadge = ({ status }: { status: string }) => {
-  const fadeAnim = React.useRef(new Animated.Value(0)).current;
-  const statusColors = {
-    PENDING: '#FFC107',
-    IN_PROGRESS: '#2196F3',
-    COMPLETED: '#4CAF50',
-    OVERDUE: '#F44336',
-    CANCELLED: '#9E9E9E'
-  };
-
-  const statusLabels = {
-    PENDING: 'Pendente',
-    IN_PROGRESS: 'Em andamento',
-    COMPLETED: 'Concluída',
-    OVERDUE: 'Atrasada',
-    CANCELLED: 'Cancelada'
-  };
-
-  const color = statusColors[status as keyof typeof statusColors] || '#9E9E9E';
-  const label = statusLabels[status as keyof typeof statusLabels] || status;
-
-  useEffect(() => {
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 600,
-      useNativeDriver: true
-    }).start();
-  }, [fadeAnim]);
-
-  return (
-    <Animated.View
-      style={[
-        styles.statusBadge,
-        {
-          backgroundColor: `${color}20`,
-          opacity: fadeAnim,
-          transform: [{
-            translateY: fadeAnim.interpolate({
-              inputRange: [0, 1],
-              outputRange: [10, 0]
-            })
-          }]
-        }
-      ]}
-    >
-      <Text style={[styles.statusText, { color }]}>{label}</Text>
-    </Animated.View>
-  );
-};
-
-// Banner de tarefas atribuídas ao usuário
-const UserAssignmentBanner = ({ isAssignedToCurrentUser }: { isAssignedToCurrentUser: boolean }) => {
-  if (!isAssignedToCurrentUser) return null;
-
-  return (
-    <View style={styles.userAssignmentBanner}>
-      <Ionicons name="person" size={18} color="#fff" />
-      <Text style={styles.userAssignmentText}>Você está atribuído a esta tarefa</Text>
-    </View>
-  );
-};
-
-const TaskDetailsScreen = () => {
+// Componente otimizado para detalhes da tarefa
+const TaskDetailsScreen: React.FC = () => {
   const router = useRouter();
-  const { user } = useAuth();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const [task, setTask] = useState<Task | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { user } = useAuth();
   const { completeTask, cancelTask, deleteTask, updateTask } = useTasks();
+
+  // Estados
+  const [task, setTask] = useState<Task | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState<boolean>(false);
+  const [showConfirmDelete, setShowConfirmDelete] = useState<boolean>(false);
   const [isStatusChanging, setIsStatusChanging] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Busca detalhes da tarefa
-  useEffect(() => {
-    const fetchTaskDetails = async () => {
-      try {
-        setLoading(true);
-        const response = await api.get(`/api/v1/tasks/${id}`);
-        setTask(response.data);
-      } catch (error) {
-        ErrorHandler.handle(error);
-        router.back();
-      } finally {
-        setLoading(false);
-      }
-    };
+  // Animações
+  const fadeAnim = useState(new Animated.Value(0))[0];
+  const scaleAnim = useState(new Animated.Value(0.95))[0];
+  const scrollY = useState(new Animated.Value(0))[0];
 
-    fetchTaskDetails();
+  // Efeito de entrada com animação
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+      Animated.timing(scaleAnim, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      })
+    ]).start();
+  }, []);
+
+  // Carregar detalhes da tarefa
+  const loadTaskDetails = useCallback(async () => {
+    if (!id) return;
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      const response = await api.get(`/api/v1/tasks/${id}`);
+      if (response.data) {
+        setTask(response.data);
+        console.log('Resposta do API:', JSON.stringify(response.data, null, 2));
+      } else {
+        setError('Tarefa não encontrada');
+      }
+    } catch (error) {
+      console.error('Error loading task details:', error);
+      ErrorHandler.handle(error);
+      setError('Não foi possível carregar os detalhes da tarefa');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
   }, [id]);
 
-  // Verificar se usuário atual está atribuído à tarefa
-  const isAssignedToCurrentUser = task?.assignedUsers?.some(user => user.id === user?.id);
+  // Carregar tarefa ao montar o componente
+  useEffect(() => {
+    loadTaskDetails();
+  }, [loadTaskDetails]);
+
+  // Verificar se o usuário está atribuído à tarefa
+  const isAssignedToCurrentUser = useMemo(() => {
+    if (!task || !user) return false;
+    return task.assignedUsers?.includes(user) || false;
+  }, [task, user]);
 
   // Verificar se usuário atual pode editar
   const canEditTask = isAssignedToCurrentUser;
   const isUserAdmin = user?.isAdmin === true;
   const canModifyTask = canEditTask || isUserAdmin;
 
+  const formatTaskDate = useCallback((dateString?: string): string => {
+    if (!dateString) return '';
+
+    try {
+      const date = parseISOPreservingTime(dateString);
+
+      if (isToday(date)) {
+        return `Hoje, ${formatTime(date)}`;
+      } else if (isTomorrow(date)) {
+        return `Amanhã, ${formatTime(date)}`;
+      } else {
+        return formatLocalDate(date, "EEEE, dd 'de' MMMM 'às' HH:mm");
+      }
+    } catch (error) {
+      return dateString;
+    }
+  }, []);
+
+  const getTimeAgo = useCallback((dateString?: string | null): string => {
+    if (!dateString) return '';
+    try {
+      const date = parseISOPreservingTime(dateString);
+      const now = new Date();
+
+      const diffMinutes = differenceInMinutes(now, date);
+
+      if (diffMinutes < 1) return 'agora mesmo';
+      if (diffMinutes < 60) return `há ${diffMinutes} minutos`;
+      if (diffMinutes < 120) return 'há 1 hora';
+      if (diffMinutes < 1440) return `há ${Math.floor(diffMinutes / 60)} horas`;
+      if (diffMinutes < 2880) return 'há 1 dia';
+
+      return formatLocalDate(date, "dd 'de' MMM");
+    } catch (error) {
+      return '';
+    }
+  }, []);
+  // Converter campos do modelo para camelCase para consistência na UI
+  const adaptedTask = useMemo(() => {
+    if (!task) return null;
+    console.log(task)
+    return {
+      ...task, 
+      assignedUsers: task.assignedUsers || [],
+      completedAt: task.status === 'COMPLETED' ? task.updated_at : null,
+      createdAt: task.createdAt,
+      updatedAt: task.updated_at,
+      republicId: task.republic_id,
+    };
+  }, [task]);
+
+  // Handler para alternar status da tarefa
   const handleToggleStatus = async () => {
     if (!task || isStatusChanging) return;
-  
+
     try {
       setIsStatusChanging(true);
-  
+
       // Determinamos o novo status com base no status atual
       let newStatus: "PENDING" | "IN_PROGRESS" | "COMPLETED" | "OVERDUE" | "CANCELLED";
-      
+
       if (task.status === 'COMPLETED') {
         newStatus = 'PENDING';
       } else if (task.status === 'PENDING') {
@@ -140,9 +183,10 @@ const TaskDetailsScreen = () => {
       } else {
         newStatus = task.status; // Mantém o status atual se for um dos outros tipos
       }
-      
-      const newCompletedAt = newStatus === 'COMPLETED' ? new Date().toISOString() : null;
-  
+
+      const completedDate = new Date();
+      const newCompletedAt = newStatus === 'COMPLETED' ? formatToBackendDateTime(completedDate) : null;
+
       // Atualiza o estado local imediatamente
       setTask(prev => {
         if (!prev) return null;
@@ -152,7 +196,7 @@ const TaskDetailsScreen = () => {
           completedAt: newCompletedAt
         };
       });
-  
+
       // Requisição ao backend
       if (task.status === 'COMPLETED') {
         await updateTask(task.id, { ...task, status: 'PENDING' });
@@ -169,7 +213,7 @@ const TaskDetailsScreen = () => {
         return {
           ...prev,
           status: task.status,
-          completedAt: task.completedAt
+          completedAt: task.completed_at
         };
       });
     } finally {
@@ -177,6 +221,7 @@ const TaskDetailsScreen = () => {
     }
   };
 
+  // Handler para cancelar tarefa
   const handleCancelTask = async () => {
     if (!task || isCancelling) return;
 
@@ -196,109 +241,127 @@ const TaskDetailsScreen = () => {
     }
   };
 
-  // Atualização para o método de exclusão
+  // Handler para excluir tarefa
   const handleDeleteTask = async () => {
     if (!task || isDeleting) return;
 
+    if (!showConfirmDelete) {
+      setShowConfirmDelete(true);
+      return;
+    }
+
     try {
       setIsDeleting(true);
-      await deleteTask(task.id);
 
-      Alert.alert(
-        'Tarefa Excluída',
-        'A tarefa foi removida com sucesso.',
-        [{
-          text: 'OK',
-          onPress: () => router.back()
-        }]
-      );
-    } catch (error) {
-      ErrorHandler.handle(error);
-      setIsDeleting(false);
-    }
-    // Não precisamos de finally aqui, pois navegamos para fora da tela em caso de sucesso
-  };
+      // Animação de saída
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(scaleAnim, {
+          toValue: 0.95,
+          duration: 200,
+          useNativeDriver: true,
+        })
+      ]).start(async () => {
+        await deleteTask(task.id);
 
-  const confirmDeleteTask = () => {
-    Alert.alert(
-      'Excluir Tarefa',
-      'Tem certeza que deseja excluir esta tarefa?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Excluir',
-          style: 'destructive',
-          onPress: handleDeleteTask
-        }
-      ]
-    );
-  };
-
-  const confirmCancelTask = () => {
-    Alert.alert(
-      'Cancelar Tarefa',
-      'Tem certeza que deseja cancelar esta tarefa?',
-      [
-        { text: 'Não', style: 'cancel' },
-        {
-          text: 'Cancelar Tarefa',
-          onPress: handleCancelTask
-        }
-      ]
-    );
-  };
-
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#7B68EE" />
-      </View>
-    );
-  }
-
-  if (!task) {
-    return (
-      <View style={styles.loadingContainer}>
-        <Text style={styles.errorText}>Tarefa não encontrada</Text>
-      </View>
-    );
-  }
-
-  const isTaskActive = ['PENDING', 'IN_PROGRESS', 'OVERDUE'].includes(task.status);
-  const isTaskOverdue = task.status === 'OVERDUE';
-  const isTaskCompleted = task.status === 'COMPLETED';
-  const isTaskCancelled = task.status === 'CANCELLED';
-
-  const formatDateWithTime = (dateString?: string | null) => {
-    if (!dateString) return '--';
-    try {
-      return format(parseISO(dateString), "dd MMM yyyy 'às' HH:mm", { locale: ptBR });
-    } catch (error) {
-      return dateString;
-    }
-  };
-
-  const getTimeAgo = (dateString?: string | null) => {
-    if (!dateString) return '';
-    try {
-      return formatDistance(parseISO(dateString), new Date(), {
-        addSuffix: true,
-        locale: ptBR
+        Alert.alert(
+          'Sucesso',
+          'Tarefa excluída com sucesso!',
+          [{
+            text: 'OK',
+            onPress: () => router.back()
+          }]
+        );
       });
     } catch (error) {
-      return '';
+      ErrorHandler.handle(error);
+      setShowConfirmDelete(false);
+      setIsDeleting(false);
     }
   };
 
-  const getDueStatusText = () => {
-    if (!task.dueDate) return null;
+  // Handler para cancelar exclusão
+  const handleCancelDelete = useCallback(() => {
+    setShowConfirmDelete(false);
+  }, []);
 
-    const dueDate = parseISO(task.dueDate);
+  // Compartilhar tarefa
+  const handleShareTask = useCallback(async () => {
+    if (!task) return;
+
+    try {
+      const message = `Tarefa: ${task.title}\n` +
+        `Status: ${task.status === 'PENDING' ? 'Pendente' :
+          task.status === 'IN_PROGRESS' ? 'Em andamento' :
+            task.status === 'COMPLETED' ? 'Concluída' :
+              task.status === 'OVERDUE' ? 'Atrasada' : 'Cancelada'
+        }\n` +
+        (task.dueDate ? `Prazo: ${formatTaskDate(task.dueDate)}\n` : '') +
+        (task.description ? `\n${task.description}` : '');
+
+      await Share.share({
+        message,
+        title: task.title,
+      });
+    } catch (error) {
+      console.error('Error sharing task:', error);
+      Alert.alert('Erro', 'Não foi possível compartilhar a tarefa');
+    }
+  }, [task, formatTaskDate]);
+
+  // Verificar se a tarefa está vencida
+  const isTaskOverdue = useMemo(() => {
+    if (!adaptedTask || !adaptedTask.dueDate) return false;
+
+    try {
+      const dueDate = parseISOPreservingTime(adaptedTask.dueDate);
+      return isPast(dueDate) && adaptedTask.status !== 'COMPLETED' && adaptedTask.status !== 'CANCELLED';
+    } catch (error) {
+      return false;
+    }
+  }, [adaptedTask]);
+  // Verificar se a tarefa está completa
+  const isTaskCompleted = useMemo(() => {
+    return adaptedTask?.status === 'COMPLETED';
+  }, [adaptedTask]);
+
+  // Verificar se a tarefa está cancelada
+  const isTaskCancelled = useMemo(() => {
+    return adaptedTask?.status === 'CANCELLED';
+  }, [adaptedTask]);
+
+  // Verificar se a tarefa está em andamento
+  const isTaskInProgress = useMemo(() => {
+    return adaptedTask?.status === 'IN_PROGRESS';
+  }, [adaptedTask]);
+
+  // Animação do header com base no scroll
+  const headerOpacity = scrollY.interpolate({
+    inputRange: [0, 100],
+    outputRange: [0, 1],
+    extrapolate: 'clamp'
+  });
+
+  const headerHeight = scrollY.interpolate({
+    inputRange: [0, 100],
+    outputRange: [0, 60],
+    extrapolate: 'clamp'
+  });
+
+  // Obter status de prazo da tarefa
+  const getDueStatusText = useCallback(() => {
+    if (!adaptedTask || !adaptedTask.dueDate) return null;
+
+    const dueDate = parseISOPreservingTime(adaptedTask.dueDate);
     const now = new Date();
 
     if (isTaskCompleted) {
-      if (task.completedAt) {
-        const completedAt = parseISO(task.completedAt);
+      if (adaptedTask.completedAt) {
+        const completedAt = parseISOPreservingTime(adaptedTask.completedAt);
         return completedAt <= dueDate
           ? { text: 'Concluída dentro do prazo', color: '#4CAF50' }
           : { text: 'Concluída com atraso', color: '#FF9800' };
@@ -327,7 +390,80 @@ const TaskDetailsScreen = () => {
     } else {
       return { text: `Vence em ${diffDays} dias`, color: '#4CAF50' };
     }
-  };
+  }, [adaptedTask, isTaskCompleted, isTaskCancelled]);
+
+  // Formato da data para exibição
+  const formatDateWithTime = useCallback((dateString?: string | null) => {
+    if (!dateString) return '--';
+    try {
+      // Verificando e logando o formato que está vindo
+      console.log('Formato de data recebido:', dateString);
+
+      // Verificar se é uma data válida
+      const parsedDate = parseISOPreservingTime(dateString);
+      if (isNaN(parsedDate.getTime())) {
+        console.log('Data inválida após parsing');
+        return dateString; // Retorna o original se for inválido
+      }
+
+      // Formatar a data usando o formatLocalDate
+      return formatLocalDate(parsedDate, "dd 'de' MMM 'de' yyyy 'às' HH:mm");
+    } catch (error) {
+      console.error('Erro ao formatar data:', error, dateString);
+      return dateString;
+    }
+  }, []);
+  // Caso esteja carregando ou tenha erro, mostrar tela adequada
+  if (loading && !task) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar barStyle="light-content" backgroundColor="#222" />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#7B68EE" />
+          <Text style={styles.loadingText}>Carregando detalhes da tarefa...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView style={styles.errorContainer}>
+        <StatusBar barStyle="light-content" backgroundColor="#222" />
+        <Ionicons name="alert-circle" size={64} color="#FF6347" />
+        <Text style={styles.errorTitle}>Erro</Text>
+        <Text style={styles.errorText}>{error}</Text>
+        <TouchableOpacity
+          style={styles.retryButton}
+          onPress={loadTaskDetails}
+        >
+          <Text style={styles.retryButtonText}>Tentar novamente</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => router.back()}
+        >
+          <Text style={styles.backButtonText}>Voltar</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
+
+  if (!task || !adaptedTask) {
+    return (
+      <SafeAreaView style={styles.errorContainer}>
+        <StatusBar barStyle="light-content" backgroundColor="#222" />
+        <Ionicons name="checkmark-circle" size={64} color="#7B68EE" />
+        <Text style={styles.errorTitle}>Tarefa não encontrada</Text>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => router.push('/(panel)/tasks')}
+        >
+          <Text style={styles.backButtonText}>Voltar para Tarefas</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
 
   const dueStatus = getDueStatusText();
 
@@ -335,64 +471,223 @@ const TaskDetailsScreen = () => {
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" backgroundColor="#222" />
 
-      <View style={styles.headerContainer}>
+      {/* Header animado */}
+      <Animated.View
+        style={[
+          styles.animatedHeader,
+          {
+            opacity: headerOpacity,
+            height: headerHeight
+          }
+        ]}
+      >
         <TouchableOpacity
+          style={styles.headerBackButton}
           onPress={() => router.back()}
-          style={styles.backButton}
         >
           <Ionicons name="arrow-back" size={24} color="#7B68EE" />
         </TouchableOpacity>
         <Text style={styles.headerTitle} numberOfLines={1}>
-          Detalhes da Tarefa
+          {adaptedTask.title}
         </Text>
-        {canModifyTask && (
+        <View style={styles.headerRight}>
+          {canModifyTask && (
+            <TouchableOpacity
+              style={styles.headerActionButton}
+              onPress={() => router.push(`/(panel)/tasks/edit?id=${task.id}`)}
+            >
+              <Ionicons name="create-outline" size={24} color="#7B68EE" />
+            </TouchableOpacity>
+          )}
+        </View>
+      </Animated.View>
+
+      {/* Banner de tarefa atribuída ao usuário */}
+      {isAssignedToCurrentUser && (
+        <View style={styles.userAssignmentBanner}>
+          <Ionicons name="person" size={18} color="#fff" />
+          <Text style={styles.userAssignmentText}>Você está atribuído a esta tarefa</Text>
+        </View>
+      )}
+
+      <Animated.ScrollView
+        style={[styles.scrollView, { opacity: fadeAnim }]}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: false }
+        )}
+        scrollEventThrottle={16}
+      >
+        {/* Cabeçalho */}
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.back()}
+          >
+            <Ionicons name="arrow-back" size={24} color="#7B68EE" />
+          </TouchableOpacity>
+
           <View style={styles.headerActions}>
             <TouchableOpacity
-              onPress={confirmDeleteTask}
-              style={styles.deleteButton}
+              style={styles.actionButton}
+              onPress={handleShareTask}
             >
-              <Ionicons name="trash" size={20} color="#FF6347" />
+              <Ionicons name="share-outline" size={24} color="#7B68EE" />
             </TouchableOpacity>
+
+            {canModifyTask && (
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={() => router.push(`/(panel)/tasks/edit?id=${task.id}`)}
+              >
+                <Ionicons name="create-outline" size={24} color="#7B68EE" />
+              </TouchableOpacity>
+            )}
           </View>
-        )}
-      </View>
+        </View>
 
-      {/* Banner de tarefa atribuída ao usuário corrente */}
-      <UserAssignmentBanner isAssignedToCurrentUser={isAssignedToCurrentUser || false} />
-
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.contentContainer}
-      >
-        {/* Task Header with Status */}
-        <View style={styles.taskHeaderSection}>
+        {/* Conteúdo principal */}
+        <Animated.View
+          style={[
+            styles.taskContainer,
+            {
+              opacity: fadeAnim,
+              transform: [{ scale: scaleAnim }]
+            }
+          ]}
+        >
+          {/* Status da tarefa */}
           <View style={styles.taskStatusRow}>
-            <AnimatedStatusBadge status={task.status} />
+            <View style={[
+              styles.statusBadge,
+              adaptedTask.status === 'PENDING' ? styles.pendingBadge :
+                adaptedTask.status === 'IN_PROGRESS' ? styles.inProgressBadge :
+                  adaptedTask.status === 'COMPLETED' ? styles.completedBadge :
+                    adaptedTask.status === 'OVERDUE' ? styles.overdueBadge :
+                      styles.cancelledBadge
+            ]}>
+              <Text style={[
+                styles.statusText,
+                adaptedTask.status === 'PENDING' ? styles.pendingText :
+                  adaptedTask.status === 'IN_PROGRESS' ? styles.inProgressText :
+                    adaptedTask.status === 'COMPLETED' ? styles.completedText :
+                      adaptedTask.status === 'OVERDUE' ? styles.overdueText :
+                        styles.cancelledText
+              ]}>
+                {adaptedTask.status === 'PENDING' ? 'Pendente' :
+                  adaptedTask.status === 'IN_PROGRESS' ? 'Em andamento' :
+                    adaptedTask.status === 'COMPLETED' ? 'Concluída' :
+                      adaptedTask.status === 'OVERDUE' ? 'Atrasada' :
+                        'Cancelada'}
+              </Text>
+            </View>
             <Text style={styles.taskUpdatedTime}>
-              Atualizada {getTimeAgo(task.updatedAt)}
+              Atualizada {getTimeAgo(adaptedTask.updatedAt)}
             </Text>
           </View>
 
-          <Text style={styles.taskTitle}>{task.title}</Text>
+          {/* Título */}
+          <Text style={styles.taskTitle}>{adaptedTask.title}</Text>
 
-          {task.republicName && (
+          {/* República */}
+          {adaptedTask.republic_id && (
             <View style={styles.republicRow}>
               <Ionicons name="home" size={16} color="#7B68EE" />
               <Text style={styles.republicText}>
-                {task.republicName}
+                República ID: {adaptedTask.republic_id}
               </Text>
             </View>
           )}
-        </View>
 
-        {/* Action Buttons */}
-        {isTaskActive && canModifyTask && (
-          <View style={styles.actionButtonsContainer}>
-            {task.status === 'PENDING' && (
+          {/* Action Buttons */}
+          {['PENDING', 'IN_PROGRESS', 'OVERDUE'].includes(adaptedTask.status) && canModifyTask && (
+            <View style={styles.actionButtonsContainer}>
+              {adaptedTask.status === 'PENDING' && (
+                <TouchableOpacity
+                  style={[
+                    styles.actionButton,
+                    styles.primaryButton,
+                    isStatusChanging && styles.actionButtonDisabled
+                  ]}
+                  onPress={handleToggleStatus}
+                  disabled={isStatusChanging}
+                >
+                  {isStatusChanging ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <>
+                      <Ionicons name="play-circle" size={18} color="#fff" />
+                      <Text style={styles.primaryButtonText}>Iniciar Tarefa</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              )}
+
+              {adaptedTask.status === 'IN_PROGRESS' && (
+                <TouchableOpacity
+                  style={[
+                    styles.actionButton,
+                    styles.primaryButton,
+                    isStatusChanging && styles.actionButtonDisabled
+                  ]}
+                  onPress={handleToggleStatus}
+                  disabled={isStatusChanging}
+                >
+                  {isStatusChanging ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <>
+                      <Ionicons name="checkmark-circle" size={18} color="#fff" />
+                      <Text style={styles.primaryButtonText}>Concluir Tarefa</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              )}
+
+              <View style={styles.buttonSpacer} />
+
               <TouchableOpacity
                 style={[
                   styles.actionButton,
-                  styles.primaryButton,
+                  styles.secondaryButton,
+                  isCancelling && styles.actionButtonDisabled
+                ]}
+                onPress={() => {
+                  Alert.alert(
+                    "Cancelar Tarefa",
+                    "Tem certeza que deseja cancelar esta tarefa?",
+                    [
+                      { text: "Não", style: "cancel" },
+                      {
+                        text: "Cancelar Tarefa",
+                        onPress: handleCancelTask
+                      }
+                    ]
+                  );
+                }}
+                disabled={isCancelling}
+              >
+                {isCancelling ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <>
+                    <Ionicons name="close-circle" size={18} color="#fff" />
+                    <Text style={styles.secondaryButtonText}>Cancelar</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Botão para reabrir tarefas concluídas */}
+          {adaptedTask.status === 'COMPLETED' && canModifyTask && (
+            <View style={styles.actionButtonsContainer}>
+              <TouchableOpacity
+                style={[
+                  styles.actionButton,
+                  styles.secondaryButton,
                   isStatusChanging && styles.actionButtonDisabled
                 ]}
                 onPress={handleToggleStatus}
@@ -402,220 +697,222 @@ const TaskDetailsScreen = () => {
                   <ActivityIndicator size="small" color="#fff" />
                 ) : (
                   <>
-                    <Ionicons name="play-circle" size={18} color="#fff" />
-                    <Text style={styles.primaryButtonText}>Iniciar Tarefa</Text>
+                    <Ionicons name="refresh-circle" size={18} color="#fff" />
+                    <Text style={styles.secondaryButtonText}>Reabrir Tarefa</Text>
                   </>
                 )}
               </TouchableOpacity>
-            )}
-            
-            {task.status === 'IN_PROGRESS' && (
-              <TouchableOpacity
-                style={[
-                  styles.actionButton,
-                  styles.primaryButton,
-                  isStatusChanging && styles.actionButtonDisabled
-                ]}
-                onPress={handleToggleStatus}
-                disabled={isStatusChanging}
-              >
-                {isStatusChanging ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <>
-                    <Ionicons name="checkmark-circle" size={18} color="#fff" />
-                    <Text style={styles.primaryButtonText}>Concluir Tarefa</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            )}
-            
-            <View style={styles.buttonSpacer} />
-            
-            <TouchableOpacity
-              style={[
-                styles.actionButton,
-                styles.secondaryButton,
-                isCancelling && styles.actionButtonDisabled
-              ]}
-              onPress={confirmCancelTask}
-              disabled={isCancelling}
-            >
-              {isCancelling ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <>
-                  <Ionicons name="close-circle" size={18} color="#fff" />
-                  <Text style={styles.secondaryButtonText}>Cancelar</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Botão para reabrir tarefas concluídas */}
-        {isTaskCompleted && canModifyTask && (
-          <View style={styles.actionButtonsContainer}>
-            <TouchableOpacity
-              style={[
-                styles.actionButton,
-                styles.secondaryButton,
-                isStatusChanging && styles.actionButtonDisabled
-              ]}
-              onPress={handleToggleStatus}
-              disabled={isStatusChanging}
-            >
-              {isStatusChanging ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <>
-                  <Ionicons name="refresh-circle" size={18} color="#fff" />
-                  <Text style={styles.secondaryButtonText}>Reabrir Tarefa</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Description */}
-        <View style={styles.sectionContainer}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Descrição</Text>
-          </View>
-
-          <Text style={styles.descriptionText}>
-            {task.description || 'Nenhuma descrição fornecida.'}
-          </Text>
-        </View>
-
-        {/* Task Details */}
-        <View style={styles.sectionContainer}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Detalhes</Text>
-          </View>
-
-          <View style={styles.detailRow}>
-            <View style={styles.detailIcon}>
-              <Ionicons name="calendar-outline" size={20} color="#7B68EE" />
             </View>
-            <View style={styles.detailContent}>
-              <Text style={styles.detailLabel}>Data de Criação</Text>
-              <Text style={styles.detailValue}>
-                {formatDateWithTime(task.createdAt)}
-              </Text>
-            </View>
+          )}
+
+          {/* Descrição */}
+          <View style={styles.descriptionContainer}>
+            <Text style={styles.descriptionLabel}>Descrição</Text>
+            <Text style={styles.descriptionText}>
+              {adaptedTask.description || 'Nenhuma descrição fornecida.'}
+            </Text>
           </View>
 
-          <View style={styles.detailRow}>
-            <View style={styles.detailIcon}>
-              <Ionicons name="alarm-outline" size={20} color="#7B68EE" />
+          {/* Task Details */}
+          <View style={styles.sectionContainer}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Detalhes</Text>
             </View>
-            <View style={styles.detailContent}>
-              <Text style={styles.detailLabel}>Prazo</Text>
-              <View style={styles.dueDateContainer}>
-                <Text style={styles.detailValue}>
-                  {task.dueDate ? formatDateWithTime(task.dueDate) : 'Sem prazo'}
-                </Text>
-                {dueStatus && (
-                  <View style={[styles.dueStatusBadge, { backgroundColor: `${dueStatus.color}20` }]}>
-                    <Text style={[styles.dueStatusText, { color: dueStatus.color }]}>
-                      {dueStatus.text}
-                    </Text>
-                  </View>
-                )}
-              </View>
-            </View>
-          </View>
 
-          {task.completedAt && (
             <View style={styles.detailRow}>
               <View style={styles.detailIcon}>
-                <Ionicons name="checkmark-circle-outline" size={20} color="#4CAF50" />
+                <Ionicons name="calendar-outline" size={20} color="#7B68EE" />
               </View>
               <View style={styles.detailContent}>
-                <Text style={styles.detailLabel}>Concluída em</Text>
+                <Text style={styles.detailLabel}>Data de Criação</Text>
                 <Text style={styles.detailValue}>
-                  {formatDateWithTime(task.completedAt)}
+                  {formatDateWithTime(adaptedTask.createdAt)}
                 </Text>
               </View>
             </View>
-          )}
 
-          <View style={styles.detailRow}>
-            <View style={styles.detailIcon}>
-              <FontAwesome5 name="tag" size={18} color="#7B68EE" />
-            </View>
-            <View style={styles.detailContent}>
-              <Text style={styles.detailLabel}>Categoria</Text>
-              <Text style={styles.detailValue}>
-                {task.category || 'Sem categoria'}
-              </Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Assignees Section */}
-        <View style={styles.sectionContainer}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Responsáveis</Text>
-          </View>
-
-          {task.assignedUsers && task.assignedUsers.length > 0 ? (
-            task.assignedUsers.map(assignee => (
-              <View
-                key={assignee.id}
-                style={[
-                  styles.assigneeRow,
-                  assignee.id === user?.uid && styles.currentUserAssigneeRow
-                ]}
-              >
-                <View style={styles.assigneeAvatarContainer}>
-                  {assignee.profilePictureUrl ? (
-                    <Image
-                      source={{ uri: assignee.profilePictureUrl }}
-                      style={styles.assigneeAvatar}
-                    />
-                  ) : (
-                    <View style={[
-                      styles.assigneeAvatarPlaceholder,
-                      assignee.id === user?.uid && styles.currentUserAvatarPlaceholder
-                    ]}>
-                      <Text style={styles.assigneeInitials}>
-                        {assignee.name.split(' ').map(n => n[0]).join('').toUpperCase()}
+            <View style={styles.detailRow}>
+              <View style={styles.detailIcon}>
+                <Ionicons name="alarm-outline" size={20} color="#7B68EE" />
+              </View>
+              <View style={styles.detailContent}>
+                <Text style={styles.detailLabel}>Prazo</Text>
+                <View style={styles.dueDateContainer}>
+                  <Text style={styles.detailValue}>
+                    {adaptedTask.dueDate ? formatDateWithTime(adaptedTask.dueDate) : 'Sem prazo'}
+                  </Text>
+                  {dueStatus && (
+                    <View style={[styles.dueStatusBadge, { backgroundColor: `${dueStatus.color}20` }]}>
+                      <Text style={[styles.dueStatusText, { color: dueStatus.color }]}>
+                        {dueStatus.text}
                       </Text>
                     </View>
                   )}
-
-                  {assignee.id === user?.uid && (
-                    <View style={styles.currentUserIndicator} />
-                  )}
                 </View>
+              </View>
+            </View>
 
-                <View style={styles.assigneeInfo}>
-                  <Text style={[
-                    styles.assigneeName,
-                    assignee.id === user?.uid && styles.currentUserName
-                  ]}>
-                    {assignee.nickname || assignee.name} {assignee.id === user?.uid ? '(Você)' : ''}
-                  </Text>
-                  <Text style={styles.assigneeEmail}>
-                    {assignee.email}
+            {adaptedTask.completedAt && (
+              <View style={styles.detailRow}>
+                <View style={styles.detailIcon}>
+                  <Ionicons name="checkmark-circle-outline" size={20} color="#4CAF50" />
+                </View>
+                <View style={styles.detailContent}>
+                  <Text style={styles.detailLabel}>Concluída em</Text>
+                  <Text style={styles.detailValue}>
+                    {formatDateWithTime(adaptedTask.completedAt)}
                   </Text>
                 </View>
               </View>
-            ))
-          ) : (
-            <Text style={styles.noAssigneesText}>
-              Nenhum responsável atribuído.
-            </Text>
-          )}
-        </View>
-      </ScrollView>
+            )}
 
-      {canModifyTask && (
+            <View style={styles.detailRow}>
+              <View style={styles.detailIcon}>
+                <FontAwesome5 name="tag" size={18} color="#7B68EE" />
+              </View>
+              <View style={styles.detailContent}>
+                <Text style={styles.detailLabel}>Categoria</Text>
+                <Text style={styles.detailValue}>
+                  {adaptedTask.category || 'Sem categoria'}
+                </Text>
+              </View>
+            </View>
+
+            {adaptedTask.is_recurring && (
+              <View style={styles.detailRow}>
+                <View style={styles.detailIcon}>
+                  <Ionicons name="repeat" size={20} color="#7B68EE" />
+                </View>
+                <View style={styles.detailContent}>
+                  <Text style={styles.detailLabel}>Recorrência</Text>
+                  <Text style={styles.detailValue}>
+                    {adaptedTask.recurrence_type === 'DAILY' ? 'Diária' :
+                      adaptedTask.recurrence_type === 'WEEKLY' ? 'Semanal' :
+                        adaptedTask.recurrence_type === 'MONTHLY' ? 'Mensal' : 'Anual'}
+                    {adaptedTask.recurrence_interval && adaptedTask.recurrence_interval > 1 ?
+                      ` (a cada ${adaptedTask.recurrence_interval} ${adaptedTask.recurrence_type === 'DAILY' ? 'dias' :
+                        adaptedTask.recurrence_type === 'WEEKLY' ? 'semanas' :
+                          adaptedTask.recurrence_type === 'MONTHLY' ? 'meses' : 'anos'
+                      })` : ''
+                    }
+                  </Text>
+                  {adaptedTask.recurrence_end_date && (
+                    <Text style={styles.detailSecondaryValue}>
+                      Término em: {formatDateWithTime(adaptedTask.recurrence_end_date)}
+                    </Text>
+                  )}
+                </View>
+              </View>
+            )}
+          </View>
+
+          <View style={styles.sectionContainer}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Responsáveis</Text>
+            </View>
+
+            {adaptedTask.assignedUsers && adaptedTask.assignedUsers.length > 0 ? (
+              adaptedTask.assignedUsers.map((assignedUser, index) => {
+                // Verificar explicitamente se este é o usuário atual
+                // Comparando id do usuário atribuído com uid do usuário atual
+                const isCurrentUser = user && assignedUser.uid === user.uid;
+
+                // Usamos o id como key, não uid
+                const userKey = assignedUser.uid || `user-${index}`;
+
+                return (
+                  <View
+                    key={userKey}
+                    style={[
+                      styles.assigneeRow,
+                      isCurrentUser && styles.currentUserAssigneeRow
+                    ]}
+                  >
+                    <View style={styles.assigneeAvatarContainer}>
+                      <View style={[
+                        styles.assigneeAvatarPlaceholder,
+                        isCurrentUser && styles.currentUserAvatarPlaceholder
+                      ]}>
+                        <Text style={styles.assigneeInitials}>
+                          {assignedUser.name ?(assignedUser.nickname ? assignedUser.nickname.substring(0, 2).toUpperCase() : 'NA' ) 
+                          : assignedUser.name.substring(0, 2).toUpperCase() 
+                            }
+                        </Text>
+                      </View>
+
+                      {isCurrentUser && (
+                        <View style={styles.currentUserIndicator} />
+                      )}
+                    </View>
+
+                    <View style={styles.assigneeInfo}>
+                      <Text style={[
+                        styles.assigneeName,
+                        isCurrentUser && styles.currentUserName
+                      ]}>
+                        {assignedUser.nickname || assignedUser.name || assignedUser.email || assignedUser.uid}
+                        {isCurrentUser ? ' (Você)' : ''}
+                      </Text>
+                      {assignedUser.email && (
+                        <Text style={styles.assigneeEmail}>{assignedUser.email}</Text>
+                      )}
+                    </View>
+                  </View>
+                );
+              })
+            ) : (
+              <Text style={styles.noAssigneesText}>
+                Nenhum responsável atribuído.
+              </Text>
+            )}
+          </View>
+
+          {/* Ações do Administrador (Exclusão) */}
+          {canModifyTask && (
+            <View style={styles.creatorActionsContainer}>
+              <Text style={styles.creatorActionsTitle}>Ações Administrativas</Text>
+
+              <View style={styles.creatorButtonsContainer}>
+                <TouchableOpacity
+                  style={[styles.creatorButton, styles.deleteButton]}
+                  onPress={handleDeleteTask}
+                >
+                  {isDeleting ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <>
+                      <Ionicons
+                        name={showConfirmDelete ? "alert-circle" : "trash"}
+                        size={20}
+                        color="#fff"
+                        style={styles.buttonIcon}
+                      />
+                      <Text style={styles.deleteButtonText}>
+                        {showConfirmDelete ? "Confirmar exclusão" : "Excluir tarefa"}
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+
+                {showConfirmDelete && (
+                  <TouchableOpacity
+                    style={styles.cancelButton}
+                    onPress={handleCancelDelete}
+                  >
+                    <Ionicons name="close-circle" size={20} color="#aaa" style={styles.buttonIcon} />
+                    <Text style={styles.cancelButtonText}>Cancelar</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          )}
+        </Animated.View>
+      </Animated.ScrollView>
+
+      {canModifyTask && !isDeleting && !showConfirmDelete && (
         <TouchableOpacity
           style={styles.editButton}
-          onPress={() => router.push(`/tasks/edit?id=${task.id}`)}
+          onPress={() => router.push(`/(panel)/tasks/edit?id=${task.id}`)}
         >
           <Feather name="edit-2" size={20} color="#fff" />
         </TouchableOpacity>
@@ -623,7 +920,6 @@ const TaskDetailsScreen = () => {
     </SafeAreaView>
   );
 };
-
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -635,41 +931,104 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#222',
   },
-  errorText: {
+  loadingText: {
     color: '#fff',
+    marginTop: 16,
     fontSize: 16,
   },
-  headerContainer: {
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#222',
+    padding: 20,
+  },
+  errorTitle: {
+    color: '#fff',
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  errorText: {
+    color: '#aaa',
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  retryButton: {
+    backgroundColor: 'rgba(123, 104, 238, 0.2)',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    marginBottom: 16,
+  },
+  retryButtonText: {
+    color: '#7B68EE',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  backButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#444',
+  },
+  backButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  animatedHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(34, 34, 34, 0.95)',
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#333',
-    paddingVertical: 15,
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
+    zIndex: 1000,
     borderBottomWidth: 1,
     borderBottomColor: '#444',
   },
-  backButton: {
-    marginRight: 15,
+  headerBackButton: {
+    padding: 8,
   },
   headerTitle: {
     flex: 1,
-    fontSize: 20,
-    fontWeight: 'bold',
     color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginLeft: 8,
+  },
+  headerRight: {
+    flexDirection: 'row',
+  },
+  headerActionButton: {
+    padding: 8,
+  },
+  scrollView: {
+    flex: 1,
+    backgroundColor: '#222',
+  },
+  scrollContent: {
+    paddingBottom: 40,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
   },
   headerActions: {
     flexDirection: 'row',
   },
-  deleteButton: {
-    marginLeft: 15,
-    padding: 5,
-  },
-  container: {
-    flex: 1,
-    backgroundColor: '#222',
-  },
-  contentContainer: {
-    paddingBottom: 40,
+  actionButton: {
+    padding: 8,
+    marginLeft: 8,
   },
   userAssignmentBanner: {
     flexDirection: 'row',
@@ -685,11 +1044,22 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginLeft: 8,
   },
-  taskHeaderSection: {
+  taskContainer: {
     backgroundColor: '#333',
+    borderRadius: 16,
+    margin: 16,
     padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#444',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 8,
+      },
+    }),
   },
   taskStatusRow: {
     flexDirection: 'row',
@@ -702,6 +1072,36 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 16,
     alignSelf: 'flex-start',
+  },
+  pendingBadge: {
+    backgroundColor: 'rgba(255, 193, 7, 0.2)',
+  },
+  pendingText: {
+    color: '#FFC107',
+  },
+  inProgressBadge: {
+    backgroundColor: 'rgba(33, 150, 243, 0.2)',
+  },
+  inProgressText: {
+    color: '#2196F3',
+  },
+  completedBadge: {
+    backgroundColor: 'rgba(76, 175, 80, 0.2)',
+  },
+  completedText: {
+    color: '#4CAF50',
+  },
+  overdueBadge: {
+    backgroundColor: 'rgba(244, 67, 54, 0.2)',
+  },
+  overdueText: {
+    color: '#F44336',
+  },
+  cancelledBadge: {
+    backgroundColor: 'rgba(158, 158, 158, 0.2)',
+  },
+  cancelledText: {
+    color: '#9E9E9E',
   },
   statusText: {
     fontSize: 12,
@@ -731,31 +1131,39 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
     paddingVertical: 16,
-    backgroundColor: '#2A2A2A',
+    marginTop: 16,
+    borderTopWidth: 1,
     borderBottomWidth: 1,
-    borderBottomColor: '#444',
+    borderColor: '#444',
   },
-  actionButton: {
+  primaryButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 8,
+    backgroundColor: '#7B68EE',
     paddingVertical: 12,
     paddingHorizontal: 16,
+    borderRadius: 8,
     flex: 1,
-  },
-  primaryButton: {
-    backgroundColor: '#7B68EE',
-    maxWidth: '60%', // Limita a largura para não ficar muito próximo do outro botão
+    maxWidth: '60%',
   },
   secondaryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: '#555',
-    maxWidth: '35%', // Menor que o botão principal
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    flex: 1,
+    maxWidth: '35%',
   },
   buttonSpacer: {
-    width: 12, // Espaço entre os botões
+    width: 12,
+  },
+  actionButtonDisabled: {
+    opacity: 0.7,
   },
   primaryButtonText: {
     color: '#fff',
@@ -767,13 +1175,25 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginLeft: 8,
   },
-  actionButtonDisabled: {
-    opacity: 0.7,
+  descriptionContainer: {
+    marginTop: 20,
+    padding: 16,
+    backgroundColor: '#444',
+    borderRadius: 12,
+  },
+  descriptionLabel: {
+    color: '#aaa',
+    fontSize: 14,
+    marginBottom: 8,
+  },
+  descriptionText: {
+    color: '#fff',
+    fontSize: 16,
+    lineHeight: 24,
   },
   sectionContainer: {
-    backgroundColor: '#333',
-    margin: 12,
-    marginTop: 16,
+    marginTop: 20,
+    backgroundColor: '#444',
     borderRadius: 12,
     overflow: 'hidden',
   },
@@ -783,28 +1203,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#444',
+    borderBottomColor: '#555',
   },
   sectionTitle: {
     fontSize: 16,
     fontWeight: 'bold',
     color: '#7B68EE',
   },
-  sectionAction: {
-    color: '#7B68EE',
-    fontSize: 14,
-  },
-  descriptionText: {
-    color: '#fff',
-    fontSize: 15,
-    lineHeight: 22,
-    padding: 16,
-  },
   detailRow: {
     flexDirection: 'row',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#444',
+    borderBottomColor: '#555',
   },
   detailIcon: {
     width: 35,
@@ -824,6 +1234,11 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
   },
+  detailSecondaryValue: {
+    color: '#ddd',
+    fontSize: 14,
+    marginTop: 4,
+  },
   dueDateContainer: {
     flexDirection: 'column',
   },
@@ -842,7 +1257,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#444',
+    borderBottomColor: '#555',
     alignItems: 'center',
   },
   currentUserAssigneeRow: {
@@ -882,7 +1297,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     backgroundColor: '#7B68EE',
     borderWidth: 2,
-    borderColor: '#333',
+    borderColor: '#444',
   },
   assigneeInfo: {
     flex: 1,
@@ -905,6 +1320,73 @@ const styles = StyleSheet.create({
     padding: 16,
     fontStyle: 'italic',
   },
+  creatorActionsContainer: {
+    marginTop: 24,
+    padding: 16,
+    backgroundColor: '#444',
+    borderRadius: 12,
+  },
+  creatorActionsTitle: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 16,
+  },
+  creatorButtonsContainer: {
+    marginTop: 8,
+  },
+  creatorButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginBottom: 12,
+    backgroundColor: 'rgba(123, 104, 238, 0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(123, 104, 238, 0.3)',
+  },
+  deleteButton: {
+    backgroundColor: '#FF6347',
+    borderWidth: 0,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#FF6347',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 3,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
+  },
+  deleteButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  cancelButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginBottom: 12,
+    backgroundColor: '#333',
+    borderWidth: 1,
+    borderColor: '#444',
+  },
+  cancelButtonText: {
+    color: '#aaa',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  buttonIcon: {
+    marginRight: 8,
+  },
   editButton: {
     position: 'absolute',
     bottom: 20,
@@ -922,5 +1404,4 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
 });
-
 export default TaskDetailsScreen;

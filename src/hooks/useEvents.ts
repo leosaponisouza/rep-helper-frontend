@@ -1,5 +1,5 @@
 // src/hooks/useEvents.ts
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { format, parseISO, isAfter, isBefore, isToday } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -26,6 +26,12 @@ export const useEvents = (options: UseEventsOptions = {}) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filterType, setFilterType] = useState<EventFilterType>(options.initialFilter || 'all');
+  
+  // Adiciona estado para controlar requisições em andamento e evitar duplicidade
+  const [requestInProgress, setRequestInProgress] = useState(false);
+  
+  // Referência para controlar debounce de operações
+  const operationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Utility functions to check event status
   const checkEventIsHappening = useCallback((event: Event): boolean => {
@@ -77,7 +83,14 @@ export const useEvents = (options: UseEventsOptions = {}) => {
 
   // Unified function to fetch events
   const fetchEvents = useCallback(async (filter?: EventFilterType) => {
+    // Evita requisições duplicadas
+    if (requestInProgress) {
+      console.log('Uma requisição já está em andamento. Ignorando nova chamada.');
+      return;
+    }
+    
     try {
+      setRequestInProgress(true);
       setLoading(true);
       setError(null);
 
@@ -108,8 +121,9 @@ export const useEvents = (options: UseEventsOptions = {}) => {
       console.error('Error fetching events:', err);
     } finally {
       setLoading(false);
+      setRequestInProgress(false);
     }
-  }, [filterType, processEvents]);
+  }, [filterType, processEvents, requestInProgress]);
 
   // Function to apply filter to events
   const applyFilter = useCallback((filter: EventFilterType, events: Event[] = allEvents) => {
@@ -157,14 +171,29 @@ export const useEvents = (options: UseEventsOptions = {}) => {
 
   // Load events on component mount
   useEffect(() => {
-    fetchEvents(filterType);
-  }, [fetchEvents, filterType]);
+    // No useEffect não usamos o debounce, mas apenas verificamos se já existe uma requisição
+    if (!requestInProgress) {
+      fetchEvents(filterType);
+    }
+  }, [fetchEvents, filterType, requestInProgress]);
 
-  // Function to refresh events
+  // Function to refresh events com debounce
   const refreshEvents = useCallback(async (specificFilter?: EventFilterType) => {
+    // Limpa timeout anterior se existir
+    if (operationTimeoutRef.current) {
+      clearTimeout(operationTimeoutRef.current);
+    }
+    
+    // Evita requisições duplicadas
+    if (requestInProgress) {
+      console.log('Uma requisição já está em andamento. Ignorando refresh.');
+      return false;
+    }
+    
     const filterToUse = specificFilter || filterType;
     
     try {
+      setRequestInProgress(true);
       setLoading(true);
       await fetchEvents(filterToUse);
       return true;
@@ -173,42 +202,79 @@ export const useEvents = (options: UseEventsOptions = {}) => {
       return false;
     } finally {
       setLoading(false);
+      setRequestInProgress(false);
     }
-  }, [fetchEvents, filterType]);
+  }, [fetchEvents, filterType, requestInProgress]);
 
   // Function to create event
   const createEvent = useCallback(async (eventData: EventFormData) => {
+    if (requestInProgress) {
+      console.log('Uma requisição já está em andamento. Ignorando criação de evento.');
+      throw new Error('Uma ação já está em andamento. Tente novamente em instantes.');
+    }
+    
     try {
+      setRequestInProgress(true);
       const newEvent = await EventsService.createEvent(eventData);
       
-      // Update events list
-      await refreshEvents();
+      // Aplicamos debounce para o refresh após criar o evento
+      if (operationTimeoutRef.current) {
+        clearTimeout(operationTimeoutRef.current);
+      }
+      
+      operationTimeoutRef.current = setTimeout(async () => {
+        await refreshEvents();
+        operationTimeoutRef.current = null;
+      }, 300);
       
       return newEvent;
     } catch (err) {
       console.error('Error creating event:', err);
       throw err;
+    } finally {
+      setRequestInProgress(false);
     }
-  }, [refreshEvents]);
+  }, [refreshEvents, requestInProgress]);
 
   // Function to update event
   const updateEvent = useCallback(async (eventId: number, updateData: Partial<EventFormData>) => {
+    if (requestInProgress) {
+      console.log('Uma requisição já está em andamento. Ignorando atualização de evento.');
+      throw new Error('Uma ação já está em andamento. Tente novamente em instantes.');
+    }
+    
     try {
+      setRequestInProgress(true);
       const updatedEvent = await EventsService.updateEvent(eventId, updateData);
       
-      // Update events list
-      await refreshEvents();
+      // Aplicamos debounce para o refresh após atualizar o evento
+      if (operationTimeoutRef.current) {
+        clearTimeout(operationTimeoutRef.current);
+      }
+      
+      operationTimeoutRef.current = setTimeout(async () => {
+        await refreshEvents();
+        operationTimeoutRef.current = null;
+      }, 300);
       
       return updatedEvent;
     } catch (err) {
       console.error('Error updating event:', err);
       throw err;
+    } finally {
+      setRequestInProgress(false);
     }
-  }, [refreshEvents]);
+  }, [refreshEvents, requestInProgress]);
 
   // Function to delete event
   const deleteEvent = useCallback(async (eventId: number) => {
+    if (requestInProgress) {
+      console.log('Uma requisição já está em andamento. Ignorando exclusão de evento.');
+      throw new Error('Uma ação já está em andamento. Tente novamente em instantes.');
+    }
+    
     try {
+      setRequestInProgress(true);
       await EventsService.deleteEvent(eventId);
       
       // Update events list after deletion
@@ -219,8 +285,10 @@ export const useEvents = (options: UseEventsOptions = {}) => {
     } catch (err) {
       console.error('Error deleting event:', err);
       throw err;
+    } finally {
+      setRequestInProgress(false);
     }
-  }, []);
+  }, [requestInProgress]);
 
   // Function to respond to an invitation
   const updateInvitationStatus = useCallback(async (
@@ -228,7 +296,13 @@ export const useEvents = (options: UseEventsOptions = {}) => {
     userId: string, 
     status: InvitationStatus
   ) => {
+    if (requestInProgress) {
+      console.log('Uma requisição já está em andamento. Ignorando atualização de convite.');
+      throw new Error('Uma ação já está em andamento. Tente novamente em instantes.');
+    }
+    
     try {
+      setRequestInProgress(true);
       const response = await EventsService.updateInvitationStatus(eventId, userId, status);
       
       // Update only the changed event in the current list
@@ -254,14 +328,22 @@ export const useEvents = (options: UseEventsOptions = {}) => {
     } catch (err) {
       console.error('Error updating invitation status:', err);
       throw err;
+    } finally {
+      setRequestInProgress(false);
     }
-  }, [applyFilter, filterType]);
+  }, [applyFilter, filterType, requestInProgress]);
 
   // Function to invite users to an event
   const inviteUsers = useCallback(async (eventId: number, userIds: string[]) => {
+    if (requestInProgress) {
+      console.log('Uma requisição já está em andamento. Ignorando convite de usuários.');
+      throw new Error('Uma ação já está em andamento. Tente novamente em instantes.');
+    }
+    
     try {
       if (!userIds.length) return null;
       
+      setRequestInProgress(true);
       const response = await EventsService.inviteUsers(eventId, userIds);
       
       // After inviting users, fetch the specific event again
@@ -285,11 +367,15 @@ export const useEvents = (options: UseEventsOptions = {}) => {
     } catch (err) {
       console.error('Error inviting users:', err);
       throw err;
+    } finally {
+      setRequestInProgress(false);
     }
-  }, [applyFilter, filterType]);
+  }, [applyFilter, filterType, requestInProgress]);
 
   // Function to get event by ID
   const getEventById = useCallback(async (eventId: string | number): Promise<Event | null> => {
+    // Não precisamos bloquear essa operação com requestInProgress
+    // pois ela é apenas uma consulta que não modifica dados
     try {
       return await EventsService.getEventById(eventId);
     } catch (err) {
@@ -360,7 +446,8 @@ export const useEvents = (options: UseEventsOptions = {}) => {
     getInvitationStats,
     isCurrentUserCreator,
     filterType,
-    getEventById
+    getEventById,
+    requestInProgress // Exportamos este estado para componentes que precisem saber se uma operação está em andamento
   }), [
     filteredEvents,
     allEvents,
@@ -379,7 +466,8 @@ export const useEvents = (options: UseEventsOptions = {}) => {
     getInvitationStats,
     isCurrentUserCreator,
     filterType,
-    getEventById
+    getEventById,
+    requestInProgress
   ]);
 };
 
