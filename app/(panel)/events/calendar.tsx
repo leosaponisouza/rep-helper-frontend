@@ -12,7 +12,8 @@ import {
   RefreshControl,
   Alert,
   Animated,
-  Platform
+  Platform,
+  ScrollView
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -72,12 +73,7 @@ const CalendarScreen: React.FC = () => {
   
   // Animações
   const scrollY = new Animated.Value(0);
-  const calendarOpacity = scrollY.interpolate({
-    inputRange: [0, 50],
-    outputRange: [1, 0.8],
-    extrapolate: 'clamp'
-  });
-
+  
   // Configurações de tema para o calendário - melhorado para acessibilidade
   const calendarTheme = {
     backgroundColor: '#333',
@@ -403,8 +399,19 @@ const CalendarScreen: React.FC = () => {
   }
 
   return (
-    <View style={styles.container}>
-      <Animated.View style={[styles.calendarContainer, { opacity: calendarOpacity }]}>
+    <ScrollView 
+      style={styles.container}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={refreshCalendarEvents}
+          colors={['#7B68EE']}
+          tintColor={'#7B68EE'}
+          progressBackgroundColor="#333"
+        />
+      }
+    >
+      <View style={styles.calendarContainer}>
         {/* Cabeçalho do calendário com botões de navegação */}
         <View style={styles.calendarHeader}>
           <Text style={styles.calendarMonthTitle}>
@@ -447,7 +454,7 @@ const CalendarScreen: React.FC = () => {
             />
           )}
         />
-      </Animated.View>
+      </View>
       
       {/* Exibir mensagem de erro se houver */}
       {errorMessage && (
@@ -488,28 +495,9 @@ const CalendarScreen: React.FC = () => {
         </View>
         
         {selectedDateEvents.length > 0 ? (
-          <Animated.FlatList
-            data={selectedDateEvents}
-            keyExtractor={(item) => String(item.id)}
-            renderItem={renderEventItem}
-            style={styles.eventsList}
-            showsVerticalScrollIndicator={false}
-            onScroll={Animated.event(
-              [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-              { useNativeDriver: true }
-            )}
-            scrollEventThrottle={16}
-            refreshControl={
-              <RefreshControl
-                refreshing={refreshing}
-                onRefresh={refreshCalendarEvents}
-                colors={['#7B68EE']}
-                tintColor={'#7B68EE'}
-                progressBackgroundColor="#333"
-              />
-            }
-            contentContainerStyle={styles.eventsListContent}
-          />
+          <View style={styles.eventsList}>
+            {selectedDateEvents.map((item) => renderEventItem({ item } as ListRenderItemInfo<Event>))}
+          </View>
         ) : (
           <View style={styles.noEventsContainer}>
             <MaterialCommunityIcons name="calendar-blank" size={48} color="#7B68EE" />
@@ -543,7 +531,7 @@ const CalendarScreen: React.FC = () => {
       >
         <Ionicons name="add" size={24} color="white" />
       </TouchableOpacity>
-    </View>
+    </ScrollView>
   );
 };
 
@@ -641,6 +629,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#444',
     marginTop: 10,
+    paddingBottom: 80, // Espaço para o botão flutuante
   },
   selectedDateHeader: {
     flexDirection: 'row',
@@ -669,11 +658,7 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   eventsList: {
-    flex: 1,
-  },
-  eventsListContent: {
     paddingHorizontal: 16,
-    paddingBottom: 80, // Espaço para o botão flutuante
   },
   eventItem: {
     flexDirection: 'row',
@@ -778,9 +763,8 @@ const styles = StyleSheet.create({
     color: '#FF6347',
   },
   noEventsContainer: {
-    flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
+    justifyContent: 'center',
     paddingVertical: 40,
   },
   noEventsText: {

@@ -1,5 +1,5 @@
 // app/(panel)/events/events-list.tsx - Versão otimizada com melhor UX e performance
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,12 +10,11 @@ import {
   RefreshControl,
   Dimensions,
   Platform,
-  Animated,
-  Image
+  Animated
 } from 'react-native';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useEventsContext, Event, EventFilterType } from '../../../src/context/EventsContext';
+import { useEvents, Event, EventFilterType } from '../../../src/hooks/useEvents';
 import { useAuth } from '../../../src/context/AuthContext';
 import { format, parseISO, isToday, isTomorrow, isPast, isAfter, isBefore, addDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -26,12 +25,13 @@ const { width } = Dimensions.get('window');
 const EventsListScreen: React.FC = () => {
   const router = useRouter();
   const { user } = useAuth();
-  const { events, loading, refreshEvents } = useEventsContext();
+  const { events, loading, refreshEvents } = useEvents();
   
   // Estados
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [filter, setFilter] = useState<EventFilterType>('upcoming');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [initialLoadDone, setInitialLoadDone] = useState<boolean>(false);
   
   // Animações
   const scrollY = useState(new Animated.Value(0))[0];
@@ -41,12 +41,13 @@ const EventsListScreen: React.FC = () => {
     extrapolate: 'clamp'
   });
   
-  // Recarregar eventos quando a tela receber foco
-  useFocusEffect(
-    useCallback(() => {
+  // Carregamento inicial - acontece apenas uma vez ao montar o componente
+  useEffect(() => {
+    if (!initialLoadDone) {
       refreshEventsList();
-    }, [])
-  );
+      setInitialLoadDone(true);
+    }
+  }, [initialLoadDone]);
   
   // Função para recarregar a lista de eventos - otimizada
   const refreshEventsList = useCallback(async () => {
@@ -62,12 +63,18 @@ const EventsListScreen: React.FC = () => {
     }
   }, [refreshEvents, filter]);
   
+  // Quando o filtro muda, atualiza a lista
+  useEffect(() => {
+    if (initialLoadDone) {
+      refreshEventsList();
+    }
+  }, [filter, initialLoadDone, refreshEventsList]);
+  
   // Filtrar eventos com base no filtro selecionado - otimizado com useMemo
   const filteredEvents = useMemo(() => {
     if (!events || events.length === 0) return [];
     
     const now = new Date();
-    const tomorrow = addDays(now, 1);
     
     switch (filter) {
       case 'upcoming':
@@ -303,7 +310,7 @@ const EventsListScreen: React.FC = () => {
   
   // Renderizar estado vazio - otimizado
   const renderEmptyState = useCallback(() => {
-    if (loading && !refreshing) {
+    if (loading && !refreshing && !initialLoadDone) {
       return (
         <View style={styles.emptyContainer}>
           <ActivityIndicator size="large" color="#7B68EE" />
@@ -314,7 +321,7 @@ const EventsListScreen: React.FC = () => {
     
     let message = 'Nenhum evento encontrado';
     let subMessage = 'Crie um novo evento para começar';
-    let icon = 'calendar-outline';
+    let icon = 'calendar-blank';
     
     switch (filter) {
       case 'upcoming':
@@ -324,18 +331,18 @@ const EventsListScreen: React.FC = () => {
       case 'past':
         message = 'Nenhum evento passado';
         subMessage = 'Os eventos passados aparecerão aqui';
-        icon = 'time-outline';
+        icon = 'clock-outline';
         break;
       case 'mine':
         message = 'Você não tem eventos';
         subMessage = 'Crie um evento ou confirme presença em um';
-        icon = 'person-outline';
+        icon = 'account';
         break;
     }
     
     return (
       <View style={styles.emptyContainer}>
-        <Ionicons name={icon} size={64} color="#7B68EE" />
+        <MaterialCommunityIcons name={icon} size={64} color="#7B68EE" />
         <Text style={styles.emptyTitle}>{message}</Text>
         <Text style={styles.emptyText}>{subMessage}</Text>
         
@@ -349,7 +356,7 @@ const EventsListScreen: React.FC = () => {
         </TouchableOpacity>
       </View>
     );
-  }, [loading, refreshing, filter, router]);
+  }, [loading, refreshing, filter, router, initialLoadDone]);
   
   // Renderizar cabeçalho da lista - otimizado
   const renderListHeader = useCallback(() => (
@@ -366,7 +373,7 @@ const EventsListScreen: React.FC = () => {
           accessibilityLabel="Filtrar por eventos futuros"
           accessibilityState={{ selected: filter === 'upcoming' }}
         >
-          <Ionicons 
+          <MaterialCommunityIcons 
             name="calendar"
             size={16} 
             color={filter === 'upcoming' ? '#7B68EE' : '#aaa'} 
@@ -390,8 +397,8 @@ const EventsListScreen: React.FC = () => {
           accessibilityLabel="Filtrar por eventos passados"
           accessibilityState={{ selected: filter === 'past' }}
         >
-          <Ionicons 
-            name="time"
+          <MaterialCommunityIcons 
+            name="clock-outline"
             size={16} 
             color={filter === 'past' ? '#7B68EE' : '#aaa'} 
             style={styles.filterIcon}
@@ -414,8 +421,8 @@ const EventsListScreen: React.FC = () => {
           accessibilityLabel="Filtrar por meus eventos"
           accessibilityState={{ selected: filter === 'mine' }}
         >
-          <Ionicons 
-            name="person"
+          <MaterialCommunityIcons 
+            name="account"
             size={16} 
             color={filter === 'mine' ? '#7B68EE' : '#aaa'} 
             style={styles.filterIcon}
@@ -438,8 +445,8 @@ const EventsListScreen: React.FC = () => {
           accessibilityLabel="Mostrar todos os eventos"
           accessibilityState={{ selected: filter === 'all' }}
         >
-          <Ionicons 
-            name="apps"
+          <MaterialCommunityIcons 
+            name="view-grid"
             size={16} 
             color={filter === 'all' ? '#7B68EE' : '#aaa'} 
             style={styles.filterIcon}
