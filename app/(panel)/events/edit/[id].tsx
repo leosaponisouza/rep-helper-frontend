@@ -457,7 +457,7 @@ const EditEventScreen: React.FC = () => {
             style={[
               sharedStyles.button, 
               loading && sharedStyles.buttonDisabled,
-              { marginBottom: 60 } // Espaço extra no final para o botão não ser cortado
+              { marginBottom: 20 } // Espaço entre os botões
             ]}
             onPress={handleUpdateEvent}
             disabled={loading}
@@ -480,7 +480,7 @@ const EditEventScreen: React.FC = () => {
             style={[
               sharedStyles.button,
               sharedStyles.buttonSecondary,
-              { marginBottom: 60 } // Espaço extra no final para o botão não ser cortado
+              { marginBottom: 60, marginTop: 0 } // Ajuste para espaçamento adequado
             ]}
             onPress={() => router.push(`/(panel)/events/invitations/${id}`)}
             accessibilityRole="button"
