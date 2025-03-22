@@ -19,55 +19,16 @@ export default function EventsLayout() {
           },
           headerShadowVisible: false,
           headerBackVisible: true,
+          headerShown: false // Oculta todos os headers por padrão
         }}
       >
-        <Stack.Screen 
-          name="index" 
-          options={{ 
-            headerShown: false 
-          }} 
-        />
-        <Stack.Screen 
-          name="events-list" 
-          options={{ 
-            headerShown: false 
-          }} 
-        />
-        <Stack.Screen 
-          name="calendar" 
-          options={{ 
-            title: 'Calendário',
-            headerShown: false 
-          }} 
-        />
-        <Stack.Screen 
-          name="create" 
-          options={{ 
-            title: 'Criar Evento',
-            headerShown: false 
-          }} 
-        />
-        <Stack.Screen 
-          name="edit" 
-          options={{ 
-            title: 'Editar Evento',
-            headerShown: false 
-          }} 
-        />
-        <Stack.Screen 
-          name="[id]" 
-          options={{ 
-            title: 'Detalhes do Evento',
-            headerShown: false 
-          }} 
-        />
-        <Stack.Screen 
-          name="invite" 
-          options={{ 
-            title: 'Convidar Membros',
-            headerShown: false 
-          }} 
-        />
+        <Stack.Screen name="index" />
+        <Stack.Screen name="events-list" />
+        <Stack.Screen name="calendar" />
+        <Stack.Screen name="create" />
+        <Stack.Screen name="edit/[id]" />
+        <Stack.Screen name="[id]" />
+        <Stack.Screen name="invitations/[id]" />
       </Stack>
     </EventsProvider>
   );

@@ -1,11 +1,10 @@
-// app/(panel)/events/edit.tsx
-import React, { useState, useEffect } from 'react';
+// app/(panel)/events/edit/[id].tsx
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
   TextInput,
   TouchableOpacity,
-  StyleSheet,
   SafeAreaView,
   StatusBar,
   ScrollView,
@@ -13,23 +12,29 @@ import {
   Platform,
   Alert,
   ActivityIndicator,
-  Keyboard
+  Keyboard,
+  Animated
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useEvents, Event } from '../../../src/hooks/useEvents';
-import { useAuth } from '../../../src/context/AuthContext';
+import { useEventsContext, Event } from '../../../../src/context/EventsContext';
+import { useAuth } from '../../../../src/context/AuthContext';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { format, parseISO, isBefore } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import api from '../../../src/services/api';
-import { ErrorHandler } from '../../../src/utils/errorHandling';
+
+// Importar estilos compartilhados
+import { sharedStyles, colors } from '../../../../src/styles/sharedStyles';
+import eventsStyles from '../../../../src/styles/eventStyles';
 
 const EditEventScreen: React.FC = () => {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
-  const { updateEvent, isCurrentUserCreator } = useEvents();
+  const { updateEvent, isCurrentUserCreator, getEventById } = useEventsContext();
+  
+  // Animações
+  const fadeAnim = useState(new Animated.Value(0))[0];
   
   // Form states
   const [title, setTitle] = useState('');
@@ -52,6 +57,15 @@ const EditEventScreen: React.FC = () => {
   const [descriptionFocused, setDescriptionFocused] = useState(false);
   const [locationFocused, setLocationFocused] = useState(false);
   
+  // Efeito de entrada com animação
+  useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+  }, []);
+  
   // Carregar os dados do evento
   useEffect(() => {
     const fetchEventDetails = async () => {
@@ -59,9 +73,14 @@ const EditEventScreen: React.FC = () => {
       
       try {
         setInitialLoading(true);
-        const response = await api.get(`/api/v1/events/${id}`);
-        const eventData = response.data;
+        const eventData = await getEventById(id);
         
+        if (!eventData) {
+          Alert.alert('Erro', 'Evento não encontrado.');
+          router.back();
+          return;
+        }
+
         // Verificar se o usuário tem permissão para editar
         if (!isCurrentUserCreator(eventData)) {
           Alert.alert('Erro', 'Você não tem permissão para editar este evento');
@@ -77,7 +96,7 @@ const EditEventScreen: React.FC = () => {
         setEndDate(parseISO(eventData.endDate));
       } catch (error) {
         console.error("Error fetching event:", error);
-        ErrorHandler.handle(error);
+        Alert.alert('Erro', 'Não foi possível carregar o evento');
         router.back();
       } finally {
         setInitialLoading(false);
@@ -85,10 +104,10 @@ const EditEventScreen: React.FC = () => {
     };
 
     fetchEventDetails();
-  }, [id]);
+  }, [id, getEventById, isCurrentUserCreator, router]);
   
-  // Funções para manipular o DateTimePicker
-  const showDatePicker = (forDate: 'start' | 'end', mode: 'date' | 'time') => {
+  // Funções para manipular o DateTimePicker - otimizadas
+  const showDatePicker = useCallback((forDate: 'start' | 'end', mode: 'date' | 'time') => {
     setDatePickerFor(forDate);
     setDatePickerMode(mode);
     if (forDate === 'start') {
@@ -96,9 +115,9 @@ const EditEventScreen: React.FC = () => {
     } else {
       setShowEndDatePicker(true);
     }
-  };
+  }, []);
   
-  const handleDateChange = (event: any, selectedDate?: Date) => {
+  const handleDateChange = useCallback((event: any, selectedDate?: Date) => {
     if (Platform.OS === 'android') {
       setShowStartDatePicker(false);
       setShowEndDatePicker(false);
@@ -207,19 +226,19 @@ const EditEventScreen: React.FC = () => {
         }
       }
     }
-  };
+  }, [startDate, endDate, datePickerFor, datePickerMode]);
   
-  // Formatação das datas para exibição
-  const formatDate = (date: Date) => {
+  // Formatação das datas para exibição - otimizada
+  const formatDate = useCallback((date: Date) => {
     return format(date, "dd 'de' MMMM 'de' yyyy", { locale: ptBR });
-  };
+  }, []);
   
-  const formatTime = (date: Date) => {
+  const formatTime = useCallback((date: Date) => {
     return format(date, "HH:mm", { locale: ptBR });
-  };
+  }, []);
   
-  // Validar formulário antes de submeter
-  const validateForm = () => {
+  // Validar formulário antes de submeter - otimizada
+  const validateForm = useCallback(() => {
     if (!title.trim()) {
       Alert.alert('Erro', 'Por favor, informe um título para o evento');
       return false;
@@ -231,10 +250,10 @@ const EditEventScreen: React.FC = () => {
     }
     
     return true;
-  };
+  }, [title, startDate, endDate]);
   
   // Atualizar evento
-  const handleUpdateEvent = async () => {
+  const handleUpdateEvent = useCallback(async () => {
     Keyboard.dismiss();
     
     if (!validateForm() || !id) return;
@@ -252,91 +271,103 @@ const EditEventScreen: React.FC = () => {
       
       await updateEvent(parseInt(id), eventData);
       
-      Alert.alert(
-        'Sucesso',
-        'Evento atualizado com sucesso!',
-        [
-          {
-            text: 'OK',
-            onPress: () => router.replace(`/(panel)/events/${id}`)
-          }
-        ]
-      );
+      // Animação de saída
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }).start(() => {
+        Alert.alert(
+          'Sucesso',
+          'Evento atualizado com sucesso!',
+          [
+            {
+              text: 'OK',
+              onPress: () => router.push(`/(panel)/events/${id}`)
+            }
+          ]
+        );
+      });
     } catch (error) {
       console.error('Erro ao atualizar evento:', error);
       Alert.alert('Erro', 'Não foi possível atualizar o evento. Tente novamente.');
     } finally {
       setLoading(false);
     }
-  };
+  }, [title, description, startDate, endDate, location, validateForm, id, updateEvent, fadeAnim, router]);
   
   if (initialLoading) {
     return (
-      <SafeAreaView style={styles.safeArea}>
-        <StatusBar barStyle="light-content" backgroundColor="#222" />
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#7B68EE" />
-          <Text style={styles.loadingText}>Carregando evento...</Text>
+      <SafeAreaView style={sharedStyles.safeArea}>
+        <StatusBar barStyle="light-content" backgroundColor={colors.background.primary} />
+        <View style={sharedStyles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary.main} />
+          <Text style={sharedStyles.loadingText}>Carregando evento...</Text>
         </View>
       </SafeAreaView>
     );
   }
   
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="light-content" backgroundColor="#222" />
+    <SafeAreaView style={sharedStyles.safeArea}>
+      <StatusBar barStyle="light-content" backgroundColor={colors.background.primary} />
       
       <KeyboardAvoidingView 
-        style={styles.container}
+        style={sharedStyles.container}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
-        <View style={styles.headerContainer}>
+        <View style={sharedStyles.headerContainer}>
           <TouchableOpacity 
             onPress={() => router.back()}
-            style={styles.backButton}
+            style={sharedStyles.headerBackButton}
+            accessibilityRole="button"
+            accessibilityLabel="Voltar"
           >
-            <Ionicons name="arrow-back" size={24} color="#7B68EE" />
+            <Ionicons name="arrow-back" size={24} color={colors.primary.main} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Editar Evento</Text>
+          <Text style={sharedStyles.headerTitle}>Editar Evento</Text>
         </View>
         
-        <ScrollView 
-          style={styles.scrollContainer}
+        <Animated.ScrollView 
+          style={[sharedStyles.scrollContainer, { opacity: fadeAnim }]}
           keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 100 }} // Adiciona padding extra no final para evitar que conteúdo seja cortado
         >
           {/* Título */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Título do Evento *</Text>
+          <View style={sharedStyles.inputGroup}>
+            <Text style={sharedStyles.inputLabel}>Título do Evento *</Text>
             <View style={[
-              styles.inputContainer, 
-              titleFocused && styles.inputFocused
+              sharedStyles.inputContainer, 
+              titleFocused && sharedStyles.inputFocused
             ]}>
-              <Ionicons name="calendar" size={20} color="#7B68EE" style={styles.inputIcon} />
+              <Ionicons name="calendar" size={20} color={colors.primary.main} style={sharedStyles.buttonIcon} />
               <TextInput
-                style={styles.input}
+                style={sharedStyles.input}
                 placeholder="Digite o título do evento"
-                placeholderTextColor="#aaa"
+                placeholderTextColor={colors.text.tertiary}
                 value={title}
                 onChangeText={setTitle}
                 maxLength={100}
                 onFocus={() => setTitleFocused(true)}
                 onBlur={() => setTitleFocused(false)}
+                returnKeyType="next"
               />
             </View>
           </View>
           
           {/* Descrição */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Descrição (opcional)</Text>
+          <View style={sharedStyles.inputGroup}>
+            <Text style={sharedStyles.inputLabel}>Descrição (opcional)</Text>
             <View style={[
-              styles.inputContainer, 
-              styles.textAreaContainer,
-              descriptionFocused && styles.inputFocused
+              sharedStyles.inputContainer, 
+              sharedStyles.textAreaContainer,
+              descriptionFocused && sharedStyles.inputFocused
             ]}>
               <TextInput
-                style={[styles.input, styles.textArea]}
+                style={[sharedStyles.input, sharedStyles.textArea]}
                 placeholder="Descreva mais sobre o evento"
-                placeholderTextColor="#aaa"
+                placeholderTextColor={colors.text.tertiary}
                 value={description}
                 onChangeText={setDescription}
                 multiline
@@ -349,94 +380,116 @@ const EditEventScreen: React.FC = () => {
           </View>
           
           {/* Data de Início */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Data e Hora de Início *</Text>
-            <View style={styles.dateTimeContainer}>
+          <View style={sharedStyles.inputGroup}>
+            <Text style={sharedStyles.inputLabel}>Data e Hora de Início *</Text>
+            <View style={eventsStyles.dateTimeContainer}>
               <TouchableOpacity 
-                style={styles.dateButton}
+                style={eventsStyles.dateButton}
                 onPress={() => showDatePicker('start', 'date')}
+                accessibilityRole="button"
+                accessibilityLabel="Selecionar data de início"
               >
-                <Ionicons name="calendar" size={20} color="#7B68EE" style={styles.inputIcon} />
-                <Text style={styles.dateTimeText}>{formatDate(startDate)}</Text>
+                <Ionicons name="calendar" size={20} color={colors.primary.main} style={sharedStyles.buttonIcon} />
+                <Text style={eventsStyles.dateTimeText}>{formatDate(startDate)}</Text>
               </TouchableOpacity>
               
               <TouchableOpacity 
-                style={styles.timeButton}
+                style={eventsStyles.timeButton}
                 onPress={() => showDatePicker('start', 'time')}
+                accessibilityRole="button"
+                accessibilityLabel="Selecionar hora de início"
               >
-                <Ionicons name="time" size={20} color="#7B68EE" style={styles.inputIcon} />
-                <Text style={styles.dateTimeText}>{formatTime(startDate)}</Text>
+                <Ionicons name="time" size={20} color={colors.primary.main} style={sharedStyles.buttonIcon} />
+                <Text style={eventsStyles.dateTimeText}>{formatTime(startDate)}</Text>
               </TouchableOpacity>
             </View>
           </View>
           
           {/* Data de Término */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Data e Hora de Término *</Text>
-            <View style={styles.dateTimeContainer}>
+          <View style={sharedStyles.inputGroup}>
+            <Text style={sharedStyles.inputLabel}>Data e Hora de Término *</Text>
+            <View style={eventsStyles.dateTimeContainer}>
               <TouchableOpacity 
-                style={styles.dateButton}
+                style={eventsStyles.dateButton}
                 onPress={() => showDatePicker('end', 'date')}
+                accessibilityRole="button"
+                accessibilityLabel="Selecionar data de término"
               >
-                <Ionicons name="calendar" size={20} color="#7B68EE" style={styles.inputIcon} />
-                <Text style={styles.dateTimeText}>{formatDate(endDate)}</Text>
+                <Ionicons name="calendar" size={20} color={colors.primary.main} style={sharedStyles.buttonIcon} />
+                <Text style={eventsStyles.dateTimeText}>{formatDate(endDate)}</Text>
               </TouchableOpacity>
               
               <TouchableOpacity 
-                style={styles.timeButton}
+                style={eventsStyles.timeButton}
                 onPress={() => showDatePicker('end', 'time')}
+                accessibilityRole="button"
+                accessibilityLabel="Selecionar hora de término"
               >
-                <Ionicons name="time" size={20} color="#7B68EE" style={styles.inputIcon} />
-                <Text style={styles.dateTimeText}>{formatTime(endDate)}</Text>
+                <Ionicons name="time" size={20} color={colors.primary.main} style={sharedStyles.buttonIcon} />
+                <Text style={eventsStyles.dateTimeText}>{formatTime(endDate)}</Text>
               </TouchableOpacity>
             </View>
           </View>
           
           {/* Local do Evento */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Local (opcional)</Text>
+          <View style={sharedStyles.inputGroup}>
+            <Text style={sharedStyles.inputLabel}>Local (opcional)</Text>
             <View style={[
-              styles.inputContainer, 
-              locationFocused && styles.inputFocused
+              sharedStyles.inputContainer, 
+              locationFocused && sharedStyles.inputFocused
             ]}>
-              <Ionicons name="location" size={20} color="#7B68EE" style={styles.inputIcon} />
+              <Ionicons name="location" size={20} color={colors.primary.main} style={sharedStyles.buttonIcon} />
               <TextInput
-                style={styles.input}
+                style={sharedStyles.input}
                 placeholder="Local do evento"
-                placeholderTextColor="#aaa"
+                placeholderTextColor={colors.text.tertiary}
                 value={location}
                 onChangeText={setLocation}
                 onFocus={() => setLocationFocused(true)}
                 onBlur={() => setLocationFocused(false)}
+                returnKeyType="done"
               />
             </View>
           </View>
           
           {/* Botão de Salvar */}
           <TouchableOpacity 
-            style={[styles.saveButton, loading && styles.buttonDisabled]}
+            style={[
+              sharedStyles.button, 
+              loading && sharedStyles.buttonDisabled,
+              { marginBottom: 60 } // Espaço extra no final para o botão não ser cortado
+            ]}
             onPress={handleUpdateEvent}
             disabled={loading}
+            accessibilityRole="button"
+            accessibilityLabel="Salvar alterações"
+            accessibilityHint="Salva as alterações feitas no evento"
           >
             {loading ? (
-              <ActivityIndicator size="small" color="#fff" />
+              <ActivityIndicator size="small" color={colors.text.primary} />
             ) : (
               <>
-                <Ionicons name="save" size={20} color="#fff" style={styles.buttonIcon} />
-                <Text style={styles.saveButtonText}>Salvar Alterações</Text>
+                <Ionicons name="save" size={20} color={colors.text.primary} style={sharedStyles.buttonIcon} />
+                <Text style={sharedStyles.buttonText}>Salvar Alterações</Text>
               </>
             )}
           </TouchableOpacity>
           
           {/* Botão para gerenciar convites */}
           <TouchableOpacity 
-            style={styles.inviteButton}
-            onPress={() => router.push(`/events/invite?id=${id}`)}
+            style={[
+              sharedStyles.button,
+              sharedStyles.buttonSecondary,
+              { marginBottom: 60 } // Espaço extra no final para o botão não ser cortado
+            ]}
+            onPress={() => router.push(`/(panel)/events/invitations/${id}`)}
+            accessibilityRole="button"
+            accessibilityLabel="Gerenciar convidados"
           >
-            <Ionicons name="people" size={20} color="#fff" style={styles.buttonIcon} />
-            <Text style={styles.inviteButtonText}>Gerenciar Convidados</Text>
+            <Ionicons name="people" size={20} color={colors.primary.main} style={sharedStyles.buttonIcon} />
+            <Text style={[sharedStyles.buttonText, sharedStyles.buttonTextSecondary]}>Gerenciar Convidados</Text>
           </TouchableOpacity>
-        </ScrollView>
+        </Animated.ScrollView>
         
         {/* Date Pickers */}
         {showStartDatePicker && (
@@ -446,6 +499,7 @@ const EditEventScreen: React.FC = () => {
             display="default"
             onChange={handleDateChange}
             minimumDate={new Date()}
+            textColor={Platform.OS === 'ios' ? '#fff' : undefined}
           />
         )}
         
@@ -456,169 +510,12 @@ const EditEventScreen: React.FC = () => {
             display="default"
             onChange={handleDateChange}
             minimumDate={datePickerMode === 'date' ? startDate : undefined}
+            textColor={Platform.OS === 'ios' ? '#fff' : undefined}
           />
         )}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };
-
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#222',
-  },
-  container: {
-    flex: 1,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    color: '#fff',
-    marginTop: 16,
-    fontSize: 16,
-  },
-  headerContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#333',
-    paddingVertical: 15,
-    paddingHorizontal: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#444',
-  },
-  backButton: {
-    marginRight: 15,
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#fff',
-  },
-  scrollContainer: {
-    flex: 1,
-    backgroundColor: '#222',
-    padding: 20,
-  },
-  inputGroup: {
-    marginBottom: 20,
-  },
-  inputLabel: {
-    color: '#fff',
-    marginBottom: 8,
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#333',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#444',
-    height: 56,
-    paddingHorizontal: 16,
-  },
-  textAreaContainer: {
-    height: 120,
-    alignItems: 'flex-start',
-  },
-  inputFocused: {
-    borderColor: '#7B68EE',
-    backgroundColor: '#393939',
-  },
-  inputIcon: {
-    marginRight: 12,
-  },
-  input: {
-    flex: 1,
-    color: '#fff',
-    fontSize: 16,
-    height: '100%',
-  },
-  textArea: {
-    textAlignVertical: 'top',
-    paddingTop: 12,
-  },
-  dateTimeContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  dateButton: {
-    flex: 0.65,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#333',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    borderWidth: 1,
-    borderColor: '#444',
-    marginRight: 8,
-  },
-  timeButton: {
-    flex: 0.32,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#333',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    borderWidth: 1,
-    borderColor: '#444',
-  },
-  dateTimeText: {
-    color: '#fff',
-    fontSize: 16,
-  },
-  saveButton: {
-    flexDirection: 'row',
-    backgroundColor: '#7B68EE',
-    height: 56,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 10,
-    marginBottom: 16,
-    shadowColor: '#7B68EE',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 4.65,
-    elevation: 8,
-  },
-  buttonDisabled: {
-    backgroundColor: '#5a5a5a',
-    shadowOpacity: 0,
-    elevation: 0,
-  },
-  buttonIcon: {
-    marginRight: 8,
-  },
-  saveButtonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  inviteButton: {
-    flexDirection: 'row',
-    backgroundColor: '#444',
-    height: 56,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 30,
-  },
-  inviteButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-});
 
 export default EditEventScreen;
