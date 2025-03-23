@@ -1,4 +1,4 @@
-// app/(panel)/tasks/[id].tsx - Versão otimizada com melhor UX e performance
+// app/(panel)/tasks/[id].tsx - Com suporte aprimorado para recorrência
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
@@ -23,7 +23,7 @@ import { useAuth } from '../../../src/context/AuthContext';
 import { format, formatDistance, parseISO, isToday, isTomorrow, isPast, differenceInMinutes } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Task } from '../../../src/models/task.model';
+import { Task, RecurrenceType } from '../../../src/models/task.model';
 import api from '../../../src/services/api';
 import { ErrorHandler } from '../../../src/utils/errorHandling';
 import {
@@ -32,6 +32,8 @@ import {
   formatLocalDate,
   formatTime
 } from '../../../src/utils/dateUtils';
+import RecurrenceInfo from '../../../components/RecurrenceInfo';
+
 const { width } = Dimensions.get('window');
 
 // Componente otimizado para detalhes da tarefa
@@ -39,7 +41,7 @@ const TaskDetailsScreen: React.FC = () => {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
-  const { completeTask, cancelTask, deleteTask, updateTask } = useTasks();
+  const { completeTask, cancelTask, deleteTask, updateTask, stopRecurrence } = useTasks();
 
   // Estados
   const [task, setTask] = useState<Task | null>(null);
@@ -50,6 +52,7 @@ const TaskDetailsScreen: React.FC = () => {
   const [isStatusChanging, setIsStatusChanging] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isStoppingRecurrence, setIsStoppingRecurrence] = useState(false);
 
   // Animações
   const fadeAnim = useState(new Animated.Value(0))[0];
@@ -105,7 +108,7 @@ const TaskDetailsScreen: React.FC = () => {
   // Verificar se o usuário está atribuído à tarefa
   const isAssignedToCurrentUser = useMemo(() => {
     if (!task || !user) return false;
-    return task.assignedUsers?.includes(user) || false;
+    return task.assignedUsers?.some(u => u.uid === user.uid) || false;
   }, [task, user]);
 
   // Verificar se usuário atual pode editar
@@ -150,10 +153,10 @@ const TaskDetailsScreen: React.FC = () => {
       return '';
     }
   }, []);
+  
   // Converter campos do modelo para camelCase para consistência na UI
   const adaptedTask = useMemo(() => {
     if (!task) return null;
-    console.log(task)
     return {
       ...task, 
       assignedUsers: task.assignedUsers || [],
@@ -203,7 +206,23 @@ const TaskDetailsScreen: React.FC = () => {
       } else if (task.status === 'PENDING') {
         await updateTask(task.id, { ...task, status: 'IN_PROGRESS' });
       } else if (task.status === 'IN_PROGRESS') {
-        await completeTask(task.id);
+        // Se a tarefa for recorrente, alertar o usuário sobre isso
+        if (task.is_recurring) {
+          const result = await completeTask(task.id);
+          
+          // Se o backend retornou a próxima instância, mostre uma mensagem informativa
+          if (result && result.nextRecurringTaskId) {
+            setTimeout(() => {
+              Alert.alert(
+                "Tarefa Recorrente",
+                "Esta tarefa foi concluída com sucesso e uma nova instância foi criada automaticamente.",
+                [{ text: "OK" }]
+              );
+            }, 500);
+          }
+        } else {
+          await completeTask(task.id);
+        }
       }
     } catch (error) {
       // Se falhar, reverte a mudança
@@ -240,6 +259,68 @@ const TaskDetailsScreen: React.FC = () => {
       setIsCancelling(false);
     }
   };
+
+  // Handler para parar recorrência
+  const handleStopRecurrence = async () => {
+    if (!task || !task.is_recurring || isStoppingRecurrence) return;
+
+    try {
+      setIsStoppingRecurrence(true);
+
+      // Confirmar com o usuário
+      Alert.alert(
+        "Interromper Recorrência",
+        "Deseja interromper a recorrência desta tarefa? As próximas instâncias não serão mais criadas automaticamente.",
+        [
+          { text: "Cancelar", style: "cancel", onPress: () => setIsStoppingRecurrence(false) },
+          { 
+            text: "Interromper", 
+            style: "destructive",
+            onPress: async () => {
+              try {
+                // Atualização otimista
+                setTask(prev => {
+                  if (!prev) return null;
+                  return {
+                    ...prev,
+                    is_recurring: false
+                  };
+                });
+                
+                // Requisição ao backend
+                await stopRecurrence(task.id);
+                
+                Alert.alert(
+                  "Recorrência Interrompida",
+                  "A tarefa não será mais recriada automaticamente após a conclusão."
+                );
+              } catch (error) {
+                ErrorHandler.handle(error);
+                // Reverter atualização otimista
+                setTask(prev => {
+                  if (!prev) return null;
+                  return {
+                    ...prev,
+                    is_recurring: true
+                  };
+                });
+              } finally {
+                setIsStoppingRecurrence(false);
+              }
+            }
+          }
+        ]
+      );
+    } catch (error) {
+      ErrorHandler.handle(error);
+      setIsStoppingRecurrence(false);
+    }
+  };
+
+  // Handler para navegar para tarefa pai
+  const handleNavigateToParent = useCallback((parentTaskId: number) => {
+    router.push(`/(panel)/tasks/${parentTaskId}`);
+  }, [router]);
 
   // Handler para excluir tarefa
   const handleDeleteTask = async () => {
@@ -294,14 +375,35 @@ const TaskDetailsScreen: React.FC = () => {
     if (!task) return;
 
     try {
-      const message = `Tarefa: ${task.title}\n` +
+      let message = `Tarefa: ${task.title}\n` +
         `Status: ${task.status === 'PENDING' ? 'Pendente' :
           task.status === 'IN_PROGRESS' ? 'Em andamento' :
             task.status === 'COMPLETED' ? 'Concluída' :
               task.status === 'OVERDUE' ? 'Atrasada' : 'Cancelada'
         }\n` +
-        (task.dueDate ? `Prazo: ${formatTaskDate(task.dueDate)}\n` : '') +
-        (task.description ? `\n${task.description}` : '');
+        (task.dueDate ? `Prazo: ${formatTaskDate(task.dueDate)}\n` : '');
+        
+      // Adicionar informações de recorrência se for uma tarefa recorrente
+      if (task.is_recurring) {
+        const recurrenceType = task.recurrence_type === 'DAILY' ? 'Diária' :
+                              task.recurrence_type === 'WEEKLY' ? 'Semanal' :
+                              task.recurrence_type === 'MONTHLY' ? 'Mensal' : 'Anual';
+        
+        const interval = task.recurrence_interval && task.recurrence_interval > 1 
+          ? ` (a cada ${task.recurrence_interval} ${
+              task.recurrence_type === 'DAILY' ? 'dias' :
+              task.recurrence_type === 'WEEKLY' ? 'semanas' :
+              task.recurrence_type === 'MONTHLY' ? 'meses' : 'anos'
+            })`
+          : '';
+        
+        message += `Recorrência: ${recurrenceType}${interval}\n`;
+      }
+      
+      // Adicionar descrição
+      if (task.description) {
+        message += `\n${task.description}`;
+      }
 
       await Share.share({
         message,
@@ -324,6 +426,7 @@ const TaskDetailsScreen: React.FC = () => {
       return false;
     }
   }, [adaptedTask]);
+  
   // Verificar se a tarefa está completa
   const isTaskCompleted = useMemo(() => {
     return adaptedTask?.status === 'COMPLETED';
@@ -396,13 +499,9 @@ const TaskDetailsScreen: React.FC = () => {
   const formatDateWithTime = useCallback((dateString?: string | null) => {
     if (!dateString) return '--';
     try {
-      // Verificando e logando o formato que está vindo
-      console.log('Formato de data recebido:', dateString);
-
       // Verificar se é uma data válida
       const parsedDate = parseISOPreservingTime(dateString);
       if (isNaN(parsedDate.getTime())) {
-        console.log('Data inválida após parsing');
         return dateString; // Retorna o original se for inválido
       }
 
@@ -413,6 +512,7 @@ const TaskDetailsScreen: React.FC = () => {
       return dateString;
     }
   }, []);
+  
   // Caso esteja carregando ou tenha erro, mostrar tela adequada
   if (loading && !task) {
     return (
@@ -589,7 +689,12 @@ const TaskDetailsScreen: React.FC = () => {
           </View>
 
           {/* Título */}
-          <Text style={styles.taskTitle}>{adaptedTask.title}</Text>
+          <Text style={styles.taskTitle}>
+            {adaptedTask.title}
+            {adaptedTask.is_recurring && (
+              <Text style={styles.recurringIndicator}> <Ionicons name="repeat" size={18} color="#4CAF50" /></Text>
+            )}
+          </Text>
 
           {/* República */}
           {adaptedTask.republic_id && (
@@ -598,6 +703,96 @@ const TaskDetailsScreen: React.FC = () => {
               <Text style={styles.republicText}>
                 República ID: {adaptedTask.republic_id}
               </Text>
+            </View>
+          )}
+
+          {/* Informações de recorrência */}
+          {(adaptedTask.is_recurring || adaptedTask.parent_task_id) && (
+            <View style={styles.recurrenceContainer}>
+              {/* Usar o componente RecurrenceInfo ou implementar aqui */}
+              <View style={styles.recurrenceBanner}>
+                <Ionicons name="repeat" size={20} color="#4CAF50" />
+                <Text style={styles.recurrenceBannerText}>
+                  {adaptedTask.is_recurring ? 'Tarefa Recorrente' : 'Gerada por Recorrência'}
+                </Text>
+              </View>
+              
+              <View style={styles.recurrenceContent}>
+                {/* Para tarefas recorrentes, mostrar configuração */}
+                {adaptedTask.is_recurring && (
+                  <>
+                    <View style={styles.recurrenceRow}>
+                      <Text style={styles.recurrenceLabel}>Tipo:</Text>
+                      <Text style={styles.recurrenceValue}>
+                        {adaptedTask.recurrence_type === 'DAILY' ? 'Diária' :
+                          adaptedTask.recurrence_type === 'WEEKLY' ? 'Semanal' :
+                            adaptedTask.recurrence_type === 'MONTHLY' ? 'Mensal' : 'Anual'}
+                        {adaptedTask.recurrence_interval && adaptedTask.recurrence_interval > 1 ?
+                          ` (a cada ${adaptedTask.recurrence_interval} ${adaptedTask.recurrence_type === 'DAILY' ? 'dias' :
+                            adaptedTask.recurrence_type === 'WEEKLY' ? 'semanas' :
+                              adaptedTask.recurrence_type === 'MONTHLY' ? 'meses' : 'anos'
+                          })` : ''
+                        }
+                      </Text>
+                    </View>
+                    
+                    {adaptedTask.recurrence_end_date && (
+                      <View style={styles.recurrenceRow}>
+                        <Text style={styles.recurrenceLabel}>Término:</Text>
+                        <Text style={styles.recurrenceValue}>
+                          {formatDateWithTime(adaptedTask.recurrence_end_date)}
+                        </Text>
+                      </View>
+                    )}
+                  </>
+                )}
+                
+                {/* Para tarefas geradas por recorrência, mostrar info da tarefa pai */}
+                {adaptedTask.parent_task_id && (
+                  <View style={styles.recurrenceRow}>
+                    <Text style={styles.recurrenceLabel}>Origem:</Text>
+                    <TouchableOpacity 
+                      style={styles.parentTaskLink}
+                      onPress={() => handleNavigateToParent(adaptedTask.parent_task_id!)}
+                    >
+                      <Text style={styles.parentTaskLinkText}>
+                        Ver tarefa original
+                      </Text>
+                      <Ionicons name="arrow-forward" size={16} color="#7B68EE" />
+                    </TouchableOpacity>
+                  </View>
+                )}
+                
+                {/* Explicação sobre recorrência */}
+                <View style={styles.recurrenceInfoBox}>
+                  <Ionicons name="information-circle" size={16} color="#aaa" />
+                  <Text style={styles.recurrenceInfoText}>
+                    {adaptedTask.is_recurring
+                      ? 'Quando concluída, uma nova instância será criada automaticamente.'
+                      : 'Esta tarefa foi gerada automaticamente por uma recorrência.'}
+                  </Text>
+                </View>
+              </View>
+              
+              {/* Botão para interromper recorrência */}
+              {canModifyTask && adaptedTask.is_recurring && (
+                <TouchableOpacity 
+                  style={styles.stopRecurrenceButton}
+                  onPress={handleStopRecurrence}
+                  disabled={isStoppingRecurrence}
+                >
+                  {isStoppingRecurrence ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <>
+                      <Ionicons name="stop-circle" size={18} color="#FF6347" />
+                      <Text style={styles.stopRecurrenceText}>
+                        Interromper Recorrência
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              )}
             </View>
           )}
 
@@ -777,33 +972,6 @@ const TaskDetailsScreen: React.FC = () => {
                 </Text>
               </View>
             </View>
-
-            {adaptedTask.is_recurring && (
-              <View style={styles.detailRow}>
-                <View style={styles.detailIcon}>
-                  <Ionicons name="repeat" size={20} color="#7B68EE" />
-                </View>
-                <View style={styles.detailContent}>
-                  <Text style={styles.detailLabel}>Recorrência</Text>
-                  <Text style={styles.detailValue}>
-                    {adaptedTask.recurrence_type === 'DAILY' ? 'Diária' :
-                      adaptedTask.recurrence_type === 'WEEKLY' ? 'Semanal' :
-                        adaptedTask.recurrence_type === 'MONTHLY' ? 'Mensal' : 'Anual'}
-                    {adaptedTask.recurrence_interval && adaptedTask.recurrence_interval > 1 ?
-                      ` (a cada ${adaptedTask.recurrence_interval} ${adaptedTask.recurrence_type === 'DAILY' ? 'dias' :
-                        adaptedTask.recurrence_type === 'WEEKLY' ? 'semanas' :
-                          adaptedTask.recurrence_type === 'MONTHLY' ? 'meses' : 'anos'
-                      })` : ''
-                    }
-                  </Text>
-                  {adaptedTask.recurrence_end_date && (
-                    <Text style={styles.detailSecondaryValue}>
-                      Término em: {formatDateWithTime(adaptedTask.recurrence_end_date)}
-                    </Text>
-                  )}
-                </View>
-              </View>
-            )}
           </View>
 
           <View style={styles.sectionContainer}>
@@ -813,11 +981,10 @@ const TaskDetailsScreen: React.FC = () => {
 
             {adaptedTask.assignedUsers && adaptedTask.assignedUsers.length > 0 ? (
               adaptedTask.assignedUsers.map((assignedUser, index) => {
-                // Verificar explicitamente se este é o usuário atual
-                // Comparando id do usuário atribuído com uid do usuário atual
+                // Verificar se é o usuário atual
                 const isCurrentUser = user && assignedUser.uid === user.uid;
 
-                // Usamos o id como key, não uid
+                // Chave única para o usuário
                 const userKey = assignedUser.uid || `user-${index}`;
 
                 return (
@@ -834,9 +1001,11 @@ const TaskDetailsScreen: React.FC = () => {
                         isCurrentUser && styles.currentUserAvatarPlaceholder
                       ]}>
                         <Text style={styles.assigneeInitials}>
-                          {assignedUser.name ?(assignedUser.nickname ? assignedUser.nickname.substring(0, 2).toUpperCase() : 'NA' ) 
-                          : assignedUser.name.substring(0, 2).toUpperCase() 
-                            }
+                          {assignedUser.nickname 
+                            ? assignedUser.nickname.substring(0, 2).toUpperCase() 
+                            : assignedUser.name 
+                              ? assignedUser.name.substring(0, 2).toUpperCase()
+                              : 'NA'}
                         </Text>
                       </View>
 
@@ -920,6 +1089,7 @@ const TaskDetailsScreen: React.FC = () => {
     </SafeAreaView>
   );
 };
+
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -1118,6 +1288,9 @@ const styles = StyleSheet.create({
     color: '#fff',
     marginBottom: 12,
   },
+  recurringIndicator: {
+    color: '#4CAF50',
+  },
   republicRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1126,6 +1299,82 @@ const styles = StyleSheet.create({
     color: '#ccc',
     fontSize: 14,
     marginLeft: 6,
+  },
+  // Estilos para a seção de recorrência
+  recurrenceContainer: {
+    backgroundColor: '#444',
+    borderRadius: 12,
+    marginTop: 16,
+    overflow: 'hidden',
+    borderLeftWidth: 3,
+    borderLeftColor: '#4CAF50',
+  },
+  recurrenceBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(76, 175, 80, 0.15)',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+  },
+  recurrenceBannerText: {
+    color: '#4CAF50',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginLeft: 8,
+  },
+  recurrenceContent: {
+    padding: 16,
+  },
+  recurrenceRow: {
+    flexDirection: 'row',
+    marginBottom: 8,
+  },
+  recurrenceLabel: {
+    color: '#aaa',
+    fontSize: 14,
+    width: 70,
+  },
+  recurrenceValue: {
+    color: '#fff',
+    fontSize: 14,
+    flex: 1,
+  },
+  recurrenceInfoBox: {
+    flexDirection: 'row',
+    backgroundColor: '#333',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  recurrenceInfoText: {
+    color: '#ccc',
+    fontSize: 13,
+    marginLeft: 8,
+    flex: 1,
+  },
+  parentTaskLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  parentTaskLinkText: {
+    color: '#7B68EE',
+    fontSize: 14,
+    marginRight: 4,
+  },
+  stopRecurrenceButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 99, 71, 0.15)',
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#555',
+  },
+  stopRecurrenceText: {
+    color: '#FF6347',
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginLeft: 8,
   },
   actionButtonsContainer: {
     flexDirection: 'row',
@@ -1404,4 +1653,5 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
 });
+
 export default TaskDetailsScreen;

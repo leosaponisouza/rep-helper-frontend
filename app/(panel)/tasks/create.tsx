@@ -31,20 +31,20 @@ import { RecurrenceType } from '../../../src/models/task.model';
 
 // Common categories that users might want to use
 const COMMON_CATEGORIES = [
-  'Limpeza', 
-  'Compras', 
-  'Manutenção', 
-  'Contas', 
+  'Limpeza',
+  'Compras',
+  'Manutenção',
+  'Contas',
   'Alimentação',
   'Outros'
 ];
 
 // Recurrence types
 const RECURRENCE_TYPES = [
-  { key: 'DAILY', label: 'Diária' },
-  { key: 'WEEKLY', label: 'Semanal' },
-  { key: 'MONTHLY', label: 'Mensal' },
-  { key: 'YEARLY', label: 'Anual' }
+  { key: 'DAILY', label: 'Diária', icon: 'calendar-outline' },
+  { key: 'WEEKLY', label: 'Semanal', icon: 'calendar-number-outline' },
+  { key: 'MONTHLY', label: 'Mensal', icon: 'calendar-clear-outline' },
+  { key: 'YEARLY', label: 'Anual', icon: 'calendar' }
 ];
 
 // Enhanced schema to match backend expectations
@@ -76,7 +76,7 @@ const CreateTaskScreen = () => {
   const [datePickerMode, setDatePickerMode] = useState<'date' | 'time'>('date');
   const [endDatePickerMode, setEndDatePickerMode] = useState<'date' | 'time'>('date');
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
-  const [availableUsers, setAvailableUsers] = useState<{uid: string, name: string, nickname:string, email: string, profilePictureUrl?: string}[]>([]);
+  const [availableUsers, setAvailableUsers] = useState<{ uid: string, name: string, nickname: string, email: string, profilePictureUrl?: string }[]>([]);
   const [isUserModalVisible, setUserModalVisible] = useState(false);
   const [isCategoryModalVisible, setCategoryModalVisible] = useState(false);
   const [isRecurrenceModalVisible, setRecurrenceModalVisible] = useState(false);
@@ -84,11 +84,11 @@ const CreateTaskScreen = () => {
   const [isLoading, setIsLoading] = useState(false);
   const { createTask, assignMultipleUsers } = useTasks();
 
-  const { 
-    control, 
-    handleSubmit, 
-    formState: { errors }, 
-    setValue, 
+  const {
+    control,
+    handleSubmit,
+    formState: { errors },
+    setValue,
     watch,
     reset
   } = useForm<z.infer<typeof taskSchema>>({
@@ -104,11 +104,12 @@ const CreateTaskScreen = () => {
       recurrence_end_date: undefined
     }
   });
-  
+
   const isRecurring = watch('is_recurring');
   const recurrenceType = watch('recurrence_type');
   const recurrenceInterval = watch('recurrence_interval');
-  
+  const recurrenceEndDate = watch('recurrence_end_date');
+
   // Limpar o formulário quando a tela for desmontada
   useEffect(() => {
     // Inicialização única
@@ -122,10 +123,10 @@ const CreateTaskScreen = () => {
       recurrence_interval: 1,
       recurrence_end_date: undefined
     };
-    
+
     // Resetar o formulário com os valores iniciais
     reset(initialValues);
-    
+
     return () => {
       // Limpar o formulário quando a tela for desmontada
       reset(initialValues);
@@ -133,22 +134,22 @@ const CreateTaskScreen = () => {
       // Limpar quaisquer outros estados relevantes
     };
   }, [reset]);
-  
+
   // Fetch republic users
   useEffect(() => {
     // Referência para controlar se o componente está montado
     let isMounted = true;
-    
+
     const fetchRepublicUsers = async () => {
       try {
         if (user?.currentRepublicId) {
           const republicId = user.currentRepublicId;
           const response = await api.get(`/api/v1/republics/${republicId}/members`);
-          
+
           // Verifica se o componente ainda está montado antes de atualizar o estado
           if (isMounted) {
             setAvailableUsers(response.data);
-            
+
             // Auto-select current user
             if (user.uid) {
               setSelectedUsers([user.uid]);
@@ -165,17 +166,61 @@ const CreateTaskScreen = () => {
     };
 
     fetchRepublicUsers();
-    
+
     // Função de limpeza para evitar atualizações de estado após desmontagem
     return () => {
       isMounted = false;
     };
   }, [user?.currentRepublicId, user?.uid]);
 
+  // Formatar o padrão de recorrência para texto legível
+  const getRecurrencePattern = () => {
+    if (!isRecurring) return '';
+
+    const type = recurrenceType === 'DAILY' ? 'Diária' :
+      recurrenceType === 'WEEKLY' ? 'Semanal' :
+        recurrenceType === 'MONTHLY' ? 'Mensal' : 'Anual';
+
+    if (recurrenceInterval === 1) {
+      return type;
+    }
+
+    const unit = recurrenceType === 'DAILY' ? 'dias' :
+      recurrenceType === 'WEEKLY' ? 'semanas' :
+        recurrenceType === 'MONTHLY' ? 'meses' : 'anos';
+
+    return `${type} (a cada ${recurrenceInterval} ${unit})`;
+  };
+
+  // Criar descrição do padrão de recorrência
+  const getRecurrenceDescription = () => {
+    if (!isRecurring) return '';
+
+    let description = '';
+
+    if (recurrenceInterval === 1) {
+      description = recurrenceType === 'DAILY' ? 'A tarefa será recriada todos os dias' :
+        recurrenceType === 'WEEKLY' ? 'A tarefa será recriada toda semana' :
+          recurrenceType === 'MONTHLY' ? 'A tarefa será recriada todo mês' :
+            'A tarefa será recriada todo ano';
+    } else {
+      description = recurrenceType === 'DAILY' ? `A tarefa será recriada a cada ${recurrenceInterval} dias` :
+        recurrenceType === 'WEEKLY' ? `A tarefa será recriada a cada ${recurrenceInterval} semanas` :
+          recurrenceType === 'MONTHLY' ? `A tarefa será recriada a cada ${recurrenceInterval} meses` :
+            `A tarefa será recriada a cada ${recurrenceInterval} anos`;
+    }
+
+    if (recurrenceEndDate) {
+      description += `, até ${formatDate(recurrenceEndDate)}`;
+    }
+
+    return description;
+  };
+
   const toggleUserSelection = (userId: string) => {
     // Verificar se o usuário está atualmente selecionado
     const isSelected = selectedUsers.includes(userId);
-    
+
     if (isSelected) {
       // Se já estiver selecionado, remova-o da lista
       setSelectedUsers(prev => prev.filter(id => id !== userId));
@@ -204,10 +249,10 @@ const CreateTaskScreen = () => {
 
   const handleDatePickerChange = (event: any, selectedDate?: Date) => {
     setDatePickerVisibility(Platform.OS === 'ios');
-    
+
     if (selectedDate) {
       const currentDate = watch('dueDate') || new Date();
-      
+
       if (datePickerMode === 'date') {
         // Keep time part from current selection or current time
         const mergedDate = new Date(
@@ -218,7 +263,7 @@ const CreateTaskScreen = () => {
           currentDate.getMinutes()
         );
         setValue('dueDate', mergedDate);
-        
+
         // If it's iOS, we'll now show the time picker
         if (Platform.OS === 'ios') {
           setDatePickerMode('time');
@@ -240,10 +285,10 @@ const CreateTaskScreen = () => {
 
   const handleEndDatePickerChange = (event: any, selectedDate?: Date) => {
     setEndDatePickerVisibility(Platform.OS === 'ios');
-    
+
     if (selectedDate) {
       const currentDate = watch('recurrence_end_date') || new Date();
-      
+
       if (endDatePickerMode === 'date') {
         // Keep time part from current selection or current time
         const mergedDate = new Date(
@@ -254,7 +299,7 @@ const CreateTaskScreen = () => {
           currentDate.getMinutes()
         );
         setValue('recurrence_end_date', mergedDate);
-        
+
         // If it's iOS, we'll now show the time picker
         if (Platform.OS === 'ios') {
           setEndDatePickerMode('time');
@@ -300,15 +345,15 @@ const CreateTaskScreen = () => {
         Alert.alert('Atenção', 'Selecione pelo menos um responsável para a tarefa.');
         return;
       }
-      
+
       // Verificar se a tarefa é recorrente e tem data de vencimento
       if (data.is_recurring && !data.dueDate) {
         Alert.alert('Atenção', 'Para tarefas recorrentes, é necessário definir a data da primeira ocorrência.');
         return;
       }
-      
+
       setIsLoading(true);
-      
+
       const taskData = {
         title: data.title,
         description: data.description || '',
@@ -320,24 +365,33 @@ const CreateTaskScreen = () => {
         recurrenceInterval: data.is_recurring ? data.recurrence_interval : undefined,
         recurrenceEndDate: data.is_recurring && data.recurrence_end_date ? data.recurrence_end_date.toISOString() : undefined
       };
-  
+
       const createdTask = await createTask(taskData);
-      
+
       if (createdTask && createdTask.id) {
         // Assign all selected users at once
         await assignMultipleUsers(createdTask.id, selectedUsers);
-        
-        Alert.alert(
-          'Sucesso', 
-          'Tarefa criada com sucesso!', 
-          [{ 
-            text: 'OK', 
-            onPress: () => {
-              // Usar replace em vez de push para evitar problemas de navegação
-              router.replace('/(panel)/tasks');
-            }
-          }]
-        );
+
+        // Mostrar mensagem específica para tarefas recorrentes
+        if (data.is_recurring) {
+          Alert.alert(
+            'Tarefa Recorrente Criada',
+            `A tarefa recorrente foi criada com sucesso! Após ser concluída, uma nova instância será criada automaticamente ${getRecurrencePattern().toLowerCase()}.`,
+            [{
+              text: 'OK',
+              onPress: () => router.replace('/(panel)/tasks')
+            }]
+          );
+        } else {
+          Alert.alert(
+            'Sucesso',
+            'Tarefa criada com sucesso!',
+            [{
+              text: 'OK',
+              onPress: () => router.replace('/(panel)/tasks')
+            }]
+          );
+        }
       }
     } catch (error) {
       ErrorHandler.handle(error);
@@ -345,7 +399,6 @@ const CreateTaskScreen = () => {
       setIsLoading(false);
     }
   };
-  
   const renderUserSelectionModal = () => (
     <Modal
       animationType="slide"
@@ -361,7 +414,7 @@ const CreateTaskScreen = () => {
               Selecione os usuários responsáveis pela tarefa
             </Text>
           </View>
-          
+
           <ScrollView style={styles.modalScrollView}>
             {availableUsers.map(availableUser => (
               <TouchableOpacity
@@ -375,8 +428,8 @@ const CreateTaskScreen = () => {
               >
                 <View style={styles.userSelectLeftContent}>
                   {availableUser.profilePictureUrl ? (
-                    <Image 
-                      source={{ uri: availableUser.profilePictureUrl }} 
+                    <Image
+                      source={{ uri: availableUser.profilePictureUrl }}
                       style={styles.userAvatar}
                     />
                   ) : (
@@ -402,7 +455,7 @@ const CreateTaskScreen = () => {
                     <Text style={styles.userEmail}>{availableUser.email}</Text>
                   </View>
                 </View>
-                
+
                 {selectedUsers.includes(availableUser.uid) ? (
                   <View style={styles.userSelectedCheckmark}>
                     <Ionicons name="checkmark-circle" size={24} color="#7B68EE" />
@@ -415,7 +468,7 @@ const CreateTaskScreen = () => {
               </TouchableOpacity>
             ))}
           </ScrollView>
-          
+
           <View style={styles.modalFooter}>
             <TouchableOpacity
               style={styles.modalCancelButton}
@@ -423,7 +476,7 @@ const CreateTaskScreen = () => {
             >
               <Text style={styles.modalCancelButtonText}>Cancelar</Text>
             </TouchableOpacity>
-            
+
             <TouchableOpacity
               style={styles.modalConfirmButton}
               onPress={() => setUserModalVisible(false)}
@@ -437,7 +490,7 @@ const CreateTaskScreen = () => {
       </View>
     </Modal>
   );
-  
+
   const renderCategoryModal = () => (
     <Modal
       animationType="slide"
@@ -453,7 +506,7 @@ const CreateTaskScreen = () => {
               Escolha uma categoria para sua tarefa
             </Text>
           </View>
-          
+
           <ScrollView style={styles.modalScrollView}>
             <View style={styles.categoryGrid}>
               {COMMON_CATEGORIES.map(category => (
@@ -465,7 +518,7 @@ const CreateTaskScreen = () => {
                   ]}
                   onPress={() => selectCategory(category)}
                 >
-                  <Text 
+                  <Text
                     style={[
                       styles.categoryChipText,
                       watch('category') === category && styles.selectedCategoryChipText
@@ -476,7 +529,7 @@ const CreateTaskScreen = () => {
                 </TouchableOpacity>
               ))}
             </View>
-            
+
             <View style={styles.customCategoryContainer}>
               <Text style={styles.customCategoryLabel}>Categoria Personalizada</Text>
               <View style={styles.customCategoryInputRow}>
@@ -500,7 +553,7 @@ const CreateTaskScreen = () => {
               </View>
             </View>
           </ScrollView>
-          
+
           <TouchableOpacity
             style={styles.modalCloseButton}
             onPress={() => setCategoryModalVisible(false)}
@@ -524,13 +577,16 @@ const CreateTaskScreen = () => {
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Configurar Recorrência</Text>
             <Text style={styles.modalSubtitle}>
-              Defina como esta tarefa deve se repetir
+              Defina como esta tarefa deve se repetir após ser concluída
             </Text>
           </View>
-          
+
           <ScrollView style={styles.modalScrollView}>
             <View style={styles.recurrenceTypeContainer}>
               <Text style={styles.recurrenceLabel}>Tipo de Recorrência</Text>
+              <Text style={styles.recurrenceDescription}>
+                Selecione com que frequência a tarefa deve se repetir
+              </Text>
               <View style={styles.recurrenceTypeGrid}>
                 {RECURRENCE_TYPES.map(type => (
                   <TouchableOpacity
@@ -541,7 +597,13 @@ const CreateTaskScreen = () => {
                     ]}
                     onPress={() => selectRecurrenceType(type.key as RecurrenceType)}
                   >
-                    <Text 
+                    <Ionicons
+                      name={type.icon as any}
+                      size={18}
+                      color={recurrenceType === type.key ? '#fff' : '#aaa'}
+                      style={{ marginRight: 8 }}
+                    />
+                    <Text
                       style={[
                         styles.recurrenceTypeText,
                         recurrenceType === type.key && styles.selectedRecurrenceTypeText
@@ -553,40 +615,66 @@ const CreateTaskScreen = () => {
                 ))}
               </View>
             </View>
-            
+
             <View style={styles.recurrenceIntervalContainer}>
               <Text style={styles.recurrenceLabel}>Intervalo</Text>
+              <Text style={styles.recurrenceDescription}>
+                Defina com que frequência a tarefa deve se repetir
+              </Text>
+
               <View style={styles.recurrenceIntervalRow}>
                 <TouchableOpacity
-                  style={styles.intervalButton}
-                  onPress={() => setValue('recurrence_interval', Math.max(1, recurrenceInterval ?? - 1))}
+                  style={[
+                    styles.intervalButton,
+                    recurrenceInterval <= 1 && styles.intervalButtonDisabled
+                  ]}
+                  onPress={() => setValue('recurrence_interval', Math.max(1, recurrenceInterval - 1))}
+                  disabled={recurrenceInterval <= 1}
                 >
                   <Ionicons name="remove" size={20} color="#fff" />
                 </TouchableOpacity>
-                
+
                 <View style={styles.intervalValueContainer}>
                   <Text style={styles.intervalValue}>{recurrenceInterval}</Text>
                 </View>
-                
+
                 <TouchableOpacity
                   style={styles.intervalButton}
-                  onPress={() => setValue('recurrence_interval', recurrenceInterval ?? + 1)}
+                  onPress={() => setValue('recurrence_interval', recurrenceInterval + 1)}
                 >
                   <Ionicons name="add" size={20} color="#fff" />
                 </TouchableOpacity>
-                
+
                 <Text style={styles.intervalText}>
                   {recurrenceType === 'DAILY' ? 'dia(s)' :
-                   recurrenceType === 'WEEKLY' ? 'semana(s)' :
-                   recurrenceType === 'MONTHLY' ? 'mês(es)' : 'ano(s)'}
+                    recurrenceType === 'WEEKLY' ? 'semana(s)' :
+                      recurrenceType === 'MONTHLY' ? 'mês(es)' : 'ano(s)'}
                 </Text>
               </View>
+
+              <Text style={styles.recurrenceHelperText}>
+                {recurrenceInterval === 1 ? (
+                  recurrenceType === 'DAILY' ? 'A tarefa será recriada todos os dias' :
+                    recurrenceType === 'WEEKLY' ? 'A tarefa será recriada toda semana' :
+                      recurrenceType === 'MONTHLY' ? 'A tarefa será recriada todo mês' :
+                        'A tarefa será recriada todo ano'
+                ) : (
+                  recurrenceType === 'DAILY' ? `A tarefa será recriada a cada ${recurrenceInterval} dias` :
+                    recurrenceType === 'WEEKLY' ? `A tarefa será recriada a cada ${recurrenceInterval} semanas` :
+                      recurrenceType === 'MONTHLY' ? `A tarefa será recriada a cada ${recurrenceInterval} meses` :
+                        `A tarefa será recriada a cada ${recurrenceInterval} anos`
+                )}
+              </Text>
             </View>
-            
+
             <View style={styles.recurrenceEndDateContainer}>
               <Text style={styles.recurrenceLabel}>Data de Término (opcional)</Text>
+              <Text style={styles.recurrenceDescription}>
+                Opcionalmente, defina quando a recorrência deve parar
+              </Text>
+
               <View style={styles.dateTimeContainer}>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.dateButton}
                   onPress={showEndDatePicker}
                 >
@@ -597,8 +685,8 @@ const CreateTaskScreen = () => {
                     </Text>
                   </View>
                 </TouchableOpacity>
-                
-                <TouchableOpacity 
+
+                <TouchableOpacity
                   style={styles.timeButton}
                   onPress={showEndTimePicker}
                 >
@@ -610,18 +698,35 @@ const CreateTaskScreen = () => {
                   </View>
                 </TouchableOpacity>
               </View>
-              
-              {watch('recurrence_end_date') && (
-                <TouchableOpacity
-                  style={styles.clearEndDateButton}
-                  onPress={() => setValue('recurrence_end_date', undefined)}
-                >
-                  <Text style={styles.clearEndDateText}>Limpar data de término</Text>
-                </TouchableOpacity>
+
+              {watch('recurrence_end_date') ? (
+                <View>
+                  <Text style={styles.recurrenceHelperText}>
+                    A recorrência será interrompida após esta data
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.clearEndDateButton}
+                    onPress={() => setValue('recurrence_end_date', undefined)}
+                  >
+                    <Text style={styles.clearEndDateText}>Remover data de término</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <Text style={styles.recurrenceHelperText}>
+                  Sem data de término definida, a tarefa continuará se repetindo indefinidamente
+                </Text>
               )}
             </View>
+
+            <View style={styles.recurrenceInfoContainer}>
+              <Ionicons name="information-circle" size={20} color="#7B68EE" />
+              <Text style={styles.recurrenceInfoText}>
+                Quando você concluir uma tarefa recorrente, uma nova instância será
+                automaticamente criada com a próxima data de vencimento.
+              </Text>
+            </View>
           </ScrollView>
-          
+
           <TouchableOpacity
             style={styles.modalCloseButton}
             onPress={() => setRecurrenceModalVisible(false)}
@@ -653,17 +758,14 @@ const CreateTaskScreen = () => {
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" backgroundColor="#222" />
-      
-      <KeyboardAvoidingView 
+
+      <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         <View style={styles.headerContainer}>
-          <TouchableOpacity 
-            onPress={() => {
-              // Usar replace em vez de push para evitar problemas de navegação
-              router.back();
-            }} 
+          <TouchableOpacity
+            onPress={() => router.back()}
             style={styles.backButton}
           >
             <Ionicons name="arrow-back" size={24} color="#7B68EE" />
@@ -671,7 +773,7 @@ const CreateTaskScreen = () => {
           <Text style={styles.headerTitle}>Criar Tarefa</Text>
         </View>
 
-        <ScrollView 
+        <ScrollView
           style={styles.scrollContainer}
           keyboardShouldPersistTaps="handled"
         >
@@ -718,7 +820,7 @@ const CreateTaskScreen = () => {
 
           <View style={styles.inputContainer}>
             <Text style={styles.inputLabel}>Responsáveis</Text>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.selectButton}
               onPress={() => setUserModalVisible(true)}
             >
@@ -726,30 +828,30 @@ const CreateTaskScreen = () => {
                 <View style={styles.selectButtonTextContainer}>
                   <Text style={styles.selectButtonLabel}>Responsáveis</Text>
                   <Text style={styles.selectButtonValue}>
-                    {selectedUsers.length > 0 
-                      ? `${selectedUsers.length} pessoa(s) selecionada(s)` 
+                    {selectedUsers.length > 0
+                      ? `${selectedUsers.length} pessoa(s) selecionada(s)`
                       : 'Selecione os responsáveis'}
                   </Text>
                 </View>
                 <Ionicons name="people" size={24} color="#7B68EE" />
               </View>
-              
+
               {selectedUsers.length > 0 && (
                 <View style={styles.selectedUsersPreview}>
                   {availableUsers
                     .filter(user => selectedUsers.includes(user.uid))
                     .slice(0, 3)
                     .map((user, index) => (
-                      <View 
-                        key={user.uid} 
+                      <View
+                        key={user.uid}
                         style={[
-                          styles.userAvatarSmall, 
+                          styles.userAvatarSmall,
                           { marginLeft: index > 0 ? -10 : 0, zIndex: 10 - index }
                         ]}
                       >
                         {user.profilePictureUrl ? (
-                          <Image 
-                            source={{ uri: user.profilePictureUrl }} 
+                          <Image
+                            source={{ uri: user.profilePictureUrl }}
                             style={styles.userAvatarSmallImage}
                           />
                         ) : (
@@ -759,7 +861,7 @@ const CreateTaskScreen = () => {
                         )}
                       </View>
                     ))}
-                    
+
                   {selectedUsers.length > 3 && (
                     <View style={[styles.userAvatarSmall, styles.moreBadge]}>
                       <Text style={styles.moreBadgeText}>+{selectedUsers.length - 3}</Text>
@@ -780,7 +882,7 @@ const CreateTaskScreen = () => {
               </Text>
             )}
             <View style={styles.dateTimeContainer}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.dateButton}
                 onPress={showDatePicker}
               >
@@ -791,8 +893,8 @@ const CreateTaskScreen = () => {
                   </Text>
                 </View>
               </TouchableOpacity>
-              
-              <TouchableOpacity 
+
+              <TouchableOpacity
                 style={styles.timeButton}
                 onPress={showTimePicker}
               >
@@ -822,7 +924,7 @@ const CreateTaskScreen = () => {
             render={({ field: { value } }) => (
               <View style={styles.inputContainer}>
                 <Text style={styles.inputLabel}>Categoria (opcional)</Text>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.selectButton}
                   onPress={() => setCategoryModalVisible(true)}
                 >
@@ -835,7 +937,7 @@ const CreateTaskScreen = () => {
                     </View>
                     <FontAwesome5 name="tag" size={20} color="#7B68EE" />
                   </View>
-                  
+
                   {value && (
                     <View style={styles.categoryPreview}>
                       <View style={styles.categoryPreviewBadge}>
@@ -857,7 +959,7 @@ const CreateTaskScreen = () => {
                   <View>
                     <Text style={styles.inputLabel}>Tarefa Recorrente</Text>
                     <Text style={styles.recurrenceDescription}>
-                      Ative para criar uma tarefa que se repete automaticamente
+                      Ative para criar uma tarefa que se repete automaticamente quando concluída
                     </Text>
                   </View>
                   <Switch
@@ -867,37 +969,44 @@ const CreateTaskScreen = () => {
                     thumbColor={value ? '#4CAF50' : '#aaa'}
                   />
                 </View>
-                
+
                 {value && (
-                  <TouchableOpacity 
-                    style={styles.recurrenceConfigButton}
-                    onPress={() => setRecurrenceModalVisible(true)}
-                  >
-                    <View style={styles.recurrenceConfigContent}>
-                      <View>
-                        <Text style={styles.recurrenceConfigLabel}>Configurar Recorrência</Text>
-                        <Text style={styles.recurrenceConfigValue}>
-                          {recurrenceType === 'DAILY' ? 'Diária' :
-                           recurrenceType === 'WEEKLY' ? 'Semanal' :
-                           recurrenceType === 'MONTHLY' ? 'Mensal' : 'Anual'}
-                          {(recurrenceInterval ?? 1) > 1 ? ` (a cada ${recurrenceInterval} ${
-                            recurrenceType === 'DAILY' ? 'dias' :
-                            recurrenceType === 'WEEKLY' ? 'semanas' :
-                            recurrenceType === 'MONTHLY' ? 'meses' : 'anos'
-                          })` : ''}
-                        </Text>
+                  <>
+                    <TouchableOpacity
+                      style={styles.recurrenceConfigButton}
+                      onPress={() => setRecurrenceModalVisible(true)}
+                    >
+                      <View style={styles.recurrenceConfigContent}>
+                        <View>
+                          <Text style={styles.recurrenceConfigLabel}>Configurar Recorrência</Text>
+                          <Text style={styles.recurrenceConfigValue}>
+                            {getRecurrencePattern()}
+                          </Text>
+                          {recurrenceEndDate && (
+                            <Text style={styles.recurrenceEndDateText}>
+                              Término em: {formatDate(recurrenceEndDate)}
+                            </Text>
+                          )}
+                        </View>
+                        <Ionicons name="repeat" size={24} color="#4CAF50" />
                       </View>
-                      <Ionicons name="repeat" size={24} color="#4CAF50" />
+                    </TouchableOpacity>
+
+                    <View style={styles.recurrenceExplanationContainer}>
+                      <Ionicons name="information-circle" size={18} color="#aaa" />
+                      <Text style={styles.recurrenceExplanationText}>
+                        {getRecurrenceDescription()}
+                      </Text>
                     </View>
-                  </TouchableOpacity>
+                  </>
                 )}
               </View>
             )}
           />
 
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[
-              styles.submitButton, 
+              styles.submitButton,
               (isLoading) && styles.submitButtonDisabled
             ]}
             onPress={handleSubmit(onSubmit)}
@@ -918,7 +1027,7 @@ const CreateTaskScreen = () => {
       {renderUserSelectionModal()}
       {renderCategoryModal()}
       {renderRecurrenceModal()}
-      
+
       {isEndDatePickerVisible && (
         <DateTimePicker
           value={watch('recurrence_end_date') || new Date()}
@@ -1116,6 +1225,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#444',
     overflow: 'hidden',
+    marginBottom: 12,
   },
   recurrenceConfigContent: {
     flexDirection: 'row',
@@ -1133,6 +1243,24 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
   },
+  recurrenceEndDateText: {
+    color: '#aaa',
+    fontSize: 12,
+    marginTop: 4,
+  },
+  recurrenceExplanationContainer: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(76, 175, 80, 0.1)',
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'flex-start',
+  },
+  recurrenceExplanationText: {
+    color: '#aaa',
+    fontSize: 13,
+    marginLeft: 8,
+    flex: 1,
+  },
   recurrenceTypeContainer: {
     marginBottom: 20,
   },
@@ -1140,13 +1268,16 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '500',
-    marginBottom: 12,
+    marginBottom: 6,
   },
   recurrenceTypeGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    marginTop: 8,
   },
   recurrenceTypeChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#444',
     paddingHorizontal: 16,
     paddingVertical: 10,
@@ -1171,6 +1302,7 @@ const styles = StyleSheet.create({
   recurrenceIntervalRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginTop: 8,
   },
   intervalButton: {
     width: 40,
@@ -1179,6 +1311,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#444',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  intervalButtonDisabled: {
+    opacity: 0.5,
   },
   intervalValueContainer: {
     width: 60,
@@ -1202,6 +1337,12 @@ const styles = StyleSheet.create({
   recurrenceEndDateContainer: {
     marginBottom: 20,
   },
+  recurrenceHelperText: {
+    color: '#aaa',
+    fontSize: 13,
+    marginTop: 8,
+    fontStyle: 'italic',
+  },
   clearEndDateButton: {
     marginTop: 10,
     alignSelf: 'flex-start',
@@ -1209,6 +1350,22 @@ const styles = StyleSheet.create({
   clearEndDateText: {
     color: '#FF6347',
     fontSize: 14,
+  },
+  recurrenceInfoContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: 'rgba(123, 104, 238, 0.1)',
+    padding: 16,
+    borderRadius: 12,
+    marginTop: 12,
+    marginBottom: 16,
+  },
+  recurrenceInfoText: {
+    color: '#ccc',
+    fontSize: 14,
+    marginLeft: 12,
+    flex: 1,
+    lineHeight: 20,
   },
   submitButton: {
     flexDirection: 'row',
