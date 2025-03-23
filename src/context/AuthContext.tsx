@@ -11,7 +11,7 @@ import { signOut } from 'firebase/auth';
 import { auth } from '../utils/firebaseClientConfig';
 import { router } from 'expo-router';
 import { ErrorHandler } from '../utils/errorHandling';
-
+ 
 interface AuthContextProps {
   user: User | null;
   loading: boolean;

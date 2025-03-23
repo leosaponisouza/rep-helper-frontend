@@ -11,7 +11,7 @@ import {
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Task } from '../src/models/task.model';
+import { Task, RecurrenceType } from '../src/models/task.model';
 import { colors, createShadow } from '../src/styles/sharedStyles';
 
 interface TaskItemProps {
@@ -22,6 +22,43 @@ interface TaskItemProps {
   onPress: (taskId: number) => void;
   onStopRecurrence?: (taskId: number) => void;
 }
+
+// Componente para exibir informações de recorrência de forma consistente
+const RecurrenceIndicator = memo(({ 
+  type, 
+  compact = false 
+}: { 
+  type?: RecurrenceType; 
+  compact?: boolean 
+}) => {
+  // Texto amigável para o tipo de recorrência
+  const recurrenceText = useMemo(() => {
+    switch (type) {
+      case 'DAILY': return 'Diária';
+      case 'WEEKLY': return 'Semanal';
+      case 'MONTHLY': return 'Mensal';
+      case 'YEARLY': return 'Anual';
+      default: return 'Recorrente';
+    }
+  }, [type]);
+
+  if (compact) {
+    return (
+      <Text style={styles.recurringIndicator}>
+        {" "}<Ionicons name="repeat" size={14} color={colors.success.main} />
+      </Text>
+    );
+  }
+
+  return (
+    <View style={styles.recurrenceChip}>
+      <Ionicons name="repeat" size={12} color={colors.success.main} />
+      <Text style={styles.recurrenceText}>
+        {recurrenceText}
+      </Text>
+    </View>
+  );
+});
 
 // Componente otimizado com memo para evitar re-renderizações desnecessárias
 const TaskItem: React.FC<TaskItemProps> = memo(({
@@ -102,16 +139,32 @@ const TaskItem: React.FC<TaskItemProps> = memo(({
     [item.description]
   );
 
-  // Texto amigável para o tipo de recorrência - memoizado
-  const recurrenceText = useMemo(() => {
+  // Função para formatar o padrão de recorrência de forma amigável
+  const getRecurrencePattern = useMemo(() => {
+    if (!item.is_recurring) return null;
+    
+    const interval = item.recurrence_interval || 1;
+    let text;
+    
     switch (item.recurrence_type) {
-      case 'DAILY': return 'Diária';
-      case 'WEEKLY': return 'Semanal';
-      case 'MONTHLY': return 'Mensal';
-      case 'YEARLY': return 'Anual';
-      default: return 'Recorrente';
+      case 'DAILY':
+        text = interval === 1 ? 'Diária' : `A cada ${interval} dias`;
+        break;
+      case 'WEEKLY':
+        text = interval === 1 ? 'Semanal' : `A cada ${interval} semanas`;
+        break;
+      case 'MONTHLY':
+        text = interval === 1 ? 'Mensal' : `A cada ${interval} meses`;
+        break;
+      case 'YEARLY':
+        text = interval === 1 ? 'Anual' : `A cada ${interval} anos`;
+        break;
+      default:
+        text = 'Recorrente';
     }
-  }, [item.recurrence_type]);
+    
+    return text;
+  }, [item.is_recurring, item.recurrence_type, item.recurrence_interval]);
 
   // Handler para toggle status
   const handleToggleStatus = () => {
@@ -173,7 +226,7 @@ const TaskItem: React.FC<TaskItemProps> = memo(({
             >
               {item.title}
               {item.is_recurring && (
-                <Text style={styles.recurringIndicator}> {" "} <Ionicons name="repeat" size={14} color={colors.success.main} /></Text>
+                <RecurrenceIndicator compact={true} />
               )}
             </Text>
 
@@ -229,12 +282,12 @@ const TaskItem: React.FC<TaskItemProps> = memo(({
               </View>
             )}
 
-            {/* Recurrence indicator */}
+            {/* Recurrence indicator com padrão detalhado */}
             {item.is_recurring && (
               <View style={styles.recurrenceChip}>
                 <Ionicons name="repeat" size={12} color={colors.success.main} />
                 <Text style={styles.recurrenceText}>
-                  {recurrenceText}
+                  {getRecurrencePattern}
                 </Text>
                 {onStopRecurrence && (
                   <TouchableOpacity
@@ -291,6 +344,16 @@ const TaskItem: React.FC<TaskItemProps> = memo(({
               </View>
             )}
           </View>
+          
+          {/* Informação da tarefa pai, se existir */}
+          {item.parent_task_id && (
+            <View style={styles.parentTaskInfo}>
+              <Ionicons name="git-branch" size={12} color={colors.text.tertiary} />
+              <Text style={styles.parentTaskText}>
+                Gerada por recorrência
+              </Text>
+            </View>
+          )}
         </View>
       </View>
     </TouchableOpacity>
@@ -307,6 +370,8 @@ const TaskItem: React.FC<TaskItemProps> = memo(({
     prevProps.item.category === nextProps.item.category &&
     prevProps.item.is_recurring === nextProps.item.is_recurring &&
     prevProps.item.recurrence_type === nextProps.item.recurrence_type &&
+    prevProps.item.recurrence_interval === nextProps.item.recurrence_interval &&
+    prevProps.item.parent_task_id === nextProps.item.parent_task_id &&
     JSON.stringify(prevProps.item.assignedUsers) === JSON.stringify(nextProps.item.assignedUsers) &&
     prevProps.currentUserId === nextProps.currentUserId &&
     JSON.stringify(prevProps.pendingTaskIds) === JSON.stringify(nextProps.pendingTaskIds)
@@ -478,6 +543,17 @@ const styles = StyleSheet.create({
     color: colors.primary.main,
     fontSize: 10,
     fontWeight: 'bold',
+  },
+  parentTaskInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  parentTaskText: {
+    color: colors.text.tertiary,
+    fontSize: 12,
+    fontStyle: 'italic',
+    marginLeft: 4,
   },
 });
 
