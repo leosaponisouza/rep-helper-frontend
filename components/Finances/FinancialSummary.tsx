@@ -12,6 +12,7 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 
 interface SummaryCardProps {
   title: string;
+  subtitle?: string;
   value: string;
   iconName: string;
   iconColor: string;
@@ -21,6 +22,7 @@ interface SummaryCardProps {
 
 const SummaryCard: React.FC<SummaryCardProps> = ({
   title,
+  subtitle,
   value,
   iconName,
   iconColor,
@@ -37,7 +39,10 @@ const SummaryCard: React.FC<SummaryCardProps> = ({
     >
       <View style={styles.cardContent}>
         <MaterialCommunityIcons name={iconName as any} size={24} color={iconColor} />
-        <Text style={styles.cardTitle}>{title}</Text>
+        <View style={styles.titleContainer}>
+          <Text style={styles.cardTitle}>{title}</Text>
+          {subtitle && <Text style={styles.cardSubtitle}>{subtitle}</Text>}
+        </View>
       </View>
       <Text style={styles.cardValue}>{value}</Text>
     </Card>
@@ -49,6 +54,8 @@ interface FinancialSummaryProps {
   pendingExpenses: number; 
   approvedExpenses: number;
   totalIncomes: number;
+  totalExpensesCurrentMonth?: number;
+  totalIncomesCurrentMonth?: number;
   loading?: boolean;
   error?: string | null;
   onRetry?: () => void;
@@ -62,6 +69,8 @@ const FinancialSummary: React.FC<FinancialSummaryProps> = ({
   pendingExpenses,
   approvedExpenses,
   totalIncomes,
+  totalExpensesCurrentMonth,
+  totalIncomesCurrentMonth,
   loading = false,
   error = null,
   onRetry,
@@ -103,7 +112,7 @@ const FinancialSummary: React.FC<FinancialSummaryProps> = ({
   return (
     <View style={styles.container}>
       <SummaryCard
-        title="Saldo Atual"
+        title="Saldo Total"
         value={formatCurrency(currentBalance)}
         iconName="wallet"
         iconColor={currentBalance >= 0 ? "#4CAF50" : "#FF6347"}
@@ -114,7 +123,8 @@ const FinancialSummary: React.FC<FinancialSummaryProps> = ({
       <View style={styles.row}>
         <SummaryCard
           title="Despesas"
-          value={formatCurrency(approvedExpenses + pendingExpenses)}
+          subtitle="Neste mês"
+          value={formatCurrency(totalExpensesCurrentMonth ?? (approvedExpenses + pendingExpenses))}
           iconName="cash-minus"
           iconColor="#FF6347"
           backgroundColor="rgba(255, 99, 71, 0.1)"
@@ -123,7 +133,8 @@ const FinancialSummary: React.FC<FinancialSummaryProps> = ({
         
         <SummaryCard
           title="Receitas"
-          value={formatCurrency(totalIncomes)}
+          subtitle="Neste mês"
+          value={formatCurrency(totalIncomesCurrentMonth ?? totalIncomes)}
           iconName="cash-plus"
           iconColor="#4CAF50"
           backgroundColor="rgba(76, 175, 80, 0.1)"
@@ -134,6 +145,7 @@ const FinancialSummary: React.FC<FinancialSummaryProps> = ({
       <View style={styles.row}>
         <SummaryCard
           title="Pendentes"
+          subtitle="Neste mês"
           value={formatCurrency(pendingExpenses)}
           iconName="clock-time-four"
           iconColor="#FFC107"
@@ -143,6 +155,7 @@ const FinancialSummary: React.FC<FinancialSummaryProps> = ({
         
         <SummaryCard
           title="Aprovadas"
+          subtitle="Neste mês"
           value={formatCurrency(approvedExpenses)}
           iconName="check-circle"
           iconColor="#2196F3"
@@ -195,7 +208,6 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   summaryCard: {
-    backgroundColor: '#333',
     borderRadius: 16,
     padding: 16,
     ...Platform.select({
@@ -217,11 +229,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 8,
   },
+  titleContainer: {
+    marginLeft: 8,
+  },
   cardTitle: {
     color: '#fff',
     fontSize: 14,
     fontWeight: '500',
-    marginLeft: 8,
+  },
+  cardSubtitle: {
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: 12,
+    marginTop: 2,
   },
   cardValue: {
     color: '#fff',

@@ -7,9 +7,10 @@ import {
   TouchableOpacity, 
   FlatList,
   Image,
-  ActivityIndicator
+  ActivityIndicator,
+  Alert
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { PendingAction } from '../../src/models/finances.model';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -21,12 +22,16 @@ interface PendingActionsProps {
   onRetry: () => void;
   onPressAction: (action: PendingAction) => void;
   onPressViewAll: () => void;
+  onApprove?: (id: number) => Promise<void>;
+  onReject?: (id: number) => Promise<void>;
 }
 
 const PendingActionItem: React.FC<{ 
   item: PendingAction; 
   onPress: (action: PendingAction) => void;
-}> = ({ item, onPress }) => {
+  onApprove?: (id: number) => Promise<void>;
+  onReject?: (id: number) => Promise<void>;
+}> = ({ item, onPress, onApprove, onReject }) => {
   // Formatar valor monetário
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -35,7 +40,7 @@ const PendingActionItem: React.FC<{
     }).format(value);
   };
 
-  // Formatação de data
+  // Formatação de data - supports both date and expenseDate fields
   const formatDate = (dateString?: string) => {
     if (!dateString) return '';
     
@@ -47,24 +52,66 @@ const PendingActionItem: React.FC<{
     }
   };
 
-  // Status da ação
-  const getStatusColor = (status: string) => {
-    return status === 'APPROVED' ? '#4CAF50' : '#FFC107';
+  // Get date from either date or expenseDate field
+  const displayDate = item.expenseDate;
+
+  // Handle approve action
+  const handleApprove = async () => {
+    if (!onApprove) return;
+    
+    try {
+      await onApprove(item.id);
+    } catch (error) {
+      console.error('Error approving expense:', error);
+      Alert.alert('Erro', 'Não foi possível aprovar esta despesa. Tente novamente.');
+    }
   };
 
-  const getStatusText = (status: string) => {
-    return status === 'APPROVED' ? 'Aprovada' : 'Pendente';
+  // Handle reject action
+  const handleReject = async () => {
+    if (!onReject) return;
+
+    Alert.prompt(
+      'Motivo da rejeição',
+      'Informe o motivo para rejeitar esta despesa:',
+      [
+        {
+          text: 'Cancelar',
+          style: 'cancel'
+        },
+        {
+          text: 'Rejeitar',
+          style: 'destructive',
+          onPress: async (reason) => {
+            if (!reason || reason.trim() === '') {
+              Alert.alert('Erro', 'É necessário informar um motivo para rejeitar a despesa.');
+              return;
+            }
+
+            try {
+              // We would pass the reason here if onReject supported it
+              await onReject(item.id);
+            } catch (error) {
+              console.error('Error rejecting expense:', error);
+              Alert.alert('Erro', 'Não foi possível rejeitar esta despesa. Tente novamente.');
+            }
+          }
+        }
+      ],
+      'plain-text'
+    );
   };
 
   return (
     <TouchableOpacity 
       style={styles.actionItem}
       onPress={() => onPress(item)}
+      activeOpacity={0.7}
     >
       <View 
         style={[
           styles.statusIndicator, 
-          { backgroundColor: getStatusColor(item.status) }
+          { backgroundColor: '#FFC107' }
         ]} 
       />
       
@@ -94,28 +141,47 @@ const PendingActionItem: React.FC<{
               </View>
             )}
             <Text style={styles.creatorName}>
-              {item.creatorName}
+              {item.creatorNickname || item.creatorName}
             </Text>
           </View>
           
           <View style={styles.actionMeta}>
             <Text style={styles.actionDate}>
-              {formatDate(item.date)}
+              {formatDate(displayDate)}
             </Text>
             
-            <View style={[
-              styles.statusBadge, 
-              { backgroundColor: `${getStatusColor(item.status)}20` }
-            ]}>
-              <Text style={[
-                styles.statusText, 
-                { color: getStatusColor(item.status) }
-              ]}>
-                {getStatusText(item.status)}
+            <View style={styles.statusBadge}>
+              <Text style={styles.statusText}>
+                Pendente
               </Text>
             </View>
           </View>
         </View>
+
+        {/* Quick action buttons */}
+        {(onApprove || onReject) && (
+          <View style={styles.quickActions}>
+            {onApprove && (
+              <TouchableOpacity 
+                style={[styles.actionButton, styles.approveButton]}
+                onPress={handleApprove}
+              >
+                <MaterialIcons name="check-circle" size={16} color="#fff" />
+                <Text style={styles.actionButtonText}>Aprovar</Text>
+              </TouchableOpacity>
+            )}
+            
+            {onReject && (
+              <TouchableOpacity 
+                style={[styles.actionButton, styles.rejectButton]}
+                onPress={handleReject}
+              >
+                <MaterialIcons name="cancel" size={16} color="#fff" />
+                <Text style={styles.actionButtonText}>Rejeitar</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
       </View>
     </TouchableOpacity>
   );
@@ -127,8 +193,16 @@ const PendingActions: React.FC<PendingActionsProps> = ({
   error,
   onRetry,
   onPressAction,
-  onPressViewAll
+  onPressViewAll,
+  onApprove,
+  onReject
 }) => {
+  // Make sure actions is always an array
+  const safeActions = Array.isArray(actions) ? actions : [];
+  
+  // Filter to include only PENDING status items
+  const pendingActions = safeActions.filter(action => action.status === 'PENDING');
+
   if (loading) {
     return (
       <View style={styles.container}>
@@ -165,6 +239,11 @@ const PendingActions: React.FC<PendingActionsProps> = ({
     );
   }
 
+  // If no pending actions, don't render the component at all
+  if (pendingActions.length === 0) {
+    return null;
+  }
+
   return (
     <View style={styles.container}>
       <View style={styles.headerRow}>
@@ -179,26 +258,21 @@ const PendingActions: React.FC<PendingActionsProps> = ({
         </TouchableOpacity>
       </View>
       
-      {actions.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Ionicons name="checkmark-circle" size={40} color="#7B68EE" style={{ opacity: 0.6 }} />
-          <Text style={styles.emptyText}>
-            Não há ações pendentes
-          </Text>
-        </View>
-      ) : (
-        <FlatList
-          data={actions}
-          keyExtractor={(item) => `${item.id}`}
-          renderItem={({ item }) => (
-            <PendingActionItem 
-              item={item} 
-              onPress={onPressAction} 
-            />
-          )}
-          style={styles.actionsList}
-        />
-      )}
+      <FlatList
+        data={pendingActions}
+        keyExtractor={(item) => `pending-${item.id}`}
+        renderItem={({ item }) => (
+          <PendingActionItem 
+            item={item} 
+            onPress={onPressAction}
+            onApprove={onApprove}
+            onReject={onReject}
+          />
+        )}
+        style={styles.actionsList}
+        contentContainerStyle={styles.actionsListContent}
+        showsVerticalScrollIndicator={false}
+      />
     </View>
   );
 };
@@ -275,6 +349,9 @@ const styles = StyleSheet.create({
   actionsList: {
     maxHeight: 300,
   },
+  actionsListContent: {
+    paddingBottom: 8,
+  },
   actionItem: {
     flexDirection: 'row',
     backgroundColor: '#444',
@@ -312,6 +389,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 10,
   },
   creatorContainer: {
     flexDirection: 'row',
@@ -353,10 +431,38 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 12,
+    backgroundColor: 'rgba(255, 193, 7, 0.2)',
   },
   statusText: {
     fontSize: 10,
     fontWeight: 'bold',
+    color: '#FFC107',
+  },
+  quickActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 8,
+    marginTop: 4,
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    justifyContent: 'center',
+  },
+  approveButton: {
+    backgroundColor: 'rgba(76, 175, 80, 0.8)', // Green with opacity
+  },
+  rejectButton: {
+    backgroundColor: 'rgba(255, 99, 71, 0.8)', // Red with opacity
+  },
+  actionButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: 'bold',
+    marginLeft: 4,
   }
 });
 

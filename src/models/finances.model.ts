@@ -69,21 +69,26 @@ export interface FinancialDashboardSummary {
   currentBalance: number;
   totalExpenses: number;
   totalIncomes: number;
-  pendingExpenses: number;
-  approvedExpenses: number;
+  pendingExpensesAmount: number;
+  approvedExpensesAmount: number;
   rejectedExpenses?: number;
   reimbursedExpenses?: number;
+  totalExpensesCurrentMonth?: number;
+  totalIncomesCurrentMonth?: number;
 }
 
 /**
  * Monthly financial data for charts
  */
-export interface MonthlyExpenseData {
+export interface MonthlyChartData {
+  monthlyData: MonthlyData[];
+}
+
+export interface MonthlyData {
   month: string;
   expenses: number;
   incomes: number;
 }
-
 /**
  * Category expense data for charts
  */
@@ -101,12 +106,27 @@ export interface PendingAction {
   id: number;
   description: string;
   amount: number;
-  date: string;
-  status: 'PENDING' | 'APPROVED';
+  expenseDate: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
   creatorId: string;
   creatorName: string;
   creatorNickname?: string;
   creatorProfilePictureUrl?: string;
+  category?: string;
+  approvalDate?: string | null;
+  receiptUrl?: string | null;
+  reimbursementDate?: string | null;
+  rejectionReason?: string | null;
+  republicId?: string;
+  republicName?: string;
+  createdAt?: string;
+}
+
+// Response model from /pending-actions/{republicId} endpoint
+export interface PendingActionsResponse {
+  pendingExpenses: PendingAction[];
+  pendingExpensesCount: number;
+  pendingExpensesTotal: number;
 }
 
 // Request and response interfaces for API calls

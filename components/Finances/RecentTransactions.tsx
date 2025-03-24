@@ -1,24 +1,17 @@
 // components/Finances/RecentTransactions.tsx
-import React from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TouchableOpacity, 
-  FlatList,
-  ActivityIndicator
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ActivityIndicator,
+  ScrollView
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-
-interface Transaction {
-  id: number;
-  description: string;
-  amount: number;
-  date: string;
-  type: 'EXPENSE' | 'INCOME';
-}
+import { Transaction } from '@/src/models/finances.model';
 
 interface RecentTransactionsProps {
   transactions: Transaction[];
@@ -29,8 +22,8 @@ interface RecentTransactionsProps {
   onPressViewAll?: () => void;
 }
 
-const TransactionItem: React.FC<{ 
-  item: Transaction; 
+const TransactionItem: React.FC<{
+  item: Transaction;
   onPress?: (transaction: Transaction) => void;
 }> = ({ item, onPress }) => {
   // Formatar valor monetário
@@ -44,7 +37,7 @@ const TransactionItem: React.FC<{
   // Formatação de data
   const formatDate = (dateString?: string) => {
     if (!dateString) return '';
-    
+
     try {
       const date = parseISO(dateString);
       return format(date, "dd MMM", { locale: ptBR });
@@ -69,9 +62,10 @@ const TransactionItem: React.FC<{
   };
 
   const { icon, color } = getIconAndColor(item.type);
+  const isExpense = item.type === 'EXPENSE';
 
   return (
-    <TouchableOpacity 
+    <TouchableOpacity
       style={styles.transactionItem}
       onPress={() => onPress && onPress(item)}
       disabled={!onPress}
@@ -79,21 +73,28 @@ const TransactionItem: React.FC<{
       <View style={[styles.iconContainer, { backgroundColor: `${color}20` }]}>
         <Ionicons name={icon as any} size={20} color={color} />
       </View>
-      
+
       <View style={styles.transactionContent}>
         <Text style={styles.transactionDescription} numberOfLines={1}>
           {item.description}
         </Text>
-        <Text style={styles.transactionDate}>
-          {formatDate(item.date)}
-        </Text>
+        <View style={styles.transactionMeta}>
+          <Text style={styles.transactionDate}>
+            {formatDate(item.date)}
+          </Text>
+          <View style={[styles.typeBadge, { backgroundColor: `${color}20` }]}>
+            <Text style={[styles.typeText, { color }]}>
+              {isExpense ? 'Despesa' : 'Receita'}
+            </Text>
+          </View>
+        </View>
       </View>
-      
+
       <Text style={[
         styles.transactionAmount,
-        { color: item.type === 'EXPENSE' ? '#FF6347' : '#4CAF50' }
+        { color: isExpense ? '#FF6347' : '#4CAF50' }
       ]}>
-        {item.type === 'EXPENSE' ? '-' : '+'}{formatCurrency(item.amount)}
+        {isExpense ? '-' : '+'}{formatCurrency(item.amount)}
       </Text>
     </TouchableOpacity>
   );
@@ -107,13 +108,20 @@ const RecentTransactions: React.FC<RecentTransactionsProps> = ({
   onPressTransaction,
   onPressViewAll
 }) => {
+  const [filter, setFilter] = useState<'ALL' | 'EXPENSE' | 'INCOME'>('ALL');
+
+  // Aplicar filtro às transações
+  const filteredTransactions = transactions.filter(t =>
+    filter === 'ALL' || t.type === filter
+  );
+
   if (loading) {
     return (
       <View style={styles.container}>
         <View style={styles.headerRow}>
           <Text style={styles.sectionTitle}>Transações Recentes</Text>
         </View>
-        
+
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="small" color="#7B68EE" />
           <Text style={styles.loadingText}>Carregando transações...</Text>
@@ -128,12 +136,12 @@ const RecentTransactions: React.FC<RecentTransactionsProps> = ({
         <View style={styles.headerRow}>
           <Text style={styles.sectionTitle}>Transações Recentes</Text>
         </View>
-        
+
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle" size={24} color="#FF6347" />
           <Text style={styles.errorText}>{error}</Text>
           {onRetry && (
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.retryButton}
               onPress={onRetry}
             >
@@ -149,7 +157,7 @@ const RecentTransactions: React.FC<RecentTransactionsProps> = ({
     <View style={styles.container}>
       <View style={styles.headerRow}>
         <Text style={styles.sectionTitle}>Transações Recentes</Text>
-        
+
         {onPressViewAll && (
           <TouchableOpacity
             style={styles.viewAllButton}
@@ -160,26 +168,63 @@ const RecentTransactions: React.FC<RecentTransactionsProps> = ({
           </TouchableOpacity>
         )}
       </View>
-      
-      {transactions.length === 0 ? (
+
+      {/* Filtros */}
+      <View style={styles.filterContainer}>
+        <TouchableOpacity
+          style={[styles.filterButton, filter === 'ALL' && styles.activeFilter]}
+          onPress={() => setFilter('ALL')}
+        >
+          <Text style={[styles.filterText, filter === 'ALL' && styles.activeFilterText]}>
+            Todos
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.filterButton, filter === 'EXPENSE' && styles.activeFilter]}
+          onPress={() => setFilter('EXPENSE')}
+        >
+          <Text style={[styles.filterText, filter === 'EXPENSE' && styles.activeFilterText]}>
+            Despesas
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.filterButton, filter === 'INCOME' && styles.activeFilter]}
+          onPress={() => setFilter('INCOME')}
+        >
+          <Text style={[styles.filterText, filter === 'INCOME' && styles.activeFilterText]}>
+            Receitas
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {filteredTransactions.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Ionicons name="wallet-outline" size={40} color="#7B68EE" style={{ opacity: 0.6 }} />
           <Text style={styles.emptyText}>
-            Nenhuma transação recente
+            {filter === 'ALL'
+              ? 'Nenhuma transação recente'
+              : filter === 'EXPENSE'
+                ? 'Nenhuma despesa recente'
+                : 'Nenhuma receita recente'
+            }
           </Text>
         </View>
       ) : (
-        <FlatList
-          data={transactions}
-          keyExtractor={(item) => `${item.id}`}
-          renderItem={({ item }) => (
-            <TransactionItem 
-              item={item} 
-              onPress={onPressTransaction} 
-            />
-          )}
+        <ScrollView
           style={styles.transactionsList}
-        />
+          showsVerticalScrollIndicator={true}
+          nestedScrollEnabled={true}
+        >
+          {filteredTransactions.map((item, index) => (
+            <TransactionItem
+              key={`transaction-${item.type}-${item.id}-${index}`}
+              item={item}
+              onPress={onPressTransaction}
+            />
+          ))}
+        </ScrollView>
       )}
     </View>
   );
@@ -212,6 +257,28 @@ const styles = StyleSheet.create({
     color: '#7B68EE',
     fontSize: 14,
     marginRight: 4,
+  },
+  filterContainer: {
+    flexDirection: 'row',
+    marginBottom: 16,
+  },
+  filterButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    marginRight: 8,
+    backgroundColor: '#444',
+  },
+  activeFilter: {
+    backgroundColor: '#7B68EE',
+  },
+  filterText: {
+    color: '#ccc',
+    fontSize: 12,
+  },
+  activeFilterText: {
+    color: '#fff',
+    fontWeight: 'bold',
   },
   loadingContainer: {
     padding: 20,
@@ -288,6 +355,23 @@ const styles = StyleSheet.create({
   transactionAmount: {
     fontSize: 14,
     fontWeight: 'bold',
+  },
+  transactionMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  typeBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
+    marginLeft: 8,
+  },
+  typeText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  transactionsListContent: {
+    paddingBottom: 8,
   }
 });
 

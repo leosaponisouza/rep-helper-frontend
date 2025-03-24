@@ -1,29 +1,24 @@
 // components/Finances/MonthlyChart.tsx
+import { MonthlyChartData, MonthlyData } from '@/src/models/finances.model';
 import React from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, Dimensions } from 'react-native';
 import { LineChart } from 'react-native-chart-kit';
 
-// Definindo a interface para os dados do gráfico
-interface MonthlyChartData {
-  month: string;
-  expenses: number;
-  incomes: number;
-}
 
 interface MonthlyChartProps {
-  data?: MonthlyChartData[] | null;
+  data?: MonthlyChartData | null;
   title?: string;
   loading?: boolean;
 }
 
-const MonthlyChart: React.FC<MonthlyChartProps> = ({ 
-  data, 
-  title = "Análise Mensal", 
-  loading = false 
+const MonthlyChart: React.FC<MonthlyChartProps> = ({
+  data,
+  title = "Análise Mensal",
+  loading = false
 }) => {
-  // Ensure data is always an array
-  const safeData = Array.isArray(data) ? data : [];
-  
+  // Ensure data.monthlyData is always an array
+  const safeData: MonthlyData[] = data?.monthlyData || [];
+
   // Handle case where data is empty
   if (safeData.length === 0) {
     return (
@@ -61,12 +56,14 @@ const MonthlyChart: React.FC<MonthlyChartProps> = ({
     legend: ["Despesas", "Receitas"]
   };
 
-  const width = Dimensions.get('window').width - 40;
+  // Calcular largura apropriada para garantir que o gráfico caiba no container
+  const screenWidth = Dimensions.get('window').width;
+  const chartWidth = screenWidth - 64; // Considerando as margens e paddings
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>{title}</Text>
-      
+
       {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#7B68EE" />
@@ -75,8 +72,10 @@ const MonthlyChart: React.FC<MonthlyChartProps> = ({
         <View style={styles.chartContainer}>
           <LineChart
             data={chartData}
-            width={width}
+            width={chartWidth}
             height={220}
+            withHorizontalLines={true}
+            withVerticalLines={false}
             chartConfig={{
               backgroundColor: '#333',
               backgroundGradientFrom: '#333',
@@ -88,12 +87,18 @@ const MonthlyChart: React.FC<MonthlyChartProps> = ({
                 borderRadius: 16
               },
               propsForDots: {
-                r: '6',
-                strokeWidth: '2',
+                r: '4', // Reduzindo o tamanho dos pontos
+                strokeWidth: '1',
+              },
+              propsForLabels: {
+                fontSize: 10, // Reduzindo o tamanho da fonte
               }
             }}
             bezier
             style={styles.chart}
+            yAxisSuffix="" // Remover sufixo do eixo Y
+            yAxisInterval={1} // Controla a densidade das linhas horizontais
+            withInnerLines={true}
           />
         </View>
       )}
@@ -107,6 +112,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     margin: 16,
+    overflow: 'hidden', // Isso garante que nada vaze para fora
   },
   title: {
     fontSize: 18,
@@ -116,10 +122,12 @@ const styles = StyleSheet.create({
   },
   chartContainer: {
     alignItems: 'center',
+    width: '100%',
+    overflow: 'hidden',
   },
   chart: {
     borderRadius: 16,
-    paddingRight: 20,
+    marginRight: -10, // Compensar o padding interno que o componente aplica
   },
   loadingContainer: {
     height: 220,

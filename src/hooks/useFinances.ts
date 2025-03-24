@@ -12,10 +12,12 @@ import {
   CreateIncomeRequest, 
   UpdateIncomeRequest,
   FinancialDashboardSummary,
-  MonthlyExpenseData,
+  MonthlyChartData,
   CategoryExpense,
   PendingAction,
-  Transaction
+  Transaction,
+  TransactionType,
+  PendingActionsResponse
 } from '../models/finances.model';
 
 export type ExpenseFilterType = 'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'REIMBURSED';
@@ -41,7 +43,7 @@ export const useFinances = (options: UseFinancesOptions = {}) => {
   
   // State for dashboard
   const [dashboardSummary, setDashboardSummary] = useState<FinancialDashboardSummary | null>(null);
-  const [monthlyData, setMonthlyData] = useState<MonthlyExpenseData[]>([]);
+  const [monthlyData, setMonthlyData] = useState<MonthlyChartData>();
   const [pendingActions, setPendingActions] = useState<PendingAction[]>([]);
   const [loadingDashboard, setLoadingDashboard] = useState(false);
   const [dashboardError, setDashboardError] = useState<string | null>(null);
@@ -74,26 +76,30 @@ export const useFinances = (options: UseFinancesOptions = {}) => {
       }))
       .sort((a, b) => b.amount - a.amount); // Sort by amount descending
   }, [expenses]);
+// No hook useFinances, ao formar o recentTransactions:
+const recentTransactions = useMemo<Transaction[]>(() => {
+  // Use um timestamp para garantir unicidade nas keys mesmo com recarregamentos
+  const timestamp = Date.now();
   
-  // Recent transactions (both expenses and incomes combined)
-  const recentTransactions = useMemo<Transaction[]>(() => {
-    const allTransactions: Transaction[] = [
-      ...expenses.map(expense => ({
-        ...expense,
-        date: expense.expenseDate,
-        uniqueId: `expense-${expense.id}` // Adicione este campo para garantir unicidade
-      })),
-      ...incomes.map(income => ({
-        ...income,
-        date: income.incomeDate,
-        uniqueId: `income-${income.id}` // Adicione este campo para garantir unicidade
-      }))
-    ];
-    
-    return allTransactions
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-      .slice(0, 10);
-  }, [expenses, incomes]);
+  const allTransactions: Transaction[] = [
+    ...expenses.map((expense, index) => ({
+      ...expense,
+      date: expense.expenseDate,
+      type: 'EXPENSE' as TransactionType,
+      uniqueId: `expense-${expense.id}-${timestamp}-${index}`
+    })),
+    ...incomes.map((income, index) => ({
+      ...income,
+      date: income.incomeDate,
+      type: 'INCOME' as TransactionType,
+      uniqueId: `income-${income.id}-${timestamp}-${index}`
+    }))
+  ];
+  
+  return allTransactions
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    .slice(0, 10);
+}, [expenses, incomes]);
 
   // API request functions with better error handling
   const fetchWithErrorHandling = async <T>(
@@ -162,22 +168,39 @@ export const useFinances = (options: UseFinancesOptions = {}) => {
       // Use Promise.all to fetch dashboard data in parallel
       const [summaryResponse, monthlyResponse, pendingResponse] = await Promise.all([
         api.get<FinancialDashboardSummary>(`/api/v1/financial-dashboard/summary/${republicId}`),
-        api.get<MonthlyExpenseData[]>(`/api/v1/financial-dashboard/expenses/monthly/${republicId}`, {
+        api.get<MonthlyChartData>(`/api/v1/financial-dashboard/expenses/monthly/${republicId}`, {
           params: { numberOfMonths: 6 }
         }),
-        api.get<PendingAction[]>(`/api/v1/financial-dashboard/pending-actions/${republicId}`)
+        api.get<PendingActionsResponse>(`/api/v1/financial-dashboard/pending-actions/${republicId}`)
       ]);
       
       setDashboardSummary(summaryResponse.data);
-      setMonthlyData(Array.isArray(monthlyResponse.data) ? monthlyResponse.data : []);
-      setPendingActions(pendingResponse.data || []);
+      console.log("summary:", summaryResponse.data);
+      setMonthlyData(monthlyResponse.data);
+      console.log("monthly ", monthlyResponse.data)
+      // Extract and process pending expenses from the response
+      if (pendingResponse.data && Array.isArray(pendingResponse.data.pendingExpenses)) {
+        console.log("Pending expenses from API:", pendingResponse.data.pendingExpenses);
+        
+        // Map the expenses to include a 'date' field for backwards compatibility with components
+        const mappedPendingActions = pendingResponse.data.pendingExpenses.map(expense => ({
+          ...expense,
+          date: expense.expenseDate // Add date field pointing to expenseDate for compatibility
+        }));
+        
+        setPendingActions(mappedPendingActions);
+        console.log("Mapped pending actions:", mappedPendingActions);
+      } else {
+        console.log("No pending expenses found or invalid format", pendingResponse.data);
+        setPendingActions([]);
+      }
     } catch (err) {
       const parsedError = await ErrorHandler.parseError(err);
       setDashboardError(parsedError.message || "Não foi possível carregar os dados do dashboard");
       console.error("Dashboard error:", err);
       
       // Set default values on error
-      setMonthlyData([]);
+      setMonthlyData(undefined);
       setPendingActions([]);
     } finally {
       setLoadingDashboard(false);
