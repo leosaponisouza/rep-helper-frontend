@@ -122,6 +122,6 @@ export const assignMultipleUsers = async (taskId: number, userIds: string[]): Pr
 
 // Parar recorrência de uma tarefa
 export const stopRecurrence = async (taskId: number): Promise<Task> => {
-  const response = await api.patch(`/api/v1/tasks/${taskId}`, { is_recurring: false });
+  const response = await api.put(`/api/v1/tasks/${taskId}`, { recurring: false });
   return response.data;
 };

@@ -70,7 +70,7 @@ export const useTasks = (options: UseTasksOptions = {}) => {
     
     // Se o filtro for "recurring", retorna apenas tarefas recorrentes
     if (filterStatus === 'recurring') {
-      return allTasks.filter(task => task.is_recurring);
+      return allTasks.filter(task => task.recurring);
     }
 
     // Para outros filtros, filtra o array de todas as tarefas
@@ -332,7 +332,7 @@ export const useTasks = (options: UseTasksOptions = {}) => {
     dueDate?: string;
     category?: string;
     republicId: string;
-    is_recurring?: boolean;
+    recurring?: boolean;
     recurrenceType?: RecurrenceType;
     recurrenceInterval?: number;
     recurrenceEndDate?: string;
@@ -367,10 +367,10 @@ export const useTasks = (options: UseTasksOptions = {}) => {
     dueDate?: string;
     category?: string;
     status?: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'OVERDUE' | 'CANCELLED';
-    is_recurring?: boolean;
-    recurrence_type?: RecurrenceType;
-    recurrence_interval?: number;
-    recurrence_end_date?: string;
+    recurring?: boolean;
+    recurrenceType?: RecurrenceType;
+    recurrenceInterval?: number;
+    recurrenceEndDate?: string;
   }) => {
     try {
       // Atualização otimista
@@ -531,22 +531,6 @@ export const useTasks = (options: UseTasksOptions = {}) => {
       // Completa a tarefa no backend
       const completedTask = await taskService.completeTask(taskId);
       
-      // Se a tarefa for recorrente, cria a próxima instância
-      if (taskToComplete.is_recurring) {
-        const newTask = await handleRecurringTaskCompletion(taskToComplete);
-        
-        // Se uma nova tarefa foi criada, adiciona-a às listas
-        if (newTask) {
-          tasksCache.current.set(newTask.id, newTask);
-          setAllTasks(prev => [newTask, ...prev]);
-          
-          // Se o usuário atual está entre os atribuídos, adiciona à lista de myTasks
-          if (newTask.assigned_users?.includes(user?.uid || '')) {
-            setMyTasks(prev => [newTask, ...prev]);
-          }
-        }
-      }
-      
       // Recarrega as listas para garantir consistência
       setTimeout(() => {
         fetchTasks(true, currentPage);
@@ -689,7 +673,7 @@ export const useTasks = (options: UseTasksOptions = {}) => {
       if (currentTask) {
         const updatedTask = { 
           ...currentTask, 
-          assigned_users: (currentTask.assigned_users || []).filter(id => id !== userId)
+          assigned_users: (currentTask.assigned_users || []).filter((id: string) => id !== userId)
         };
         
         // Atualiza o cache
@@ -740,7 +724,7 @@ export const useTasks = (options: UseTasksOptions = {}) => {
                          myTasks.find(t => t.id === taskId);
       
       if (currentTask) {
-        const updatedTask = { ...currentTask, is_recurring: false };
+        const updatedTask = { ...currentTask, recurring: false };
         
         // Atualiza o cache
         tasksCache.current.set(taskId, updatedTask);

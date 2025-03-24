@@ -11,16 +11,16 @@ export const useTaskRecurrence = () => {
 
   // Calculate the next due date based on recurrence settings
   const calculateNextDueDate = useCallback((task: Task): string | null => {
-    if (!task.is_recurring || !task.recurrence_type || !task.dueDate) {
+    if (!task.recurring || !task.recurrenceType || !task.dueDate) {
       return null;
     }
 
     const dueDate = new Date(task.dueDate);
-    const interval = task.recurrence_interval || 1;
+    const interval = task.recurrenceInterval || 1;
     
     let nextDueDate = new Date(dueDate);
     
-    switch (task.recurrence_type) {
+    switch (task.recurrenceType) {
       case 'DAILY':
         nextDueDate.setDate(nextDueDate.getDate() + interval);
         break;
@@ -36,8 +36,8 @@ export const useTaskRecurrence = () => {
     }
     
     // Check if we've passed the end date
-    if (task.recurrence_end_date) {
-      const endDate = new Date(task.recurrence_end_date);
+    if (task.recurrenceEndDate) {
+      const endDate = new Date(task.recurrenceEndDate);
       if (nextDueDate > endDate) {
         return null;
       }
@@ -50,7 +50,7 @@ export const useTaskRecurrence = () => {
   const stopRecurrence = useCallback(async (taskId: number) => {
     try {
       setLoading(true);
-      await api.patch(`/api/v1/tasks/${taskId}`, { is_recurring: false });
+      await api.put(`/api/v1/tasks/${taskId}`, { isRecurrence: false });
       return true;
     } catch (error) {
       ErrorHandler.handle(error);
@@ -62,7 +62,7 @@ export const useTaskRecurrence = () => {
 
   // Handle task completion and create next instance if recurring
   const handleRecurringTaskCompletion = useCallback(async (task: Task) => {
-    if (!task.is_recurring) return null;
+    if (!task.recurring) return null;
     
     try {
       setLoading(true);
@@ -87,19 +87,19 @@ export const useTaskRecurrence = () => {
         republicId: task.republic_id,
         dueDate: nextDueDate,
         category: task.category,
-        is_recurring: task.is_recurring,
-        recurrence_type: task.recurrence_type,
-        recurrence_interval: task.recurrence_interval,
-        recurrence_end_date: task.recurrence_end_date,
-        parent_task_id: task.id
+        recurring: task.recurring,
+        recurrenceType: task.recurrencetype,
+        recurrenceInterval: task.recurrenceInterval,
+        recurrenceEndDate: task.recurrenceEndDate,
+        parentTaskId: task.id
       };
       
       const response = await api.post('/api/v1/tasks', newTaskData);
       const newTask = response.data;
-      
+      console.log("new task : " + newTask)
       // Copy assigned users from original task
       if (task.assigned_users && task.assigned_users.length > 0) {
-        const userIds = task.assigned_users.map(user => user);
+        const userIds = task.assigned_users.map((user: any) => user);
         await api.post(`/api/v1/tasks/${newTask.id}/assign-users`, { userIds });
       }
       

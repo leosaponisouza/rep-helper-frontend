@@ -18,11 +18,11 @@ export interface Task {
   assignedUsers?: User[];  // UIDs dos usuários atribuídos
   completed_at?: string;
   // Campos para recorrência
-  is_recurring?: boolean;
-  recurrence_type?: RecurrenceType;
-  recurrence_interval?: number;
-  recurrence_end_date?: string;
-  parent_task_id?: number;
+  recurring?: boolean;
+  recurrenceType?: RecurrenceType;
+  recurrenceInterval?: number;
+  recurrenceEndDate?: string;
+  parentTaskId?: number;
 }
 
 export interface CreateTaskDTO {
@@ -34,7 +34,7 @@ export interface CreateTaskDTO {
   assigned_users?: string[];
   
   // Campos para recorrência
-  is_recurring?: boolean;
+  recurring?: boolean;
   recurrenceType?: RecurrenceType;
   recurrenceInterval?: number;
   recurrenceEndDate?: string;
@@ -49,7 +49,7 @@ export interface UpdateTaskDTO {
   assigned_users?: string[];
   
   // Campos para recorrência
-  is_recurring?: boolean;
+  recurring?: boolean;
   recurrenceType?: RecurrenceType;
   recurrenceInterval?: number;
   recurrenceEndDate?: string;

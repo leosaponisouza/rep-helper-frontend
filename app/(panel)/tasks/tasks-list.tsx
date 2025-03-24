@@ -230,7 +230,7 @@ const TasksListScreen = () => {
           onPress: async () => {
             try {
               setPendingTaskIds(prev => [...prev, taskId]);
-              await updateTask(taskId, { is_recurring: false });
+              await updateTask(taskId, { recurring: false });
               
               Alert.alert(
                 "Sucesso",
@@ -292,7 +292,7 @@ const TasksListScreen = () => {
       currentUserId={user?.uid}
       pendingTaskIds={pendingTaskIds}
       onPress={navigateToTaskDetails}
-      onStopRecurrence={item.is_recurring ? handleStopRecurrence : undefined}
+      onStopRecurrence={item.recurring ? handleStopRecurrence : undefined}
     />
   ), [handleToggleTaskStatus, user?.uid, pendingTaskIds, navigateToTaskDetails, handleStopRecurrence]);
   

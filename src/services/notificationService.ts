@@ -53,7 +53,7 @@ class NotificationService {
     };
 
     // Add extra info for recurring tasks
-    if (task.is_recurring) {
+    if (task.recurring) {
       notificationContent.title = 'Lembrete de Tarefa Recorrente';
       notificationContent.body = `A tarefa recorrente "${task.title}" vence em 1 hora.`;
     }
@@ -69,7 +69,7 @@ class NotificationService {
 
   // Schedule a notification for a recurring task that was just completed
   async scheduleRecurringTaskNotification(task: Task, nextDueDate: string) {
-    if (!task.is_recurring || !nextDueDate) return null;
+    if (!task.recurring || !nextDueDate) return null;
 
     const hasPermission = await this.requestPermissions();
     if (!hasPermission) return null;

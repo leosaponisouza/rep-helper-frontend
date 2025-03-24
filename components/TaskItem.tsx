@@ -141,12 +141,12 @@ const TaskItem: React.FC<TaskItemProps> = memo(({
 
   // Função para formatar o padrão de recorrência de forma amigável
   const getRecurrencePattern = useMemo(() => {
-    if (!item.is_recurring) return null;
+    if (!item.recurring) return null;
     
-    const interval = item.recurrence_interval || 1;
+    const interval = item.recurrenceInterval || 1;
     let text;
     
-    switch (item.recurrence_type) {
+    switch (item.recurrenceType) {
       case 'DAILY':
         text = interval === 1 ? 'Diária' : `A cada ${interval} dias`;
         break;
@@ -164,7 +164,7 @@ const TaskItem: React.FC<TaskItemProps> = memo(({
     }
     
     return text;
-  }, [item.is_recurring, item.recurrence_type, item.recurrence_interval]);
+  }, [item.recurring, item.recurrenceType, item.recurrenceInterval]);
 
   // Handler para toggle status
   const handleToggleStatus = () => {
@@ -191,7 +191,7 @@ const TaskItem: React.FC<TaskItemProps> = memo(({
         item.status === 'COMPLETED' && styles.completedTask,
         isPending && styles.pendingTaskItem,
         isAssignedToCurrentUser && styles.myTaskItem,
-        item.is_recurring && styles.recurringTaskItem
+        item.recurring && styles.recurringTaskItem
       ]}
       onPress={handlePress}
       disabled={isPending}
@@ -225,7 +225,7 @@ const TaskItem: React.FC<TaskItemProps> = memo(({
               numberOfLines={1}
             >
               {item.title}
-              {item.is_recurring && (
+              {item.recurring && (
                 <RecurrenceIndicator compact={true} />
               )}
             </Text>
@@ -283,7 +283,7 @@ const TaskItem: React.FC<TaskItemProps> = memo(({
             )}
 
             {/* Recurrence indicator com padrão detalhado */}
-            {item.is_recurring && (
+            {item.recurring && (
               <View style={styles.recurrenceChip}>
                 <Ionicons name="repeat" size={12} color={colors.success.main} />
                 <Text style={styles.recurrenceText}>
@@ -346,7 +346,7 @@ const TaskItem: React.FC<TaskItemProps> = memo(({
           </View>
           
           {/* Informação da tarefa pai, se existir */}
-          {item.parent_task_id && (
+          {item.parentTaskId && (
             <View style={styles.parentTaskInfo}>
               <Ionicons name="git-branch" size={12} color={colors.text.tertiary} />
               <Text style={styles.parentTaskText}>
@@ -368,10 +368,10 @@ const TaskItem: React.FC<TaskItemProps> = memo(({
     prevProps.item.status === nextProps.item.status &&
     prevProps.item.due_date === nextProps.item.due_date &&
     prevProps.item.category === nextProps.item.category &&
-    prevProps.item.is_recurring === nextProps.item.is_recurring &&
-    prevProps.item.recurrence_type === nextProps.item.recurrence_type &&
-    prevProps.item.recurrence_interval === nextProps.item.recurrence_interval &&
-    prevProps.item.parent_task_id === nextProps.item.parent_task_id &&
+    prevProps.item.recurring === nextProps.item.recurring &&
+    prevProps.item.recurrenceType === nextProps.item.recurrenceType &&
+    prevProps.item.recurrenceInterval === nextProps.item.recurrenceInterval &&
+    prevProps.item.parentTaskId === nextProps.item.parentTaskId &&
     JSON.stringify(prevProps.item.assignedUsers) === JSON.stringify(nextProps.item.assignedUsers) &&
     prevProps.currentUserId === nextProps.currentUserId &&
     JSON.stringify(prevProps.pendingTaskIds) === JSON.stringify(nextProps.pendingTaskIds)

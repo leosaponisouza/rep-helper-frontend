@@ -53,13 +53,13 @@ const taskSchema = z.object({
   description: z.string().optional(),
   dueDate: z.date().optional(),
   category: z.string().optional(),
-  is_recurring: z.boolean().optional(),
-  recurrence_type: z.string().optional(),
-  recurrence_interval: z.number().min(1).optional(),
-  recurrence_end_date: z.date().optional(),
+  recurring: z.boolean().optional(),
+  recurrenceType: z.string().optional(),
+  recurrenceInterval: z.number().min(1).optional(),
+  recurrenceEndDate: z.date().optional(),
 }).refine(data => {
   // Se a tarefa for recorrente, a data de vencimento é obrigatória
-  if (data.is_recurring && !data.dueDate) {
+  if (data.recurring && !data.dueDate) {
     return false;
   }
   return true;
@@ -98,17 +98,17 @@ const CreateTaskScreen = () => {
       description: '',
       dueDate: undefined,
       category: '',
-      is_recurring: false,
-      recurrence_type: 'WEEKLY',
-      recurrence_interval: 1,
-      recurrence_end_date: undefined
+      recurring: false,
+      recurrenceType: 'WEEKLY',
+      recurrenceInterval: 1,
+      recurrenceEndDate: undefined
     }
   });
 
-  const isRecurring = watch('is_recurring');
-  const recurrenceType = watch('recurrence_type');
-  const recurrenceInterval = watch('recurrence_interval');
-  const recurrenceEndDate = watch('recurrence_end_date');
+  const isRecurring = watch('recurring');
+  const recurrenceType = watch('recurrenceType');
+  const recurrenceInterval = watch('recurrenceInterval');
+  const recurrenceEndDate = watch('recurrenceEndDate');
 
   // Limpar o formulário quando a tela for desmontada
   useEffect(() => {
@@ -118,10 +118,10 @@ const CreateTaskScreen = () => {
       description: '',
       dueDate: undefined,
       category: '',
-      is_recurring: false,
-      recurrence_type: 'WEEKLY',
-      recurrence_interval: 1,
-      recurrence_end_date: undefined
+      recurring: false,
+      recurrenceType: 'WEEKLY',
+      recurrenceInterval: 1,
+      recurrenceEndDate: undefined
     };
 
     // Resetar o formulário com os valores iniciais
@@ -236,7 +236,7 @@ const CreateTaskScreen = () => {
   };
 
   const selectRecurrenceType = (type: RecurrenceType) => {
-    setValue('recurrence_type', type);
+    setValue('recurrenceType', type);
   };
 
   const handleCustomCategory = () => {
@@ -287,7 +287,7 @@ const CreateTaskScreen = () => {
     setEndDatePickerVisibility(Platform.OS === 'ios');
 
     if (selectedDate) {
-      const currentDate = watch('recurrence_end_date') || new Date();
+      const currentDate = watch('recurrenceEndDate') || new Date();
 
       if (endDatePickerMode === 'date') {
         // Keep time part from current selection or current time
@@ -298,7 +298,7 @@ const CreateTaskScreen = () => {
           currentDate.getHours(),
           currentDate.getMinutes()
         );
-        setValue('recurrence_end_date', mergedDate);
+        setValue('recurrenceEndDate', mergedDate);
 
         // If it's iOS, we'll now show the time picker
         if (Platform.OS === 'ios') {
@@ -314,7 +314,7 @@ const CreateTaskScreen = () => {
           selectedDate.getHours(),
           selectedDate.getMinutes()
         );
-        setValue('recurrence_end_date', mergedDate);
+        setValue('recurrenceEndDate', mergedDate);
       }
     }
   };
@@ -347,7 +347,7 @@ const CreateTaskScreen = () => {
       }
 
       // Verificar se a tarefa é recorrente e tem data de vencimento
-      if (data.is_recurring && !data.dueDate) {
+      if (data.recurring && !data.dueDate) {
         Alert.alert('Atenção', 'Para tarefas recorrentes, é necessário definir a data da primeira ocorrência.');
         return;
       }
@@ -360,10 +360,10 @@ const CreateTaskScreen = () => {
         republicId: user?.currentRepublicId || '',
         dueDate: data.dueDate ? data.dueDate.toISOString() : undefined,
         category: data.category,
-        isRecurring: data.is_recurring,
-        recurrenceType: data.is_recurring ? data.recurrence_type as RecurrenceType : undefined,
-        recurrenceInterval: data.is_recurring ? data.recurrence_interval : undefined,
-        recurrenceEndDate: data.is_recurring && data.recurrence_end_date ? data.recurrence_end_date.toISOString() : undefined
+        isRecurring: data.recurring,
+        recurrenceType: data.recurring ? data.recurrenceType as RecurrenceType : undefined,
+        recurrenceInterval: data.recurring ? data.recurrenceInterval : undefined,
+        recurrenceEndDate: data.recurring && data.recurrenceEndDate ? data.recurrenceEndDate.toISOString() : undefined
       };
 
       const createdTask = await createTask(taskData);
@@ -373,7 +373,7 @@ const CreateTaskScreen = () => {
         await assignMultipleUsers(createdTask.id, selectedUsers);
 
         // Mostrar mensagem específica para tarefas recorrentes
-        if (data.is_recurring) {
+        if (data.recurring) {
           Alert.alert(
             'Tarefa Recorrente Criada',
             `A tarefa recorrente foi criada com sucesso! Após ser concluída, uma nova instância será criada automaticamente ${getRecurrencePattern().toLowerCase()}.`,
@@ -628,7 +628,7 @@ const CreateTaskScreen = () => {
                     styles.intervalButton,
                     recurrenceInterval <= 1 && styles.intervalButtonDisabled
                   ]}
-                  onPress={() => setValue('recurrence_interval', Math.max(1, recurrenceInterval - 1))}
+                  onPress={() => setValue('recurrenceInterval', Math.max(1, recurrenceInterval - 1))}
                   disabled={recurrenceInterval <= 1}
                 >
                   <Ionicons name="remove" size={20} color="#fff" />
@@ -640,7 +640,7 @@ const CreateTaskScreen = () => {
 
                 <TouchableOpacity
                   style={styles.intervalButton}
-                  onPress={() => setValue('recurrence_interval', recurrenceInterval + 1)}
+                  onPress={() => setValue('recurrenceInterval', recurrenceInterval + 1)}
                 >
                   <Ionicons name="add" size={20} color="#fff" />
                 </TouchableOpacity>
@@ -681,7 +681,7 @@ const CreateTaskScreen = () => {
                   <View style={styles.dateButtonContent}>
                     <Ionicons name="calendar" size={20} color="#7B68EE" />
                     <Text style={styles.dateTimeText}>
-                      {watch('recurrence_end_date') ? formatDate(watch('recurrence_end_date')) : 'Selecionar data'}
+                      {watch('recurrenceEndDate') ? formatDate(watch('recurrenceEndDate')) : 'Selecionar data'}
                     </Text>
                   </View>
                 </TouchableOpacity>
@@ -693,20 +693,20 @@ const CreateTaskScreen = () => {
                   <View style={styles.dateButtonContent}>
                     <Ionicons name="time" size={20} color="#7B68EE" />
                     <Text style={styles.dateTimeText}>
-                      {watch('recurrence_end_date') ? formatTime(watch('recurrence_end_date')) : 'Hora'}
+                      {watch('recurrenceEndDate') ? formatTime(watch('recurrenceEndDate')) : 'Hora'}
                     </Text>
                   </View>
                 </TouchableOpacity>
               </View>
 
-              {watch('recurrence_end_date') ? (
+              {watch('recurrenceEndDate') ? (
                 <View>
                   <Text style={styles.recurrenceHelperText}>
                     A recorrência será interrompida após esta data
                   </Text>
                   <TouchableOpacity
                     style={styles.clearEndDateButton}
-                    onPress={() => setValue('recurrence_end_date', undefined)}
+                    onPress={() => setValue('recurrenceEndDate', undefined)}
                   >
                     <Text style={styles.clearEndDateText}>Remover data de término</Text>
                   </TouchableOpacity>
@@ -952,7 +952,7 @@ const CreateTaskScreen = () => {
 
           <Controller
             control={control}
-            name="is_recurring"
+            name="recurring"
             render={({ field: { onChange, value } }) => (
               <View style={styles.inputContainer}>
                 <View style={styles.recurrenceToggleContainer}>
@@ -1030,7 +1030,7 @@ const CreateTaskScreen = () => {
 
       {isEndDatePickerVisible && (
         <DateTimePicker
-          value={watch('recurrence_end_date') || new Date()}
+          value={watch('recurrenceEndDate') || new Date()}
           mode={endDatePickerMode}
           display="default"
           onChange={handleEndDatePickerChange}

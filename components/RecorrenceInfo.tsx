@@ -1,130 +1,85 @@
 // components/RecurrenceInfo.tsx
-import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import React from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Task, RecurrenceType } from '../src/models/task.model';
-import { colors } from '../src/styles/sharedStyles';
-import { formatLocalDate } from '../src/utils/dateUtils';
+import { RecurrenceType } from '../src/models/task.model';
+import { formatDateWithTime } from '../src/utils/dateUtils';
 
 interface RecurrenceInfoProps {
-  task: Task;
-  showDetailed?: boolean;
-  showStopButton?: boolean;
-  showParentLink?: boolean;
-  onStopRecurrence?: (taskId: number) => void;
-  onNavigateToParent?: (taskId: number) => void;
+  isRecurring: boolean;
+  recurrenceType?: RecurrenceType;
+  recurrenceInterval?: number;
+  recurrenceEndDate?: string;
+  parentTaskId?: number;
+  onNavigateToParent?: (parentTaskId: number) => void;
+  onStopRecurrence?: () => void;
+  isStoppingRecurrence?: boolean;
+  canModifyTask?: boolean;
 }
 
-/**
- * Componente para exibir informações de recorrência de uma tarefa
- * Pode ser utilizado na tela de detalhes da tarefa, ou em outros locais
- */
-export const RecurrenceInfo: React.FC<RecurrenceInfoProps> = ({
-  task,
-  showDetailed = false,
-  showStopButton = false,
-  showParentLink = false,
+const RecurrenceInfo: React.FC<RecurrenceInfoProps> = ({
+  isRecurring,
+  recurrenceType,
+  recurrenceInterval = 1,
+  recurrenceEndDate,
+  parentTaskId,
+  onNavigateToParent,
   onStopRecurrence,
-  onNavigateToParent
+  isStoppingRecurrence = false,
+  canModifyTask = false,
 }) => {
-  // Se a tarefa não for recorrente, não renderiza nada
-  if (!task.is_recurring && !task.parent_task_id) return null;
-  
-  // Formatar o tipo de recorrência para texto amigável
-  const recurrenceTypeText = useMemo(() => {
-    switch (task.recurrence_type) {
+  if (!isRecurring && !parentTaskId) return null;
+
+  const getRecurrenceTypeLabel = (type?: RecurrenceType): string => {
+    if (!type) return 'Desconhecido';
+    
+    switch (type) {
       case 'DAILY': return 'Diária';
       case 'WEEKLY': return 'Semanal';
       case 'MONTHLY': return 'Mensal';
       case 'YEARLY': return 'Anual';
-      default: return 'Recorrente';
-    }
-  }, [task.recurrence_type]);
-  
-  // Formatar o padrão completo de recorrência
-  const recurrencePattern = useMemo(() => {
-    if (!task.is_recurring) return '';
-    
-    const type = recurrenceTypeText;
-    const interval = task.recurrence_interval || 1;
-    
-    // Se o intervalo for 1, apenas exibe o tipo
-    if (interval === 1) {
-      return type;
-    }
-    
-    // Caso contrário, mostra o padrão com o intervalo
-    let unit = '';
-    switch (task.recurrence_type) {
-      case 'DAILY': unit = 'dias'; break;
-      case 'WEEKLY': unit = 'semanas'; break;
-      case 'MONTHLY': unit = 'meses'; break;
-      case 'YEARLY': unit = 'anos'; break;
-      default: unit = 'períodos';
-    }
-    
-    return `${type} (a cada ${interval} ${unit})`;
-  }, [task.is_recurring, task.recurrence_type, task.recurrence_interval, recurrenceTypeText]);
-  
-  // Handler para interromper recorrência
-  const handleStopRecurrence = () => {
-    if (onStopRecurrence && task.is_recurring) {
-      onStopRecurrence(task.id);
+      default: return 'Desconhecido';
     }
   };
-  
-  // Handler para navegar para a tarefa pai
-  const handleNavigateToParent = () => {
-    if (onNavigateToParent && task.parent_task_id) {
-      onNavigateToParent(task.parent_task_id);
-    }
+
+  const getIntervalText = (type?: RecurrenceType, interval: number = 1): string => {
+    if (!type || interval <= 1) return '';
+    
+    const unit = type === 'DAILY' ? 'dias' :
+                 type === 'WEEKLY' ? 'semanas' :
+                 type === 'MONTHLY' ? 'meses' : 'anos';
+                 
+    return `a cada ${interval} ${unit}`;
   };
-  
-  // Componente compacto para uso em listas
-  if (!showDetailed) {
-    return (
-      <View style={styles.compactContainer}>
-        <Ionicons name="repeat" size={12} color={colors.success.main} />
-        <Text style={styles.compactText}>{recurrencePattern}</Text>
-        
-        {showStopButton && task.is_recurring && onStopRecurrence && (
-          <TouchableOpacity 
-            style={styles.stopButton}
-            onPress={handleStopRecurrence}
-          >
-            <Ionicons name="close-circle" size={14} color={colors.error.main} />
-          </TouchableOpacity>
-        )}
-      </View>
-    );
-  }
-  
-  // Componente detalhado para a tela de detalhes
+
   return (
-    <View style={styles.container}>
-      {/* Banner superior */}
-      <View style={styles.banner}>
-        <Ionicons name="repeat" size={20} color={colors.success.main} />
-        <Text style={styles.bannerText}>
-          {task.is_recurring ? 'Tarefa Recorrente' : 'Gerada por Recorrência'}
+    <View style={styles.recurrenceContainer}>
+      <View style={styles.recurrenceBanner}>
+        <Ionicons name="repeat" size={20} color="#4CAF50" />
+        <Text style={styles.recurrenceBannerText}>
+          {isRecurring ? 'Tarefa Recorrente' : 'Gerada por Recorrência'}
         </Text>
       </View>
       
-      {/* Detalhes da recorrência */}
-      <View style={styles.content}>
+      <View style={styles.recurrenceContent}>
         {/* Para tarefas recorrentes, mostrar configuração */}
-        {task.is_recurring && (
+        {isRecurring && recurrenceType && (
           <>
-            <View style={styles.row}>
-              <Text style={styles.label}>Tipo:</Text>
-              <Text style={styles.value}>{recurrencePattern}</Text>
+            <View style={styles.recurrenceRow}>
+              <Text style={styles.recurrenceLabel}>Tipo:</Text>
+              <Text style={styles.recurrenceValue}>
+                {getRecurrenceTypeLabel(recurrenceType)}
+                {recurrenceInterval && recurrenceInterval > 1 ?
+                  ` (${getIntervalText(recurrenceType, recurrenceInterval)})` : ''
+                }
+              </Text>
             </View>
             
-            {task.recurrence_end_date && (
-              <View style={styles.row}>
-                <Text style={styles.label}>Término:</Text>
-                <Text style={styles.value}>
-                  {formatLocalDate(task.recurrence_end_date, "dd 'de' MMMM 'de' yyyy")}
+            {recurrenceEndDate && (
+              <View style={styles.recurrenceRow}>
+                <Text style={styles.recurrenceLabel}>Término:</Text>
+                <Text style={styles.recurrenceValue}>
+                  {formatDateWithTime(recurrenceEndDate)}
                 </Text>
               </View>
             )}
@@ -132,26 +87,26 @@ export const RecurrenceInfo: React.FC<RecurrenceInfoProps> = ({
         )}
         
         {/* Para tarefas geradas por recorrência, mostrar info da tarefa pai */}
-        {task.parent_task_id && showParentLink && (
-          <View style={styles.row}>
-            <Text style={styles.label}>Origem:</Text>
+        {parentTaskId && onNavigateToParent && (
+          <View style={styles.recurrenceRow}>
+            <Text style={styles.recurrenceLabel}>Origem:</Text>
             <TouchableOpacity 
-              style={styles.parentLink}
-              onPress={handleNavigateToParent}
+              style={styles.parentTaskLink}
+              onPress={() => onNavigateToParent(parentTaskId)}
             >
-              <Text style={styles.parentLinkText}>
+              <Text style={styles.parentTaskLinkText}>
                 Ver tarefa original
               </Text>
-              <Ionicons name="arrow-forward" size={16} color={colors.primary.main} />
+              <Ionicons name="arrow-forward" size={16} color="#7B68EE" />
             </TouchableOpacity>
           </View>
         )}
         
         {/* Explicação sobre recorrência */}
-        <View style={styles.infoRow}>
-          <Ionicons name="information-circle" size={16} color={colors.text.secondary} />
-          <Text style={styles.infoText}>
-            {task.is_recurring
+        <View style={styles.recurrenceInfoBox}>
+          <Ionicons name="information-circle" size={16} color="#aaa" />
+          <Text style={styles.recurrenceInfoText}>
+            {isRecurring
               ? 'Quando concluída, uma nova instância será criada automaticamente.'
               : 'Esta tarefa foi gerada automaticamente por uma recorrência.'}
           </Text>
@@ -159,15 +114,22 @@ export const RecurrenceInfo: React.FC<RecurrenceInfoProps> = ({
       </View>
       
       {/* Botão para interromper recorrência */}
-      {showStopButton && task.is_recurring && onStopRecurrence && (
+      {canModifyTask && isRecurring && onStopRecurrence && (
         <TouchableOpacity 
           style={styles.stopRecurrenceButton}
-          onPress={handleStopRecurrence}
+          onPress={onStopRecurrence}
+          disabled={isStoppingRecurrence}
         >
-          <Ionicons name="stop-circle" size={18} color={colors.error.main} />
-          <Text style={styles.stopRecurrenceText}>
-            Interromper Recorrência
-          </Text>
+          {isStoppingRecurrence ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <>
+              <Ionicons name="stop-circle" size={18} color="#FF6347" />
+              <Text style={styles.stopRecurrenceText}>
+                Interromper Recorrência
+              </Text>
+            </>
+          )}
         </TouchableOpacity>
       )}
     </View>
@@ -175,83 +137,63 @@ export const RecurrenceInfo: React.FC<RecurrenceInfoProps> = ({
 };
 
 const styles = StyleSheet.create({
-  // Estilos para o componente compacto
-  compactContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: `${colors.success.main}15`,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 12,
-  },
-  compactText: {
-    color: colors.success.main,
-    fontSize: 12,
-    marginLeft: 4,
-  },
-  stopButton: {
-    marginLeft: 4,
-    padding: 2,
-  },
-  
-  // Estilos para o componente detalhado
-  container: {
-    backgroundColor: colors.background.secondary,
+  recurrenceContainer: {
+    backgroundColor: '#444',
     borderRadius: 12,
     overflow: 'hidden',
-    marginVertical: 8,
     borderLeftWidth: 3,
-    borderLeftColor: colors.success.main,
+    borderLeftColor: '#4CAF50',
   },
-  banner: {
+  recurrenceBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: `${colors.success.main}15`,
+    backgroundColor: 'rgba(76, 175, 80, 0.15)',
     paddingVertical: 10,
     paddingHorizontal: 16,
   },
-  bannerText: {
-    color: colors.success.main,
+  recurrenceBannerText: {
+    color: '#4CAF50',
     fontSize: 16,
     fontWeight: 'bold',
     marginLeft: 8,
   },
-  content: {
+  recurrenceContent: {
     padding: 16,
   },
-  row: {
+  recurrenceRow: {
     flexDirection: 'row',
     marginBottom: 8,
   },
-  label: {
-    color: colors.text.secondary,
+  recurrenceLabel: {
+    color: '#aaa',
     fontSize: 14,
     width: 70,
   },
-  value: {
-    color: colors.text.primary,
+  recurrenceValue: {
+    color: '#fff',
     fontSize: 14,
     flex: 1,
   },
-  infoRow: {
+  recurrenceInfoBox: {
     flexDirection: 'row',
-    backgroundColor: colors.background.tertiary,
+    backgroundColor: '#333',
     padding: 12,
     borderRadius: 8,
     marginTop: 8,
+    alignItems: 'flex-start',
   },
-  infoText: {
-    color: colors.text.secondary,
+  recurrenceInfoText: {
+    color: '#ccc',
     fontSize: 13,
     marginLeft: 8,
     flex: 1,
   },
-  parentLink: {
+  parentTaskLink: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  parentLinkText: {
-    color: colors.primary.main,
+  parentTaskLinkText: {
+    color: '#7B68EE',
     fontSize: 14,
     marginRight: 4,
   },
@@ -259,13 +201,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: `${colors.error.main}15`,
+    backgroundColor: 'rgba(255, 99, 71, 0.15)',
     paddingVertical: 12,
     borderTopWidth: 1,
-    borderTopColor: colors.background.tertiary,
+    borderTopColor: '#555',
   },
   stopRecurrenceText: {
-    color: colors.error.main,
+    color: '#FF6347',
     fontSize: 14,
     fontWeight: 'bold',
     marginLeft: 8,
