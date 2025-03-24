@@ -74,6 +74,12 @@ export default function PanelLayout() {
           href: null, // Opcional: Se você quiser esconder esta tab por enquanto
         }}
       />
+       <Tabs.Screen
+        name="quick-actions"
+        options={{
+          href: null, // Hide this from tab bar
+        }}
+      />
     </Tabs>
   );
 }

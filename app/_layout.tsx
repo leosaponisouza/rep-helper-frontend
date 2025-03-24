@@ -1,9 +1,11 @@
 // app/_layout.tsx
 import { Slot } from 'expo-router';
 import { AuthProvider } from '../src/context/AuthContext';
+import { NotificationProvider } from '../src/context/NotificationContext';
 import { StatusBar, View } from 'react-native';
 import { useEffect } from 'react';
 import * as SplashScreen from 'expo-splash-screen';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 // Manter splash screen visível enquanto inicializamos recursos
 SplashScreen.preventAutoHideAsync();
@@ -19,14 +21,18 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <AuthProvider>
-      <View style={{ flex: 1, backgroundColor: '#333' }}>
-        <StatusBar
-          backgroundColor="#333"
-          barStyle="light-content"
-        />
-        <Slot />
-      </View>
-    </AuthProvider>
+    <SafeAreaProvider>
+      <AuthProvider>
+        <NotificationProvider>
+          <View style={{ flex: 1, backgroundColor: '#333' }}>
+            <StatusBar
+              backgroundColor="#333"
+              barStyle="light-content"
+            />
+            <Slot />
+          </View>
+        </NotificationProvider>
+      </AuthProvider>
+    </SafeAreaProvider>
   );
 }
