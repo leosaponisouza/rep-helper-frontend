@@ -25,6 +25,19 @@ import { useAuth } from '../../src/context/AuthContext';
 import { router, useNavigation } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
+// Função auxiliar para formatar CEP
+const formatCEP = (value: string) => {
+    // Remove qualquer caractere não numérico
+    const numbers = value.replace(/\D/g, '');
+    
+    // Aplica a máscara de CEP (00000-000)
+    if (numbers.length <= 5) {
+        return numbers;
+    } else {
+        return `${numbers.slice(0, 5)}-${numbers.slice(5, 8)}`;
+    }
+};
+
 // Validation Schema
 const republicSchema = z.object({
     name: z.string().min(3, { message: "Nome da república é obrigatório" }),
@@ -78,7 +91,9 @@ const CreateRepublicScreen: React.FC = () => {
                 owner_id: user.uid,
             };
 
-            const response = await api.post('api/v1/republics', republicData);
+            console.log('Enviando dados para criar república:', republicData);
+            const response = await api.post('/republics', republicData);
+            console.log('Resposta da API:', response.data);
             const republicCode = response.data.republic?.code;
 
             if (republicCode) {
@@ -133,9 +148,9 @@ const CreateRepublicScreen: React.FC = () => {
         control: any;
         name: keyof RepublicFormData;
         label: string;
-        icon: string;
-        rules?: object;
-        inputProps?: any;
+        icon: any;
+        rules?: any;
+        [key: string]: any;
     }) => {
         return (
             <View style={styles.fieldContainer}>
@@ -146,27 +161,47 @@ const CreateRepublicScreen: React.FC = () => {
                     control={control}
                     name={name}
                     rules={rules}
-                    render={({ field: { onChange, value, onBlur } }) => (
-                        <View style={[
-                            styles.inputContainer,
-                            errors[name] && styles.inputError
-                        ]}>
-                            <Ionicons 
-                                name={icon} 
-                                size={20} 
-                                color={errors[name] ? "#FF6347" : "#7B68EE"} 
-                                style={styles.inputIcon} 
-                            />
-                            <TextInput
-                                style={styles.input}
-                                onChangeText={onChange}
-                                onBlur={onBlur}
-                                value={value}
-                                placeholderTextColor="#aaa"
-                                {...inputProps}
-                            />
-                        </View>
-                    )}
+                    render={({ field: { onChange, value, onBlur } }) => {
+                        // Criar handler personalizado para onChangeText
+                        const handleChangeText = (text: string) => {
+                            // Se tiver um onChangeText nas inputProps, chama ele primeiro
+                            if (inputProps.onChangeText) {
+                                const result = inputProps.onChangeText(text);
+                                if (result !== undefined) {
+                                    // Se retornar valor, use-o
+                                    onChange(result);
+                                    return;
+                                }
+                            }
+                            // Caso contrário, use o valor original
+                            onChange(text);
+                        };
+
+                        // Remove onChangeText das inputProps para não passar duas vezes
+                        const { onChangeText, ...restInputProps } = inputProps;
+
+                        return (
+                            <View style={[
+                                styles.inputContainer,
+                                errors[name] && styles.inputError
+                            ]}>
+                                <Ionicons 
+                                    name={icon} 
+                                    size={20} 
+                                    color={errors[name] ? "#FF6347" : "#7B68EE"} 
+                                    style={styles.inputIcon} 
+                                />
+                                <TextInput
+                                    style={styles.input}
+                                    onChangeText={handleChangeText}
+                                    onBlur={onBlur}
+                                    value={value}
+                                    placeholderTextColor="#aaa"
+                                    {...restInputProps}
+                                />
+                            </View>
+                        );
+                    }}
                 />
                 {errors[name] && (
                     <Text style={styles.errorText}>
@@ -280,6 +315,8 @@ const CreateRepublicScreen: React.FC = () => {
                             placeholder="00000-000"
                             keyboardType="number-pad"
                             rules={{ required: true }}
+                            maxLength={9}
+                            onChangeText={(text: string) => formatCEP(text)}
                         />
 
                         <TouchableOpacity

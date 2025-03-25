@@ -57,9 +57,9 @@ const SignUpScreen = () => {
       const isConnected = await checkApiConnection();
       setNetworkStatus({ connected: isConnected, checking: false });
       setDebugInfo(`Conectividade: ${isConnected ? 'OK' : 'Falha'}`);
-    } catch (error) {
+    } catch (error: unknown) {
       setNetworkStatus({ connected: false, checking: false });
-      setDebugInfo(`Erro de conectividade: ${error.message}`);
+      setDebugInfo(`Erro de conectividade: ${error instanceof Error ? error.message : 'Desconhecido'}`);
       console.log('Falha na verificação de conexão:', error);
     }
   };
@@ -190,8 +190,9 @@ const SignUpScreen = () => {
         setDebugInfo('Redirecionando...');
         // 4. Navegar para a tela de escolha de república 
         router.replace('/(republic)/choice');
-      } catch (apiError) {
-        setDebugInfo(`Erro na API: ${apiError.message}`);
+      } catch (apiError: unknown) {
+        const errorMessage = apiError instanceof Error ? apiError.message : 'Erro desconhecido';
+        setDebugInfo(`Erro na API: ${errorMessage}`);
         console.error('Erro na API:', apiError);
         
         // Se o usuário foi criado no Firebase, mas falhou no backend
@@ -201,15 +202,16 @@ const SignUpScreen = () => {
             setDebugInfo('Tentando excluir usuário Firebase após falha');
             await firebaseUser.delete();
           }
-        } catch (deleteError) {
-          setDebugInfo(`Erro ao excluir usuário Firebase: ${deleteError.message}`);
+        } catch (deleteError: unknown) {
+          const errorMessage = deleteError instanceof Error ? deleteError.message : 'Erro desconhecido';
+          setDebugInfo(`Erro ao excluir usuário Firebase: ${errorMessage}`);
           console.error('Erro ao excluir usuário Firebase após falha no backend:', deleteError);
         }
         
         throw apiError;
       }
     } catch (error) {
-      const parsedError = ErrorHandler.parseError(error);
+      const parsedError = await ErrorHandler.parseError(error);
       setError(parsedError.message);
       setDebugInfo(`Erro final: ${parsedError.message} (${parsedError.type})`);
       ErrorHandler.logError(parsedError);

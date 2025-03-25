@@ -308,9 +308,7 @@ const TasksListScreen = () => {
   const getContentContainerStyle = useCallback((isEmpty: boolean) => {
     if (isEmpty) {
       return {
-        ...styles.listContainer,
-        flex: 1,
-        justifyContent: 'center' as const
+        flexGrow: 1,
       };
     }
     return styles.listContainer;
@@ -630,7 +628,6 @@ const styles = StyleSheet.create({
   listContainer: {
     flexGrow: 1,
     backgroundColor: '#222',
-    paddingHorizontal: 20,
     paddingTop: 10,
     paddingBottom: 20,
   },

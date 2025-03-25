@@ -1,5 +1,5 @@
 // app/(panel)/home.tsx
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { 
   View, 
   Text, 
@@ -17,82 +17,90 @@ import {
 import { router } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuth } from '@/src/context/AuthContext';
-import { useTasks } from '@/src/hooks/useTasks';
+import { useHome } from '@/src/hooks/useHome';
+import { useNotifications } from '@/src/hooks/useNotifications';
 import { useFinances } from '@/src/hooks/useFinances';
+import { useTasks } from '@/src/hooks/useTasks';
 import { colors, createShadow } from '@/src/styles/sharedStyles';
 import { getDisplayName } from '@/src/utils/userUtils';
+import { parseISOPreservingTime, formatLocalDate, formatTime } from '@/src/utils/dateUtils';
 import TaskItem from '@/components/TaskItem';
 import NotificationCenter from '@/components/NotificationCenter';
+import { Task } from '@/src/models/task.model';
 
 const { width } = Dimensions.get('window');
 
 // Componente simples para exibir um evento (não usa o EventItem completo)
-const SimpleEventCard = ({ title, date, onPress }) => (
-  <TouchableOpacity 
-    style={styles.simpleEventCard}
-    onPress={onPress}
-    activeOpacity={0.7}
-  >
-    <View style={styles.eventDateBadge}>
-      <Text style={styles.eventDateText}>
-        {new Date(date).getDate()}
-      </Text>
-      <Text style={styles.eventMonthText}>
-        {new Date(date).toLocaleString('pt-BR', { month: 'short' })}
-      </Text>
-    </View>
-    <View style={styles.eventDetails}>
-      <Text style={styles.eventTitle} numberOfLines={2}>
-        {title}
-      </Text>
-      <Text style={styles.eventTime}>
-        {new Date(date).toLocaleTimeString('pt-BR', { 
-          hour: '2-digit', 
-          minute: '2-digit' 
-        })}
-      </Text>
-    </View>
-    <Ionicons name="chevron-forward" size={20} color={colors.text.tertiary} />
-  </TouchableOpacity>
-);
-
-// Eventos de exemplo para caso os dados reais não estejam disponíveis
-const MOCK_EVENTS = [
-  {
-    id: 1,
-    title: "Reunião de moradores",
-    startDate: new Date(Date.now() + 86400000).toISOString(), // Amanhã
-    location: "Sala de estar"
-  },
-  {
-    id: 2,
-    title: "Limpeza coletiva do quintal",
-    startDate: new Date(Date.now() + 259200000).toISOString(), // 3 dias
-    location: "Quintal"
-  }
-];
+const SimpleEventCard = ({ 
+  title, 
+  date, 
+  onPress 
+}: { 
+  title: string; 
+  date: string; 
+  onPress: () => void;
+}) => {
+  const eventDate = parseISOPreservingTime(date);
+  
+  return (
+    <TouchableOpacity 
+      style={styles.simpleEventCard}
+      onPress={onPress}
+      activeOpacity={0.7}
+    >
+      <View style={styles.eventDateBadge}>
+        <Text style={styles.eventDateText}>
+          {eventDate.getDate()}
+        </Text>
+        <Text style={styles.eventMonthText}>
+          {formatLocalDate(eventDate, 'MMM')}
+        </Text>
+      </View>
+      <View style={styles.eventDetails}>
+        <Text style={styles.eventTitle} numberOfLines={2}>
+          {title}
+        </Text>
+        <Text style={styles.eventTime}>
+          {formatTime(eventDate)}
+        </Text>
+      </View>
+      <Ionicons name="chevron-forward" size={20} color={colors.text.tertiary} />
+    </TouchableOpacity>
+  );
+};
 
 const HomeScreen = () => {
   const { user } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   
-  // Tasks hook - usando apenas a funcionalidade necessária
+  // Usar o hook useHome para centralizar a lógica
   const { 
-    tasks,
-    allTasks,
-    loading: loadingTasks,
-    error: tasksError,
-    applyFilter
-  } = useTasks();
+    userTasks,
+    loadingTasks,
+    tasksError,
+    upcomingEvents,
+    loadingEvents,
+    eventsError,
+    refreshData: refreshHomeData,
+    refreshEvents,
+  } = useHome();
   
-  // Finanças hook
+  // Usar hooks adicionais para ampliar funcionalidades
+  const { 
+    fetchNotifications, 
+    unreadCount, 
+    markAsRead 
+  } = useNotifications();
+  
+  const { completeTask } = useTasks();
+  
+  // Usar useFinances para dados financeiros precisos
   const { 
     dashboardSummary,
     pendingActions,
     loadingDashboard,
-    dashboardError,
-    fetchDashboardData
+    fetchDashboardData,
   } = useFinances();
   
   // Valor animado para o cabeçalho
@@ -112,20 +120,22 @@ const HomeScreen = () => {
     extrapolate: 'clamp'
   });
   
-  // Carregar as tarefas do usuário atual apenas uma vez
-  React.useEffect(() => {
-    applyFilter('my-tasks');
-    fetchDashboardData();
-  }, []);
-  
-  // Função para atualizar todos os dados
-  const refreshData = useCallback(async () => {
+  // Função para lidar com o pull-to-refresh
+  const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     
     try {
-      // Atualizar cada área independentemente
-      applyFilter('my-tasks');
-      fetchDashboardData();
+      // Atualizar os dados da home
+      await refreshHomeData();
+      
+      // Atualizar dados financeiros
+      await fetchDashboardData();
+      
+      // Atualizar notificações
+      await fetchNotifications();
+      
+      // Atualizar especificamente os eventos para garantir dados atualizados
+      await refreshEvents();
       
       // Pequeno atraso para dar tempo à UI de reagir
       await new Promise(resolve => setTimeout(resolve, 800));
@@ -134,15 +144,10 @@ const HomeScreen = () => {
     } finally {
       setRefreshing(false);
     }
-  }, [applyFilter, fetchDashboardData]);
+  }, [refreshHomeData, fetchDashboardData, fetchNotifications, refreshEvents]);
   
-  // Função para lidar com o pull-to-refresh
-  const handleRefresh = useCallback(() => {
-    refreshData();
-  }, [refreshData]);
-  
-  // Funcão para navegar para os detalhes das tarefas
-  const handleTaskPress = useCallback((taskId) => {
+  // Função para navegar para os detalhes das tarefas
+  const handleTaskPress = useCallback((taskId: number) => {
     router.push(`/(panel)/tasks/${taskId}`);
   }, []);
   
@@ -152,14 +157,57 @@ const HomeScreen = () => {
   }, [showNotifications]);
   
   // Formatar valor monetário
-  const formatCurrency = (value) => {
+  const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
       currency: 'BRL'
     }).format(value || 0);
   };
   
-  const userTasks = tasks?.slice(0, 3) || [];
+  // Filtrar eventos para exibir apenas eventos futuros com data válida
+  const filteredEvents = upcomingEvents ? upcomingEvents.filter(event => {
+    if (!event.startDate) return false;
+    try {
+      const eventDate = parseISOPreservingTime(event.startDate);
+      const now = new Date();
+      return eventDate > now;
+    } catch (e) {
+      console.error('Erro ao analisar data do evento:', e);
+      return false;
+    }
+  }).sort((a, b) => {
+    // Ordenar por data (mais próximos primeiro)
+    const dateA = parseISOPreservingTime(a.startDate);
+    const dateB = parseISOPreservingTime(b.startDate);
+    return dateA.getTime() - dateB.getTime();
+  }) : [];
+  
+  // Função para lidar com a conclusão de uma tarefa
+  const handleToggleStatus = useCallback(async (task: Task): Promise<void> => {
+    if (task && task.id) {
+      try {
+        await completeTask(task.id);
+        // Após concluir, atualizar as tarefas
+        await refreshHomeData();
+      } catch (error) {
+        console.error('Erro ao alternar status da tarefa:', error);
+      }
+    }
+  }, [completeTask, refreshHomeData]);
+  
+  // Atualizar notificações quando o componente for montado
+  useEffect(() => {
+    fetchNotifications();
+    // Carregar os eventos ao iniciar o componente
+    refreshEvents();
+  }, [fetchNotifications, refreshEvents]);
+  
+  // Função para fechar centro de notificações e atualizar contagem
+  const handleCloseNotifications = useCallback(() => {
+    setShowNotifications(false);
+    // Atualizar a contagem de notificações não lidas
+    fetchNotifications();
+  }, [fetchNotifications]);
   
   return (
     <View style={styles.container}>
@@ -179,14 +227,19 @@ const HomeScreen = () => {
               onPress={toggleNotifications}
             >
               <Ionicons name="notifications" size={24} color={colors.primary.main} />
-              {/* Badge de notificação */}
-              <View style={styles.notificationBadge}>
-                <Text style={styles.notificationCount}>3</Text>
-              </View>
+              {/* Badge de notificação somente se houver notificações não lidas */}
+              {unreadCount > 0 && (
+                <View style={styles.notificationBadge}>
+                  <Text style={styles.notificationCount}>
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </Text>
+                </View>
+              )}
             </TouchableOpacity>
             
             <TouchableOpacity 
               style={styles.profileButton}
+              // @ts-ignore - Ignorar erro de tipagem temporariamente
               onPress={() => router.push('/(panel)/profile')}
             >
               {user?.profile_picture_url ? (
@@ -263,29 +316,9 @@ const HomeScreen = () => {
               </View>
               <Text style={styles.summaryTitle}>Eventos</Text>
               <Text style={styles.summaryValue}>
-                {MOCK_EVENTS.length}
+                {filteredEvents.length}
               </Text>
               <Text style={styles.summaryLabel}>próximos</Text>
-            </View>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={[styles.summaryCard, styles.tertiaryCard]}
-            onPress={() => router.push('/(panel)/finances')}
-          >
-            <View style={styles.summaryCardContent}>
-              <View style={styles.summaryIconContainer}>
-                <MaterialCommunityIcons name="cash" size={28} color="#fff" />
-              </View>
-              <Text style={styles.summaryTitle}>Finanças</Text>
-              <Text style={styles.summaryValue}>
-                {dashboardSummary ? new Intl.NumberFormat('pt-BR', {
-                  style: 'currency',
-                  currency: 'BRL',
-                  notation: 'compact'
-                }).format(dashboardSummary.totalExpenses || 0) : 'R$ 0'}
-              </Text>
-              <Text style={styles.summaryLabel}>despesas</Text>
             </View>
           </TouchableOpacity>
         </View>
@@ -293,7 +326,7 @@ const HomeScreen = () => {
         {/* Resumo Financeiro */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Resumo Financeiro</Text>
+            <Text style={styles.sectionTitle}>Resumo Financeiro mensal</Text>
             <TouchableOpacity onPress={() => router.push('/(panel)/finances')}>
               <Text style={styles.sectionAction}>Ver detalhes</Text>
             </TouchableOpacity>
@@ -322,21 +355,21 @@ const HomeScreen = () => {
                 <View style={styles.financeStatsRow}>
                   <View style={styles.financeStatItem}>
                     <Text style={styles.financeStatValue}>
-                      {formatCurrency(dashboardSummary.totalExpenses)}
+                      {formatCurrency(dashboardSummary.totalExpensesCurrentMonth || 0)}
                     </Text>
                     <Text style={styles.financeStatLabel}>Despesas</Text>
                   </View>
                   
                   <View style={styles.financeStatItem}>
                     <Text style={styles.financeStatValue}>
-                      {formatCurrency(dashboardSummary.totalIncomes)}
+                      {formatCurrency(dashboardSummary.totalIncomesCurrentMonth || 0)}
                     </Text>
                     <Text style={styles.financeStatLabel}>Receitas</Text>
                   </View>
                   
                   <View style={styles.financeStatItem}>
                     <Text style={styles.financeStatValue}>
-                      {formatCurrency(dashboardSummary.pendingExpensesAmount)}
+                      {formatCurrency(dashboardSummary.pendingExpensesAmount || 0)}
                     </Text>
                     <Text style={styles.financeStatLabel}>Pendentes</Text>
                   </View>
@@ -385,7 +418,7 @@ const HomeScreen = () => {
                 <TaskItem
                   key={`task-${task.id}`}
                   item={task}
-                  onToggleStatus={() => {}}
+                  onToggleStatus={handleToggleStatus}
                   currentUserId={user?.uid}
                   pendingTaskIds={[]}
                   onPress={handleTaskPress}
@@ -418,21 +451,44 @@ const HomeScreen = () => {
           </View>
           
           <View style={styles.simpleEventsContainer}>
-            {MOCK_EVENTS.map(event => (
-              <SimpleEventCard
-                key={`event-${event.id}`}
-                title={event.title}
-                date={event.startDate}
-                onPress={() => router.push('/(panel)/events')}
-              />
-            ))}
-            <TouchableOpacity
-              style={styles.createEventButton}
-              onPress={() => router.push('/(panel)/events/new')}
-            >
-              <Ionicons name="add-circle-outline" size={24} color={colors.primary.main} />
-              <Text style={styles.createEventButtonText}>Criar Novo Evento</Text>
-            </TouchableOpacity>
+            {loadingEvents ? (
+              <View style={styles.loadingSectionContainer}>
+                <ActivityIndicator size="small" color={colors.primary.main} />
+                <Text style={styles.loadingSectionText}>Carregando eventos...</Text>
+              </View>
+            ) : filteredEvents && filteredEvents.length > 0 ? (
+              filteredEvents.map(event => (
+                <SimpleEventCard
+                  key={`event-${event.id}`}
+                  title={event.title}
+                  date={event.startDate}
+                  onPress={() => router.push(`/(panel)/events/${event.id}`)}
+                />
+              ))
+            ) : (
+              <View style={styles.emptyState}>
+                <Ionicons name="calendar" size={48} color={colors.primary.light} />
+                <Text style={styles.emptyStateText}>
+                  Não há eventos programados
+                </Text>
+                <TouchableOpacity
+                  style={styles.createButton}
+                  onPress={() => router.push('/(panel)/events/new')}
+                >
+                  <Text style={styles.createButtonText}>Criar Evento</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+            
+            {filteredEvents && filteredEvents.length > 0 && (
+              <TouchableOpacity
+                style={styles.createEventButton}
+                onPress={() => router.push('/(panel)/events/new')}
+              >
+                <Ionicons name="add-circle-outline" size={24} color={colors.primary.main} />
+                <Text style={styles.createEventButtonText}>Criar Novo Evento</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
         
@@ -455,7 +511,7 @@ const HomeScreen = () => {
       {/* Centro de Notificações */}
       {showNotifications && (
         <NotificationCenter 
-          onClose={toggleNotifications}
+          onClose={handleCloseNotifications}
           visible={showNotifications}
         />
       )}
@@ -605,7 +661,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   summaryCard: {
-    width: '31%',
+    width: '48%',
     minHeight: 140,
     borderRadius: 16,
     padding: 16,

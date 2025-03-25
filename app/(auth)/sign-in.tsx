@@ -53,37 +53,52 @@ const LoginScreen = () => {
 
     const handleLogin = async () => {
         Keyboard.dismiss();
-
-        // Validação de formulário
-        if (!email.trim()) {
-            setError('Por favor, insira seu email.');
-            return;
-        }
-
-        if (!password) {
-            setError('Por favor, insira sua senha.');
-            return;
-        }
-
-        // Validação de formato de email
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(email)) {
-            setError('Por favor, insira um email válido.');
-            return;
-        }
-
         setLoading(true);
         setError('');
 
         try {
+            // Validação de formulário
+            if (!email.trim()) {
+                throw new Error('Por favor, insira seu email.');
+            }
+
+            if (!password) {
+                throw new Error('Por favor, insira sua senha.');
+            }
+
+            // Validação de formato de email
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(email)) {
+                throw new Error('Por favor, insira um email válido.');
+            }
+
             // Verificar conexão com a API antes de tentar login
             const isConnected = await checkApiConnection();
             if (!isConnected) {
                 throw new Error('Sem conexão com o servidor. Verifique sua internet.');
             }
 
-            // Autenticação Firebase
-            const userCredential = await signInWithEmailAndPassword(auth, email, password);
+            try {
+                // Autenticação Firebase
+                await signInWithEmailAndPassword(auth, email, password);
+            } catch (firebaseError: any) {
+                // Tratar erros do Firebase Authentication
+                // Para erros de senha/email incorretos, usar mensagem genérica de segurança
+                if (firebaseError.code === 'auth/wrong-password' || 
+                    firebaseError.code === 'auth/user-not-found' || 
+                    firebaseError.code === 'auth/invalid-email' ||
+                    firebaseError.code === 'auth/invalid-credential') {
+                    throw new Error('Email ou senha incorretos.');
+                } else if (firebaseError.code === 'auth/too-many-requests') {
+                    throw new Error('Muitas tentativas. Tente novamente mais tarde ou recupere sua senha.');
+                } else if (firebaseError.code === 'auth/network-request-failed') {
+                    throw new Error('Falha na conexão. Verifique sua internet e tente novamente.');
+                } else if (firebaseError.code === 'auth/user-disabled') {
+                    throw new Error('Esta conta foi desativada. Entre em contato com o suporte.');
+                }
+                // Para outros erros, repassar para tratamento geral
+                throw firebaseError;
+            }
             
             // Obter token Firebase
             const firebaseToken = await getFreshFirebaseToken(true);
@@ -92,44 +107,55 @@ const LoginScreen = () => {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 15000);
             
-            // Autenticação na API backend
-          // Autenticação na API backend
-            const response = await api.post('/api/v1/auth/login',
-                {
-                    // Enviar o firebaseToken também no corpo da requisição
-                    firebaseToken: firebaseToken
-                },
-                {
-                    headers: {
-                        'Authorization': `Bearer ${firebaseToken}`,
-                        'Content-Type': 'application/json'
+            try {
+                // Autenticação na API backend
+                const response = await api.post('/api/v1/auth/login',
+                    {
+                        // Enviar o firebaseToken também no corpo da requisição
+                        firebaseToken: firebaseToken
                     },
-                    signal: controller.signal
-                }
-            );
-            console.log(response);
-            clearTimeout(timeoutId);
-    
-            // Correct access to token and user
-            if (response.data.token && response.data.user) {
-                // Armazenar dados de autenticação e atualizar contexto
-                await login(
-                    response.data.token,  // Direct access to token
-                    response.data.user,   // Direct access to user object  // No refresh token in this response
+                    {
+                        headers: {
+                            'Authorization': `Bearer ${firebaseToken}`,
+                            'Content-Type': 'application/json'
+                        },
+                        signal: controller.signal
+                    }
                 );
-    
-                // Navegar para tela apropriada
-                if (response.data.user.currentRepublicId) {
-                    router.replace('/(panel)/home');
+                
+                clearTimeout(timeoutId);
+        
+                // Verificar a resposta da API
+                if (response.data.token && response.data.user) {
+                    // Armazenar dados de autenticação e atualizar contexto
+                    await login(
+                        response.data.token,
+                        response.data.user,
+                    );
+        
+                    // Navegar para tela apropriada
+                    if (response.data.user.currentRepublicId) {
+                        router.replace('/(panel)/home');
+                    } else {
+                        router.replace('/(republic)/choice');
+                    }
                 } else {
-                    router.replace('/(republic)/choice');
+                    throw new Error('Resposta inválida do servidor. Tente novamente mais tarde.');
                 }
-            } else {
-                throw new Error('Resposta inválida do servidor');
+            } catch (apiError: any) {
+                clearTimeout(timeoutId);
+                
+                // Se for erro de timeout
+                if (apiError.name === 'AbortError') {
+                    throw new Error('O servidor demorou para responder. Tente novamente mais tarde.');
+                }
+                
+                // Repassar erro para tratamento geral
+                throw apiError;
             }
         } catch (error) {
             // Usar o utilitário de tratamento de erros
-            const parsedError = ErrorHandler.parseError(error);
+            const parsedError = await ErrorHandler.parseError(error);
             setError(parsedError.message);
             ErrorHandler.logError(parsedError);
         } finally {

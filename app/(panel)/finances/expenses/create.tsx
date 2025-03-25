@@ -475,7 +475,6 @@ const CreateExpenseScreen = () => {
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Valor</Text>
             <View style={styles.amountInputContainer}>
-              <Text style={styles.currencySymbol}>R$</Text>
               <TextInput
                 style={styles.amountInput}
                 placeholder="0,00"
