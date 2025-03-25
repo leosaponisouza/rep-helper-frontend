@@ -27,6 +27,7 @@ import { parseISOPreservingTime, formatLocalDate, formatTime } from '@/src/utils
 import TaskItem from '@/components/TaskItem';
 import NotificationCenter from '@/components/NotificationCenter';
 import { Task } from '@/src/models/task.model';
+import api from '@/src/services/api';
 
 const { width } = Dimensions.get('window');
 
@@ -73,6 +74,42 @@ const HomeScreen = () => {
   const { user } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  
+  // Estado local para armazenar a URL da imagem de perfil
+  const [profileImageUrl, setProfileImageUrl] = useState<string | null>(user?.profilePictureUrl || null);
+  
+  // Estado para armazenar o nome da república
+  const [republicName, setRepublicName] = useState<string>('Sua República');
+  const [loadingRepublic, setLoadingRepublic] = useState<boolean>(false);
+
+  // Atualiza a URL da imagem de perfil quando o usuário ou sua URL muda
+  useEffect(() => {
+    if (user?.profilePictureUrl) {
+      setProfileImageUrl(user.profilePictureUrl);
+    }
+  }, [user, user?.profilePictureUrl]);
+  
+  // Buscar dados da república
+  const fetchRepublicData = useCallback(async () => {
+    if (!user?.currentRepublicId) return;
+
+    try {
+      setLoadingRepublic(true);
+      const response = await api.get(`/api/v1/republics/${user.currentRepublicId}`);
+      if (response.data && response.data.name) {
+        setRepublicName(response.data.name);
+      }
+    } catch (error) {
+      console.error('Erro ao buscar dados da república:', error);
+    } finally {
+      setLoadingRepublic(false);
+    }
+  }, [user?.currentRepublicId]);
+  
+  // Buscar dados da república quando o componente for montado ou o ID da república mudar
+  useEffect(() => {
+    fetchRepublicData();
+  }, [fetchRepublicData]);
   
   // Usar o hook useHome para centralizar a lógica
   const { 
@@ -128,6 +165,9 @@ const HomeScreen = () => {
       // Atualizar os dados da home
       await refreshHomeData();
       
+      // Buscar dados da república
+      await fetchRepublicData();
+      
       // Atualizar dados financeiros
       await fetchDashboardData();
       
@@ -144,7 +184,7 @@ const HomeScreen = () => {
     } finally {
       setRefreshing(false);
     }
-  }, [refreshHomeData, fetchDashboardData, fetchNotifications, refreshEvents]);
+  }, [refreshHomeData, fetchDashboardData, fetchNotifications, refreshEvents, fetchRepublicData]);
   
   // Função para navegar para os detalhes das tarefas
   const handleTaskPress = useCallback((taskId: number) => {
@@ -240,11 +280,11 @@ const HomeScreen = () => {
             <TouchableOpacity 
               style={styles.profileButton}
               // @ts-ignore - Ignorar erro de tipagem temporariamente
-              onPress={() => router.push('/(panel)/profile')}
+              onPress={() => router.push('/(panel)/settings/account')}
             >
-              {user?.profile_picture_url ? (
+              {profileImageUrl ? (
                 <Image 
-                  source={{ uri: user.profile_picture_url }} 
+                  source={{ uri: profileImageUrl }} 
                   style={styles.profilePhoto}
                 />
               ) : (
@@ -259,9 +299,25 @@ const HomeScreen = () => {
         </View>
         
         <Animated.View style={[styles.republicInfo, { opacity: headerContentOpacity }]}>
-          <Text style={styles.republicName}>
-            {user?.currentRepublicId ? "Sua República" : "Bem-vindo"}
-          </Text>
+          <View style={styles.republicNameContainer}>
+            {loadingRepublic ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="small" color="#fff" />
+                <Text style={[styles.republicName, { marginLeft: 8 }]}>
+                  Carregando...
+                </Text>
+              </View>
+            ) : user?.currentRepublicId ? (
+              <>
+                <MaterialCommunityIcons name="home-group" size={18} color="#fff" />
+                <Text style={[styles.republicName, { marginLeft: 8 }]}>
+                  {republicName}
+                </Text>
+              </>
+            ) : (
+              <Text style={styles.republicName}>Bem-vindo</Text>
+            )}
+          </View>
           <Text style={styles.lastUpdated}>
             Deslize para atualizar os dados
           </Text>
@@ -614,14 +670,19 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
   },
+  republicNameContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   republicInfo: {
-    marginTop: 10,
+    padding: 16,
+    paddingTop: 0,
   },
   republicName: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: colors.primary.main,
-    marginBottom: 4,
+    color: colors.text.primary,
+    marginBottom: 2,
   },
   lastUpdated: {
     fontSize: 12,

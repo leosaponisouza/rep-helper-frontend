@@ -6,7 +6,7 @@ export interface User {
   nickname?: string | null; // Campo de apelido (opcional)
   email: string;
   phoneNumber?: string | null;
-  profile_picture_url?: string | null;
+  profilePictureUrl?: string | null;
   currentRepublicId?: string | null;
   isAdmin?: boolean;
   createdAt?: string;
@@ -14,5 +14,4 @@ export interface User {
   status?: 'active' | 'inactive' | 'banned';
   firebaseUid: string;
   provider: 'email' | 'google.com' | 'facebook.com' | 'phone' | 'github.com' | 'custom';
-  role?: 'admin' | 'user' | 'resident';
 }

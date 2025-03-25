@@ -23,9 +23,10 @@ export default function SettingsLayout() {
         headerTitle: '',
         headerBackVisible: true,
       }} />
-      <Stack.Screen name="notifications" options={{ title: 'Notificações' }} />
-      <Stack.Screen name="theme" options={{ title: 'Tema' }} />
       <Stack.Screen name="about" options={{ title: 'Sobre' }} />
+      <Stack.Screen name="terms-of-use" options={{ title: 'Termos de Uso' }} />
+      <Stack.Screen name="privacy-policy" options={{ title: 'Política de Privacidade' }} />
+      <Stack.Screen name="software-licenses" options={{ title: 'Licenças de Software' }} />
       <Stack.Screen name="republic" options={{ title: 'República' }} />
       <Stack.Screen name="members" options={{ title: 'Membros' }} />
       <Stack.Screen name="help" options={{ title: 'Ajuda' }} />

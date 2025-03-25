@@ -59,35 +59,56 @@ const QuickActionsScreen = () => {
   const [loading, setLoading] = useState(false);
 
   const handleCreateTask = () => {
-    router.replace('/(panel)/tasks/create');
+    // Navegar primeiro para o módulo de tarefas e depois para a criação
+    router.push('/(panel)/tasks');
+    // Pequeno atraso para garantir que a navegação principal foi concluída
+    setTimeout(() => {
+      router.push('/(panel)/tasks/create');
+    }, 100);
   };
 
   const handleCreateEvent = () => {
-    router.replace('/(panel)/events/create');
+    // Navegar primeiro para o módulo de eventos e depois para a criação
+    router.push('/(panel)/events');
+    setTimeout(() => {
+      router.push('/(panel)/events/create');
+    }, 100);
   };
   
   const handleCreateExpense = () => {
-    router.replace('/(panel)/finances/expenses/create');
+    // Navegar primeiro para o módulo de finanças e depois para a criação de despesa
+    router.push('/(panel)/finances');
+    setTimeout(() => {
+      router.push('/(panel)/finances/expenses/create');
+    }, 100);
   };
   
   const handleCreateIncome = () => {
-    router.replace('/(panel)/finances/incomes/create');
+    // Navegar primeiro para o módulo de finanças e depois para a criação de receita
+    router.push('/(panel)/finances');
+    setTimeout(() => {
+      router.push('/(panel)/finances/incomes/create');
+    }, 100);
   };
   
   const handleInviteUser = () => {
-    router.replace('/(panel)/republic/invite');
+    // Navegar primeiro para o módulo de configurações e depois para membros
+    router.push('/(panel)/settings');
+    setTimeout(() => {
+      router.push('/(panel)/settings/members');
+    }, 100);
   };
   
   const handleViewTasks = () => {
-    router.replace('/(panel)/tasks');
+    router.push('/(panel)/tasks');
   };
   
   const handlePendingApprovals = () => {
-    router.replace('/(panel)/finances');
+    router.push('/(panel)/finances');
   };
   
   const handleSettings = () => {
-    router.replace('/(panel)/settings');
+    router.push('/(panel)/settings');
   };
 
   if (loading) {

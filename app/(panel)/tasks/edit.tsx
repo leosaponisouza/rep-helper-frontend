@@ -106,21 +106,23 @@ const EditTaskScreen = () => {
 
   // Fetch republic users
   useEffect(() => {
-    const fetchRepublicUsers = async () => {
+    const fetchUsers = async () => {
       try {
-        if (user?.currentRepublicId) {
-          const republicId = user.currentRepublicId;
-          const response = await api.get(`/api/v1/republics/${republicId}/members`);
-          setAvailableUsers(response.data);
-        } else {
-          console.warn("current_republic_id não encontrado para o usuário.");
-        }
+        const { data } = await api.get(`/api/v1/republics/${user?.currentRepublicId}/users`);
+        const formattedUsers = data.map((u: any) => ({
+          uid: u.uid,
+          name: u.name,
+          nickname: u.nickname,
+          email: u.email,
+          profilePictureUrl: u.profilePictureUrl
+        }));
+        setAvailableUsers(formattedUsers);
       } catch (error) {
-        ErrorHandler.handle(error);
+        console.error('Erro ao buscar usuários:', error);
       }
     };
 
-    fetchRepublicUsers();
+    fetchUsers();
   }, [user?.currentRepublicId]);
 
   const onSubmit = async (data: z.infer<typeof taskSchema>) => {

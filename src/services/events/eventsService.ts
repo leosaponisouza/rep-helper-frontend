@@ -4,11 +4,11 @@ import { ErrorHandler } from '../../utils/errorHandling';
 import { Event, EventFormData, InvitationStatus } from './eventsTypes';
 
 /**
- * Service responsible for handling all event-related API calls
+ * Serviço responsável por gerenciar todas as chamadas de API relacionadas a eventos
  */
 export class EventsService {
   /**
-   * Fetch all events
+   * Busca todos os eventos
    */
   static async fetchAllEvents(): Promise<Event[]> {
     try {
@@ -22,7 +22,7 @@ export class EventsService {
   }
 
   /**
-   * Fetch upcoming events
+   * Busca eventos futuros
    */
   static async fetchUpcomingEvents(): Promise<Event[]> {
     try {
@@ -36,7 +36,7 @@ export class EventsService {
   }
 
   /**
-   * Fetch events where the user is invited
+   * Busca eventos para os quais o usuário foi convidado
    */
   static async fetchInvitedEvents(): Promise<Event[]> {
     try {
@@ -50,7 +50,7 @@ export class EventsService {
   }
 
   /**
-   * Fetch events where the user has confirmed attendance
+   * Busca eventos para os quais o usuário confirmou presença
    */
   static async fetchConfirmedEvents(): Promise<Event[]> {
     try {
@@ -64,7 +64,7 @@ export class EventsService {
   }
 
   /**
-   * Get a specific event by ID
+   * Obtém um evento específico pelo ID
    */
   static async getEventById(eventId: number | string): Promise<Event> {
     try {
@@ -78,7 +78,7 @@ export class EventsService {
   }
 
   /**
-   * Create a new event
+   * Cria um novo evento
    */
   static async createEvent(eventData: EventFormData): Promise<Event> {
     try {
@@ -86,13 +86,14 @@ export class EventsService {
       return response.data;
     } catch (err) {
       const parsedError = await ErrorHandler.parseError(err);
-      ErrorHandler.handle(err);
+      ErrorHandler.logError(parsedError);
+      ErrorHandler.handle(parsedError);
       throw parsedError;
     }
   }
 
   /**
-   * Update an existing event
+   * Atualiza um evento existente
    */
   static async updateEvent(eventId: number, updateData: Partial<EventFormData>): Promise<Event> {
     try {
@@ -100,13 +101,14 @@ export class EventsService {
       return response.data;
     } catch (err) {
       const parsedError = await ErrorHandler.parseError(err);
-      ErrorHandler.handle(err);
+      ErrorHandler.logError(parsedError);
+      ErrorHandler.handle(parsedError);
       throw parsedError;
     }
   }
 
   /**
-   * Delete an event
+   * Exclui um evento
    */
   static async deleteEvent(eventId: number): Promise<boolean> {
     try {
@@ -114,13 +116,14 @@ export class EventsService {
       return true;
     } catch (err) {
       const parsedError = await ErrorHandler.parseError(err);
-      ErrorHandler.handle(err);
+      ErrorHandler.logError(parsedError);
+      ErrorHandler.handle(parsedError);
       throw parsedError;
     }
   }
 
   /**
-   * Update invitation status for a user
+   * Atualiza o status de convite para um usuário
    */
   static async updateInvitationStatus(
     eventId: number | string, 
@@ -132,13 +135,14 @@ export class EventsService {
       return response.data;
     } catch (err) {
       const parsedError = await ErrorHandler.parseError(err);
-      ErrorHandler.handle(err);
+      ErrorHandler.logError(parsedError);
+      ErrorHandler.handle(parsedError);
       throw parsedError;
     }
   }
 
   /**
-   * Invite users to an event
+   * Convida usuários para um evento
    */
   static async inviteUsers(eventId: number, userIds: string[]): Promise<any> {
     try {
@@ -148,7 +152,8 @@ export class EventsService {
       return response.data;
     } catch (err) {
       const parsedError = await ErrorHandler.parseError(err);
-      ErrorHandler.handle(err);
+      ErrorHandler.logError(parsedError);
+      ErrorHandler.handle(parsedError);
       throw parsedError;
     }
   }

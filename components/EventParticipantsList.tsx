@@ -43,9 +43,9 @@ const EventParticipantsList: React.FC<EventParticipantsListProps> = ({
 
     return (
       <View key={invitation.userId} style={styles.participantItem}>
-        {invitation.userProfilePicture ? (
+        {invitation.profilePictureUrl ? (
           <Image 
-            source={{ uri: invitation.userProfilePicture }} 
+            source={{ uri: invitation.profilePictureUrl }} 
             style={styles.participantAvatar}
           />
         ) : (

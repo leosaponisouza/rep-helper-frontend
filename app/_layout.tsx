@@ -1,4 +1,5 @@
 // app/_layout.tsx
+import 'react-native-url-polyfill/auto';
 import { Slot } from 'expo-router';
 import { AuthProvider } from '../src/context/AuthContext';
 import { NotificationProvider } from '../src/context/NotificationContext';

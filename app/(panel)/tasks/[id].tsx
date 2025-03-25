@@ -997,18 +997,25 @@ const TaskDetailsScreen: React.FC = () => {
                     ]}
                   >
                     <View style={styles.assigneeAvatarContainer}>
-                      <View style={[
-                        styles.assigneeAvatarPlaceholder,
-                        isCurrentUser && styles.currentUserAvatarPlaceholder
-                      ]}>
-                        <Text style={styles.assigneeInitials}>
-                          {assignedUser.nickname 
-                            ? assignedUser.nickname.substring(0, 2).toUpperCase() 
-                            : assignedUser.name 
-                              ? assignedUser.name.substring(0, 2).toUpperCase()
-                              : 'NA'}
-                        </Text>
-                      </View>
+                      {assignedUser.profilePictureUrl ? (
+                        <Image 
+                          source={{ uri: assignedUser.profilePictureUrl }} 
+                          style={styles.assigneeAvatar}
+                        />
+                      ) : (
+                        <View style={[
+                          styles.assigneeAvatarPlaceholder,
+                          isCurrentUser && styles.currentUserAvatarPlaceholder
+                        ]}>
+                          <Text style={styles.assigneeInitials}>
+                            {assignedUser.nickname 
+                              ? assignedUser.nickname.substring(0, 2).toUpperCase() 
+                              : assignedUser.name 
+                                ? assignedUser.name.substring(0, 2).toUpperCase()
+                                : 'NA'}
+                          </Text>
+                        </View>
+                      )}
 
                       {isCurrentUser && (
                         <View style={styles.currentUserIndicator} />

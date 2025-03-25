@@ -71,6 +71,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           const cachedUserData = await getData('user');
           if (cachedUserData) {
             const cachedUser = JSON.parse(cachedUserData);
+            console.log('Carregando usuário do cache:', cachedUser);
             setUser(cachedUser);
           }
         } catch (cacheError) {
@@ -92,6 +93,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           clearTimeout(timeoutId);
 
           if (response.data.user) {
+            console.log('Dados do usuário recebidos do servidor:', response.data.user);
             setUser(response.data.user);
             // Atualizar cache
             await storeData('user', JSON.stringify(response.data.user));

@@ -17,11 +17,12 @@ import {
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useEventsContext, Event } from '../../../../src/context/EventsContext';
+import { useEvents } from '../../../../src/hooks/useEvents';
 import { useAuth } from '../../../../src/context/AuthContext';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { format, parseISO, isBefore } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { EventsService } from '../../../../src/services/events';
 
 // Importar estilos compartilhados
 import { sharedStyles, colors } from '../../../../src/styles/sharedStyles';
@@ -32,7 +33,7 @@ const EditEventScreen: React.FC = () => {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
-  const { updateEvent, isCurrentUserCreator, getEventById } = useEventsContext();
+  const { updateEvent, isCurrentUserCreator } = useEvents();
   
   // Animações
   const fadeAnim = useState(new Animated.Value(0))[0];
@@ -43,7 +44,7 @@ const EditEventScreen: React.FC = () => {
   const [location, setLocation] = useState('');
   const [startDate, setStartDate] = useState(new Date());
   const [endDate, setEndDate] = useState(new Date());
-  const [event, setEvent] = useState<Event | null>(null);
+  const [event, setEvent] = useState<any | null>(null);
   
   // Date picker states
   const [showStartDatePicker, setShowStartDatePicker] = useState(false);
@@ -74,7 +75,7 @@ const EditEventScreen: React.FC = () => {
       
       try {
         setInitialLoading(true);
-        const eventData = await getEventById(id);
+        const eventData = await EventsService.getEventById(id);
         
         if (!eventData) {
           Alert.alert('Erro', 'Evento não encontrado.');
@@ -83,7 +84,8 @@ const EditEventScreen: React.FC = () => {
         }
 
         // Verificar se o usuário tem permissão para editar
-        if (!isCurrentUserCreator(eventData)) {
+        const isCreator = !!user && user.uid === eventData.creatorId;
+        if (!isCreator) {
           Alert.alert('Erro', 'Você não tem permissão para editar este evento');
           router.back();
           return;
@@ -95,9 +97,15 @@ const EditEventScreen: React.FC = () => {
         setLocation(eventData.location || '');
         setStartDate(parseISO(eventData.startDate));
         setEndDate(parseISO(eventData.endDate));
-      } catch (error) {
+      } catch (error: any) {
         console.error("Error fetching event:", error);
-        Alert.alert('Erro', 'Não foi possível carregar o evento');
+        
+        // Extrair a mensagem de erro mais específica se disponível
+        const errorMessage = error?.message || 
+                            error?.originalError?.message || 
+                            'Não foi possível carregar o evento';
+                            
+        Alert.alert('Erro', errorMessage);
         router.back();
       } finally {
         setInitialLoading(false);
@@ -105,7 +113,7 @@ const EditEventScreen: React.FC = () => {
     };
 
     fetchEventDetails();
-  }, [id, getEventById, isCurrentUserCreator, router]);
+  }, [id, user, router]);
   
   // Funções para manipular o DateTimePicker - otimizadas
   const showDatePicker = useCallback((forDate: 'start' | 'end', mode: 'date' | 'time') => {
@@ -290,9 +298,15 @@ const EditEventScreen: React.FC = () => {
           ]
         );
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao atualizar evento:', error);
-      Alert.alert('Erro', 'Não foi possível atualizar o evento. Tente novamente.');
+      
+      // Extrair a mensagem de erro mais específica se disponível
+      const errorMessage = error?.message || 
+                          error?.originalError?.message || 
+                          'Não foi possível atualizar o evento. Tente novamente.';
+                          
+      Alert.alert('Erro', errorMessage);
     } finally {
       setLoading(false);
     }
@@ -468,28 +482,29 @@ const EditEventScreen: React.FC = () => {
             <Ionicons name="people" size={20} color={colors.primary.main} style={sharedStyles.buttonIcon} />
             <Text style={[sharedStyles.buttonText, sharedStyles.buttonTextSecondary]}>Gerenciar Convidados</Text>
           </TouchableOpacity>
-          {/* Botão de Salvar */}
-          <TouchableOpacity 
-            style={[
-              sharedStyles.button, 
-              loading && sharedStyles.buttonDisabled,
-              { marginBottom: 20 } // Espaço entre os botões
-            ]}
-            onPress={handleUpdateEvent}
-            disabled={loading}
-            accessibilityRole="button"
-            accessibilityLabel="Salvar alterações"
-            accessibilityHint="Salva as alterações feitas no evento"
-          >
-            {loading ? (
-              <ActivityIndicator size="small" color={colors.text.primary} />
-            ) : (
-              <>
-                <Ionicons name="save" size={20} color={colors.text.primary} style={sharedStyles.buttonIcon} />
-                <Text style={sharedStyles.buttonText}>Salvar Alterações</Text>
-              </>
-            )}
-          </TouchableOpacity>
+          {/* Botão de Atualizar */}
+          <View style={{ marginTop: 20, marginBottom: 60 }}>
+            <TouchableOpacity 
+              style={[
+                sharedStyles.button, 
+                loading && sharedStyles.buttonDisabled
+              ]}
+              onPress={handleUpdateEvent}
+              disabled={loading}
+              accessibilityRole="button"
+              accessibilityLabel="Atualizar evento"
+              accessibilityHint="Salva as alterações feitas no evento"
+            >
+              {loading ? (
+                <ActivityIndicator size="small" color={colors.text.primary} />
+              ) : (
+                <>
+                  <Ionicons name="save" size={20} color={colors.text.primary} style={sharedStyles.buttonIcon} />
+                  <Text style={sharedStyles.buttonText}>Atualizar Evento</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
           
          
         </Animated.ScrollView>

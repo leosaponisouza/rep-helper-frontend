@@ -21,11 +21,12 @@ import { useAuth } from '../../../src/context/AuthContext';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { format, addHours, parseISO, isBefore, setHours, setMinutes } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { formatToBackendDateTime } from '@/src/utils/dateUtils';
 
 // Importar estilos compartilhados
 import { sharedStyles, colors } from '../../../src/styles/sharedStyles';
 import eventsStyles from '@/src/styles/eventStyles';
-import { formatLocalDate, formatToBackendDateTime } from '@/src/utils/dateUtils';
+import { formatLocalDate } from '@/src/utils/dateUtils';
 
 const CreateEventScreen: React.FC = () => {
   const router = useRouter();
@@ -263,9 +264,14 @@ const CreateEventScreen: React.FC = () => {
           ]
         );
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao criar evento:', error);
-      Alert.alert('Erro', 'Não foi possível criar o evento. Tente novamente.');
+      // Extrair a mensagem de erro mais específica se disponível
+      const errorMessage = error?.message || 
+                          error?.originalError?.message || 
+                          'Não foi possível criar o evento. Tente novamente.';
+                          
+      Alert.alert('Erro', errorMessage);
     } finally {
       setLoading(false);
     }
@@ -442,28 +448,31 @@ const CreateEventScreen: React.FC = () => {
             </Text>
           </View>
           
-          {/* Botão de Criar */}
-          <TouchableOpacity 
-            style={[
-              sharedStyles.button, 
-              loading && sharedStyles.buttonDisabled,
-              { marginBottom: 60 } // Espaço extra no final para o botão não ser cortado
-            ]}
-            onPress={handleCreateEvent}
-            disabled={loading}
-            accessibilityRole="button"
-            accessibilityLabel="Criar evento"
-            accessibilityHint="Cria um novo evento com as informações fornecidas"
-          >
-            {loading ? (
-              <ActivityIndicator size="small" color={colors.text.primary} />
-            ) : (
-              <>
-                <Ionicons name="add-circle" size={20} color={colors.text.primary} style={sharedStyles.buttonIcon} />
-                <Text style={sharedStyles.buttonText}>Criar Evento</Text>
-              </>
-            )}
-          </TouchableOpacity>
+          {/* Mapa (implementar depois) */}
+          
+          {/* Botão de criar */}
+          <View style={{ marginTop: 20, marginBottom: 60 }}>
+            <TouchableOpacity
+              style={[
+                sharedStyles.button, 
+                loading && sharedStyles.buttonDisabled
+              ]}
+              onPress={handleCreateEvent}
+              disabled={loading}
+              accessibilityRole="button"
+              accessibilityLabel="Criar evento"
+              accessibilityHint="Cria um novo evento com as informações fornecidas"
+            >
+              {loading ? (
+                <ActivityIndicator color={colors.text.primary} size="small" />
+              ) : (
+                <>
+                  <Ionicons name="add-circle" size={20} color={colors.text.primary} style={sharedStyles.buttonIcon} />
+                  <Text style={sharedStyles.buttonText}>Criar Evento</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
         </Animated.ScrollView>
         
         {/* Date Pickers */}

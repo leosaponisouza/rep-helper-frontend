@@ -2,6 +2,8 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true,
+    "jsx": "react-jsx",
+    "esModuleInterop": true,
     "paths": {
       "@/*": [
         "./*"
@@ -9,7 +11,6 @@
       "@firebase/auth": ["./node_modules/@firebase/auth/dist/index.rn.d.ts"]
     }
   },
-  "extends": "expo/tsconfig.base",
   "include": [
     "**/*.ts",
     "**/*.tsx",

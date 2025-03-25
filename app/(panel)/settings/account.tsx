@@ -24,6 +24,7 @@ import { ErrorHandler } from '../../../src/utils/errorHandling';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
 import { updateCurrentUser } from 'firebase/auth';
+import { uploadImageToSupabase, deleteImageFromSupabase } from '../../../src/services/supabase';
 
 const AccountScreen = () => {
     const router = useRouter();
@@ -33,14 +34,28 @@ const AccountScreen = () => {
     const [nickname, setNickname] = useState(user?.nickname || '');
     const [email, setEmail] = useState(user?.email || '');
     const [phone, setPhone] = useState(user?.phoneNumber || '');
-    const [profileImage, setProfileImage] = useState<string | null>(user?.profile_picture_url || null);
+    const [profileImage, setProfileImage] = useState<string | null>(user?.profilePictureUrl || null);
     const [loading, setLoading] = useState(false);
     const [uploadingImage, setUploadingImage] = useState(false);
+    const [uploadError, setUploadError] = useState<string | null>(null);
 
     // Estados de foco para inputs
     const [nameFocused, setNameFocused] = useState(false);
     const [nicknameFocused, setNicknameFocused] = useState(false);
     const [phoneFocused, setPhoneFocused] = useState(false);
+
+    // Atualiza os dados do usuário quando o objeto user mudar
+    useEffect(() => {
+        if (user) {
+            setName(user.name || '');
+            setNickname(user.nickname || '');
+            setEmail(user.email || '');
+            setPhone(user.phoneNumber || '');
+            if (user.profilePictureUrl) {
+                setProfileImage(user.profilePictureUrl);
+            }
+        }
+    }, [user]);
 
     // Função para salvar alterações no perfil
     const handleSaveProfile = async () => {
@@ -58,17 +73,19 @@ const AccountScreen = () => {
             const userData = {
                 name,
                 nickname: nickname.trim() || null, // Garante que seja null se estiver vazio
-                phoneNumber: phone
+                phoneNumber: phone,
+                profilePictureUrl: profileImage // Enviando a URL da imagem para o backend
             };
 
+            console.log('Enviando dados para atualização:', userData);
             const response = await api.put(`/api/v1/users/${user?.uid}`, userData);
 
             if (response.data) {
                 await updateStoredUser(response.data);
-
                 Alert.alert('Sucesso', 'Perfil atualizado com sucesso!');
             }
         } catch (error) {
+            console.error('Erro ao salvar perfil:', error);
             ErrorHandler.handle(error);
         } finally {
             setLoading(false);
@@ -78,6 +95,8 @@ const AccountScreen = () => {
     // Função para selecionar imagem da galeria
     const pickImage = async () => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        // Limpar erro anterior
+        setUploadError(null);
 
         try {
             // Solicitar permissão para acessar a galeria
@@ -93,48 +112,78 @@ const AccountScreen = () => {
                 mediaTypes: ImagePicker.MediaTypeOptions.Images,
                 allowsEditing: true,
                 aspect: [1, 1],
-                quality: 0.8,
+                quality: 0.7, // Reduzindo a qualidade para tamanho menor
+                allowsMultipleSelection: false,
             });
 
             if (!result.canceled && result.assets && result.assets.length > 0) {
                 // Iniciar upload
                 setUploadingImage(true);
-
-                // Preparar formulário para upload
-                const formData = new FormData();
-                const imageUri = result.assets[0].uri;
-                const filename = imageUri.split('/').pop() || 'profile.jpg';
-
-                formData.append('profileImage', {
-                    uri: imageUri,
-                    name: filename,
-                    type: 'image/jpeg'
-                } as any);
-
-                // Chamar API para upload
+                
                 try {
-                    const response = await api.post('/api/v1/users/me/profile-image', formData, {
-                        headers: {
-                            'Content-Type': 'multipart/form-data',
-                        },
+                    console.log('Imagem selecionada. Iniciando upload para Supabase...');
+                    // Upload para o Supabase usando a função do serviço
+                    const imageUri = result.assets[0].uri;
+                    const asset = result.assets[0];
+                    
+                    console.log('Detalhes da imagem:', {
+                        uri: asset.uri,
+                        width: asset.width,
+                        height: asset.height,
+                        fileSize: asset.fileSize,
+                        type: asset.type
+                    });
+                    
+                    const { url, error } = await uploadImageToSupabase(imageUri);
+                    
+                    if (error || !url) {
+                        setUploadError(error?.message || 'Falha ao fazer upload da imagem');
+                        throw new Error(`Falha ao fazer upload da imagem para o Supabase: ${error?.message}`);
+                    }
+                    
+                    console.log('Upload concluído. URL recebida:', url);
+                    
+                    // Atualizar a imagem no estado
+                    setProfileImage(url);
+                    
+                    // Atualizar o perfil do usuário no backend com a nova URL
+                    console.log('Atualizando perfil no backend com nova URL...');
+                    const response = await api.put(`/api/v1/users/${user?.uid}`, {
+                        profilePictureUrl: url
                     });
 
-                    if (response.data && response.data.imageUrl) {
-                        setProfileImage(response.data.imageUrl);
+                    console.log('Resposta da API:', response.data);
 
-                        // Atualizar usuário no contexto
-                        if (user) {
-                            const updatedUser = {
-                                ...user,
-                                profile_picture_url: response.data.imageUrl
-                            };
-
-                            login(response.data.token || '', updatedUser);
-                        }
-
-                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                    // Atualizar usuário no contexto de autenticação
+                    if (user) {
+                        // Criar objeto com todos os dados do usuário atual + a nova URL
+                        const updatedUser = {
+                            ...user,
+                            profilePictureUrl: url
+                        };
+                        
+                        // Log para debug
+                        console.log('Atualizando usuário no contexto com nova imagem:', updatedUser);
+                        
+                        // Atualizar o contexto de autenticação
+                        await updateStoredUser(updatedUser);
+                        
+                        // Log para confirmar que a atualização foi concluída
+                        console.log('Usuário atualizado no contexto com sucesso');
                     }
+
+                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                    Alert.alert('Sucesso', 'Foto de perfil atualizada com sucesso!');
                 } catch (error) {
+                    const message = error instanceof Error ? error.message : 'Erro desconhecido';
+                    console.error('Erro detalhado no upload:', error);
+                    setUploadError(message);
+                    
+                    Alert.alert(
+                        'Erro ao Enviar Imagem', 
+                        `Não foi possível fazer o upload da imagem: ${message}`
+                    );
+                    
                     ErrorHandler.handle(error);
                     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
                 } finally {
@@ -142,8 +191,10 @@ const AccountScreen = () => {
                 }
             }
         } catch (error) {
+            const message = error instanceof Error ? error.message : 'Erro desconhecido';
             console.error('Erro ao selecionar imagem:', error);
-            Alert.alert('Erro', 'Não foi possível selecionar a imagem');
+            setUploadError(message);
+            Alert.alert('Erro', `Não foi possível selecionar a imagem: ${message}`);
             setUploadingImage(false);
         }
     };
@@ -168,23 +219,45 @@ const AccountScreen = () => {
     const handleDeleteProfilePicture = async () => {
         try {
             setUploadingImage(true);
+            setUploadError(null);
 
-            await api.delete('/api/v1/users/me/profile-image');
+            // Deletar a imagem do Supabase se tivermos uma URL válida
+            if (profileImage) {
+                console.log('Tentando excluir imagem do Supabase:', profileImage);
+                const { success, error } = await deleteImageFromSupabase(profileImage);
+                
+                if (error) {
+                    console.warn('Erro ao deletar imagem do Supabase:', error);
+                    // Continuar mesmo com erro, para pelo menos remover a referência no backend
+                }
+            }
 
+            // Atualizar o perfil do usuário no backend
+            console.log('Atualizando perfil no backend para remover a URL da imagem');
+            const response = await api.put(`/api/v1/users/${user?.uid}`, {
+                profilePictureUrl: null
+            });
+            
             setProfileImage(null);
 
             // Atualizar usuário no contexto
             if (user) {
                 const updatedUser = {
                     ...user,
-                    profile_picture_url: null
+                    profilePictureUrl: null
                 };
 
-                login('', updatedUser);
+                await updateStoredUser(updatedUser);
+                console.log('Usuário atualizado no contexto após remoção de imagem');
             }
 
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            Alert.alert('Sucesso', 'Foto de perfil removida com sucesso!');
         } catch (error) {
+            const message = error instanceof Error ? error.message : 'Erro desconhecido';
+            console.error('Erro ao excluir imagem:', error);
+            setUploadError(message);
+            Alert.alert('Erro', `Não foi possível remover a foto: ${message}`);
             ErrorHandler.handle(error);
         } finally {
             setUploadingImage(false);
@@ -206,7 +279,14 @@ const AccountScreen = () => {
                                     <ActivityIndicator size="large" color="#7B68EE" />
                                 </View>
                             ) : profileImage ? (
-                                <Image source={{ uri: profileImage }} style={styles.profileImage} />
+                                <Image 
+                                    source={{ uri: profileImage }} 
+                                    style={styles.profileImage}
+                                    onError={(e) => {
+                                        console.error('Erro ao carregar imagem:', e.nativeEvent.error);
+                                        setUploadError('Não foi possível carregar a imagem');
+                                    }}
+                                />
                             ) : (
                                 <View style={styles.placeholderImage}>
                                     <Text style={styles.placeholderText}>
@@ -237,6 +317,12 @@ const AccountScreen = () => {
                                 )}
                             </View>
                         </View>
+
+                        {uploadError && (
+                            <Text style={styles.errorText}>
+                                {uploadError}
+                            </Text>
+                        )}
 
                         <Text style={styles.userName}>
                             {nickname || name}
@@ -430,6 +516,13 @@ const styles = StyleSheet.create({
     },
     deleteImageButton: {
         backgroundColor: '#FF6347',
+    },
+    errorText: {
+        color: '#FF6347',
+        marginTop: 5,
+        marginBottom: 10,
+        textAlign: 'center',
+        fontSize: 12,
     },
     userName: {
         fontSize: 22,

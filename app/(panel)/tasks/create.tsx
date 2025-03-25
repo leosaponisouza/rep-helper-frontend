@@ -148,7 +148,13 @@ const CreateTaskScreen = () => {
 
           // Verifica se o componente ainda está montado antes de atualizar o estado
           if (isMounted) {
-            setAvailableUsers(response.data);
+            // Garantir que todos os usuários tenham uma propriedade uid e profilePictureUrl
+            const users = response.data.map((memberUser: any) => ({
+              ...memberUser,
+              uid: memberUser.uid || memberUser.id,
+              profilePictureUrl: memberUser.profilePictureUrl
+            }));
+            setAvailableUsers(users);
 
             // Auto-select current user
             if (user.uid) {

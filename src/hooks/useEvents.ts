@@ -17,374 +17,284 @@ interface UseEventsOptions {
 }
 
 /**
- * Custom hook for managing events with improved performance and type safety
+ * Hook personalizado para gerenciar eventos
  */
 export const useEvents = (options: UseEventsOptions = {}) => {
   const { user } = useAuth();
-  const [allEvents, setAllEvents] = useState<Event[]>([]);
+  const [events, setEvents] = useState<Event[]>([]);
   const [filteredEvents, setFilteredEvents] = useState<Event[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filterType, setFilterType] = useState<EventFilterType>(options.initialFilter || 'all');
   
-  // Adiciona estado para controlar requisições em andamento e evitar duplicidade
-  const [requestInProgress, setRequestInProgress] = useState(false);
-  
-  // Referência para controlar debounce de operações
-  const operationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // Referência para controlar se já carregou eventos ao menos uma vez
+  const hasLoadedEvents = useRef(false);
 
-  // Utility functions to check event status
-  const checkEventIsHappening = useCallback((event: Event): boolean => {
-    try {
-      const now = new Date();
-      const startDate = parseISO(event.startDate);
-      const endDate = parseISO(event.endDate);
-      
-      return isAfter(now, startDate) && isBefore(now, endDate);
-    } catch (error) {
-      console.error('Error checking if event is happening:', error);
-      return false;
-    }
-  }, []);
-
-  const checkEventIsFinished = useCallback((event: Event): boolean => {
-    try {
-      const now = new Date();
-      const endDate = parseISO(event.endDate);
-      
-      return isAfter(now, endDate);
-    } catch (error) {
-      console.error('Error checking if event is finished:', error);
-      return false;
-    }
-  }, []);
-
-  // Process events to ensure all required properties exist
-  const processEvents = useCallback((events: Event[]): Event[] => {
-    return events.map(event => {
-      // Ensure invitations is never null
+  // Processa eventos para garantir que todas as propriedades existam
+  const processEvents = useCallback((eventsData: Event[]): Event[] => {
+    return eventsData.map(event => {
+      // Garantir que invitations nunca seja null
       const processedEvent = {
         ...event,
         invitations: event.invitations || [],
       };
       
-      // Add status flags if not present
+      // Adicionar flags de status se não presentes
       if (typeof processedEvent.isHappening !== 'boolean') {
-        processedEvent.isHappening = checkEventIsHappening(processedEvent);
+        const now = new Date();
+        const startDate = parseISO(processedEvent.startDate);
+        const endDate = parseISO(processedEvent.endDate);
+        processedEvent.isHappening = isAfter(now, startDate) && isBefore(now, endDate);
       }
       
       if (typeof processedEvent.isFinished !== 'boolean') {
-        processedEvent.isFinished = checkEventIsFinished(processedEvent);
+        const now = new Date();
+        const endDate = parseISO(processedEvent.endDate);
+        processedEvent.isFinished = isAfter(now, endDate);
       }
       
       return processedEvent;
     });
-  }, [checkEventIsHappening, checkEventIsFinished]);
+  }, []);
 
-  // Unified function to fetch events
-  const fetchEvents = useCallback(async (filter?: EventFilterType) => {
-    // Evita requisições duplicadas
-    if (requestInProgress) {
-      console.log('Uma requisição já está em andamento. Ignorando nova chamada.');
-      return;
-    }
-    
-    try {
-      setRequestInProgress(true);
-      setLoading(true);
-      setError(null);
-
-      let events: Event[] = [];
-      
-      // Determine which API to call based on filter
-      switch (filter) {
-        case 'upcoming':
-          events = await EventsService.fetchUpcomingEvents();
-          break;
-        case 'invited':
-          events = await EventsService.fetchInvitedEvents();
-          break;
-        case 'confirmed':
-          events = await EventsService.fetchConfirmedEvents();
-          break;
-        default:
-          events = await EventsService.fetchAllEvents();
-          break;
-      }
-      
-      const normalizedEvents = processEvents(events);
-      
-      setAllEvents(normalizedEvents);
-      applyFilter(filter || filterType, normalizedEvents);
-    } catch (err: any) {
-      setError(err.message || 'Failed to fetch events');
-      console.error('Error fetching events:', err);
-    } finally {
-      setLoading(false);
-      setRequestInProgress(false);
-    }
-  }, [filterType, processEvents, requestInProgress]);
-
-  // Function to apply filter to events
-  const applyFilter = useCallback((filter: EventFilterType, events: Event[] = allEvents) => {
+  // Função para aplicar filtro aos eventos
+  const applyFilter = useCallback((filter: EventFilterType, eventsToFilter: Event[] = events) => {
     setFilterType(filter);
     
     const now = new Date();
     
     switch (filter) {
       case 'upcoming':
-        setFilteredEvents(events.filter(event => {
+        setFilteredEvents(eventsToFilter.filter(event => {
           const startDate = parseISO(event.startDate);
           return isAfter(startDate, now) && !event.isFinished;
         }));
         break;
       case 'past':
-        setFilteredEvents(events.filter(event => {
+        setFilteredEvents(eventsToFilter.filter(event => {
           return event.isFinished;
         }));
         break;
       case 'today':
-        setFilteredEvents(events.filter(event => {
+        setFilteredEvents(eventsToFilter.filter(event => {
           const startDate = parseISO(event.startDate);
           return isToday(startDate);
         }));
         break;
       case 'invited':
-        setFilteredEvents(events.filter(event => {
+        setFilteredEvents(eventsToFilter.filter(event => {
           return event.invitations?.some(
             invitation => invitation.userId === user?.uid && invitation.status === 'INVITED'
           );
         }));
         break;
       case 'confirmed':
-        setFilteredEvents(events.filter(event => {
+        setFilteredEvents(eventsToFilter.filter(event => {
           return event.invitations?.some(
             invitation => invitation.userId === user?.uid && invitation.status === 'CONFIRMED'
           );
         }));
         break;
+      case 'mine':
+        setFilteredEvents(eventsToFilter.filter(event => {
+          return event.creatorId === user?.uid;
+        }));
+        break;
       default: // 'all'
-        setFilteredEvents(events);
+        setFilteredEvents(eventsToFilter);
         break;
     }
-  }, [allEvents, user?.uid]);
+  }, [events, user?.uid]);
 
-  // Load events on component mount
-  useEffect(() => {
-    // No useEffect não usamos o debounce, mas apenas verificamos se já existe uma requisição
-    if (!requestInProgress) {
-      fetchEvents(filterType);
-    }
-  }, [fetchEvents, filterType, requestInProgress]);
-
-  // Function to refresh events com debounce
-  const refreshEvents = useCallback(async (specificFilter?: EventFilterType) => {
-    // Limpa timeout anterior se existir
-    if (operationTimeoutRef.current) {
-      clearTimeout(operationTimeoutRef.current);
-    }
-    
-    // Evita requisições duplicadas
-    if (requestInProgress) {
-      console.log('Uma requisição já está em andamento. Ignorando refresh.');
-      return false;
-    }
-    
-    const filterToUse = specificFilter || filterType;
-    
+  // Função unificada para buscar eventos
+  const fetchEvents = useCallback(async (filter?: EventFilterType) => {
     try {
-      setRequestInProgress(true);
       setLoading(true);
-      await fetchEvents(filterToUse);
+      setError(null);
+
+      let eventsData: Event[] = [];
+      const filterToUse = filter || filterType;
+      
+      // Determinar qual API chamar com base no filtro
+      switch (filterToUse) {
+        case 'upcoming':
+          eventsData = await EventsService.fetchUpcomingEvents();
+          break;
+        case 'invited':
+          eventsData = await EventsService.fetchInvitedEvents();
+          break;
+        case 'confirmed':
+          eventsData = await EventsService.fetchConfirmedEvents();
+          break;
+        default:
+          eventsData = await EventsService.fetchAllEvents();
+          break;
+      }
+      
+      const processedEvents = processEvents(eventsData);
+      setEvents(processedEvents);
+      applyFilter(filterToUse, processedEvents);
       return true;
-    } catch (error) {
-      console.error('Error refreshing events:', error);
+    } catch (err: any) {
+      console.error('Erro ao carregar eventos:', err);
+      setError(err.message || 'Falha ao buscar eventos');
       return false;
     } finally {
       setLoading(false);
-      setRequestInProgress(false);
     }
-  }, [fetchEvents, filterType, requestInProgress]);
+  }, [filterType, processEvents, applyFilter]);
 
-  // Function to create event
-  const createEvent = useCallback(async (eventData: EventFormData) => {
-    if (requestInProgress) {
-      console.log('Uma requisição já está em andamento. Ignorando criação de evento.');
-      throw new Error('Uma ação já está em andamento. Tente novamente em instantes.');
+  // Carregar eventos na montagem do componente
+  useEffect(() => {
+    // Verifica se já carregou eventos para evitar requisições em loop
+    if (!hasLoadedEvents.current) {
+      fetchEvents(filterType);
+      hasLoadedEvents.current = true;
     }
-    
+  }, [fetchEvents, filterType]);
+
+  // Função para atualizar eventos
+  const refreshEvents = useCallback(async (specificFilter?: EventFilterType) => {
+    return fetchEvents(specificFilter || filterType);
+  }, [fetchEvents, filterType]);
+
+  // Função para criar evento
+  const createEvent = useCallback(async (eventData: EventFormData) => {
     try {
-      setRequestInProgress(true);
       const newEvent = await EventsService.createEvent(eventData);
       
-      // Aplicamos debounce para o refresh após criar o evento
-      if (operationTimeoutRef.current) {
-        clearTimeout(operationTimeoutRef.current);
-      }
+      // Processar o novo evento
+      const processedEvent = processEvents([newEvent])[0];
       
-      operationTimeoutRef.current = setTimeout(async () => {
-        await refreshEvents();
-        operationTimeoutRef.current = null;
-      }, 300);
+      // Adicionar o evento à lista
+      setEvents(prev => {
+        const exists = prev.some(e => e.id === newEvent.id);
+        if (exists) {
+          return prev.map(e => e.id === newEvent.id ? processedEvent : e);
+        }
+        return [...prev, processedEvent];
+      });
+      
+      // Aplicar o filtro atual
+      applyFilter(filterType);
       
       return newEvent;
     } catch (err) {
-      console.error('Error creating event:', err);
+      console.error('Erro ao criar evento:', err);
       throw err;
-    } finally {
-      setRequestInProgress(false);
     }
-  }, [refreshEvents, requestInProgress]);
+  }, [processEvents, applyFilter, filterType]);
 
-  // Function to update event
+  // Função para atualizar evento
   const updateEvent = useCallback(async (eventId: number, updateData: Partial<EventFormData>) => {
-    if (requestInProgress) {
-      console.log('Uma requisição já está em andamento. Ignorando atualização de evento.');
-      throw new Error('Uma ação já está em andamento. Tente novamente em instantes.');
-    }
-    
     try {
-      setRequestInProgress(true);
       const updatedEvent = await EventsService.updateEvent(eventId, updateData);
       
-      // Aplicamos debounce para o refresh após atualizar o evento
-      if (operationTimeoutRef.current) {
-        clearTimeout(operationTimeoutRef.current);
-      }
+      // Processar o evento atualizado
+      const processedEvent = processEvents([updatedEvent])[0];
       
-      operationTimeoutRef.current = setTimeout(async () => {
-        await refreshEvents();
-        operationTimeoutRef.current = null;
-      }, 300);
+      // Atualizar o evento na lista
+      setEvents(prev => 
+        prev.map(event => event.id === eventId ? processedEvent : event)
+      );
+      
+      // Aplicar o filtro atual
+      applyFilter(filterType);
       
       return updatedEvent;
     } catch (err) {
-      console.error('Error updating event:', err);
+      console.error('Erro ao atualizar evento:', err);
       throw err;
-    } finally {
-      setRequestInProgress(false);
     }
-  }, [refreshEvents, requestInProgress]);
+  }, [processEvents, applyFilter, filterType]);
 
-  // Function to delete event
+  // Função para excluir evento
   const deleteEvent = useCallback(async (eventId: number) => {
-    if (requestInProgress) {
-      console.log('Uma requisição já está em andamento. Ignorando exclusão de evento.');
-      throw new Error('Uma ação já está em andamento. Tente novamente em instantes.');
-    }
-    
     try {
-      setRequestInProgress(true);
       await EventsService.deleteEvent(eventId);
       
-      // Update events list after deletion
-      setAllEvents(prev => prev.filter(event => event.id !== eventId));
+      // Remover o evento das listas
+      setEvents(prev => prev.filter(event => event.id !== eventId));
       setFilteredEvents(prev => prev.filter(event => event.id !== eventId));
       
       return true;
     } catch (err) {
-      console.error('Error deleting event:', err);
+      console.error('Erro ao excluir evento:', err);
       throw err;
-    } finally {
-      setRequestInProgress(false);
     }
-  }, [requestInProgress]);
+  }, []);
 
-  // Function to respond to an invitation
-  const updateInvitationStatus = useCallback(async (
-    eventId: number | string, 
-    userId: string, 
-    status: InvitationStatus
-  ) => {
-    if (requestInProgress) {
-      console.log('Uma requisição já está em andamento. Ignorando atualização de convite.');
-      throw new Error('Uma ação já está em andamento. Tente novamente em instantes.');
-    }
-    
+  // Função para responder a um convite de evento
+  const respondToInvite = useCallback(async (eventId: number | string, userId: string, status: InvitationStatus) => {
     try {
-      setRequestInProgress(true);
-      const response = await EventsService.updateInvitationStatus(eventId, userId, status);
+      const updatedEvent = await EventsService.updateInvitationStatus(eventId, userId, status);
       
-      // Update only the changed event in the current list
-      setAllEvents(prev => 
-        prev.map(event => 
-          event.id === Number(eventId) 
-            ? {
-                ...event, 
-                invitations: event.invitations.map(inv => 
-                  inv.userId === userId 
-                    ? { ...inv, status } 
-                    : inv
-                )
-              } 
-            : event
-        )
+      // Processar o evento atualizado
+      const processedEvent = processEvents([updatedEvent])[0];
+      
+      // Atualizar o evento na lista
+      setEvents(prev => 
+        prev.map(event => event.id === Number(eventId) ? processedEvent : event)
       );
       
-      // Apply filter again to update filtered list
+      // Aplicar o filtro atual
       applyFilter(filterType);
       
-      return response;
+      return updatedEvent;
     } catch (err) {
-      console.error('Error updating invitation status:', err);
+      console.error('Erro ao responder ao convite:', err);
       throw err;
-    } finally {
-      setRequestInProgress(false);
     }
-  }, [applyFilter, filterType, requestInProgress]);
+  }, [processEvents, applyFilter, filterType]);
 
-  // Function to invite users to an event
+  // Alias para respondToInvite para manter compatibilidade
+  const updateInvitationStatus = useCallback((eventId: number | string, userId: string, status: InvitationStatus) => {
+    return respondToInvite(eventId, userId, status);
+  }, [respondToInvite]);
+
+  // Função para convidar usuários para um evento
   const inviteUsers = useCallback(async (eventId: number, userIds: string[]) => {
-    if (requestInProgress) {
-      console.log('Uma requisição já está em andamento. Ignorando convite de usuários.');
-      throw new Error('Uma ação já está em andamento. Tente novamente em instantes.');
-    }
-    
     try {
       if (!userIds.length) return null;
       
-      setRequestInProgress(true);
       const response = await EventsService.inviteUsers(eventId, userIds);
       
-      // After inviting users, fetch the specific event again
+      // Após convidar usuários, buscar o evento atualizado
       try {
         const updatedEvent = await EventsService.getEventById(eventId);
         
-        // Update the event in the list
-        setAllEvents(prev => 
-          prev.map(event => 
-            event.id === eventId ? updatedEvent : event
-          )
+        // Processar o evento atualizado
+        const processedEvent = processEvents([updatedEvent])[0];
+        
+        // Atualizar o evento na lista
+        setEvents(prev => 
+          prev.map(event => event.id === eventId ? processedEvent : event)
         );
         
-        // Apply filter again
+        // Aplicar o filtro atual
         applyFilter(filterType);
       } catch (error) {
-        console.error('Error fetching updated event data:', error);
+        console.error('Erro ao buscar detalhes atualizados do evento após convite:', error);
       }
       
       return response;
     } catch (err) {
-      console.error('Error inviting users:', err);
+      console.error('Erro ao convidar usuários:', err);
       throw err;
-    } finally {
-      setRequestInProgress(false);
     }
-  }, [applyFilter, filterType, requestInProgress]);
+  }, [processEvents, applyFilter, filterType]);
 
-  // Function to get event by ID
+  // Função para obter evento por ID
   const getEventById = useCallback(async (eventId: string | number): Promise<Event | null> => {
-    // Não precisamos bloquear essa operação com requestInProgress
-    // pois ela é apenas uma consulta que não modifica dados
     try {
       return await EventsService.getEventById(eventId);
     } catch (err) {
-      console.error('Error getting event by ID:', err);
+      console.error('Erro ao obter evento por ID:', err);
       return null;
     }
   }, []);
 
-  // Format date for display
+  // Formatar data para exibição
   const formatEventDate = useCallback((dateString?: string, includeTime: boolean = true): string => {
     if (!dateString) return '';
     
@@ -395,12 +305,12 @@ export const useEvents = (options: UseEventsOptions = {}) => {
       }
       return format(date, "dd 'de' MMMM", { locale: ptBR });
     } catch (error) {
-      console.error('Error formatting event date:', error, dateString);
+      console.error('Erro ao formatar data do evento:', error, dateString);
       return dateString;
     }
   }, []);
 
-  // Get current user's status for an event
+  // Obter status do usuário atual para um evento
   const getCurrentUserEventStatus = useCallback((event: Event): InvitationStatus | null => {
     if (!user || !event || !event.invitations) return null;
     
@@ -408,7 +318,7 @@ export const useEvents = (options: UseEventsOptions = {}) => {
     return invitation ? invitation.status : null;
   }, [user]);
   
-  // Get invitation statistics for an event
+  // Obter estatísticas de convites para um evento
   const getInvitationStats = useCallback((event: Event): EventStats => {
     if (!event || !event.invitations) {
       return { confirmed: 0, pending: 0, declined: 0 };
@@ -421,15 +331,15 @@ export const useEvents = (options: UseEventsOptions = {}) => {
     };
   }, []);
   
-  // Check if current user is the creator of the event
+  // Verificar se o usuário atual é o criador do evento
   const isCurrentUserCreator = useCallback((event: Event): boolean => {
     return !!user && user.uid === event.creatorId;
   }, [user]);
 
-  // Memoize the return value to prevent unnecessary re-renders
+  // Memoizar o valor de retorno para evitar renderizações desnecessárias
   return useMemo(() => ({
     events: filteredEvents,
-    allEvents,
+    allEvents: events,
     loading,
     error,
     fetchEvents,
@@ -438,7 +348,7 @@ export const useEvents = (options: UseEventsOptions = {}) => {
     createEvent,
     updateEvent,
     deleteEvent,
-    respondToInvite: updateInvitationStatus, // Alias for backward compatibility
+    respondToInvite,
     updateInvitationStatus,
     inviteUsers,
     formatEventDate,
@@ -446,11 +356,10 @@ export const useEvents = (options: UseEventsOptions = {}) => {
     getInvitationStats,
     isCurrentUserCreator,
     filterType,
-    getEventById,
-    requestInProgress // Exportamos este estado para componentes que precisem saber se uma operação está em andamento
+    getEventById
   }), [
     filteredEvents,
-    allEvents,
+    events,
     loading,
     error,
     fetchEvents,
@@ -459,6 +368,7 @@ export const useEvents = (options: UseEventsOptions = {}) => {
     createEvent,
     updateEvent,
     deleteEvent,
+    respondToInvite,
     updateInvitationStatus,
     inviteUsers,
     formatEventDate,
@@ -466,13 +376,9 @@ export const useEvents = (options: UseEventsOptions = {}) => {
     getInvitationStats,
     isCurrentUserCreator,
     filterType,
-    getEventById,
-    requestInProgress
+    getEventById
   ]);
 };
 
-// Re-export types from the service for backward compatibility
-export type { Event, EventFormData, InvitationStatus, EventFilterType, EventStats, EventInvitation } from '../services/events';
-
-// Re-export the EventsProvider from the context
-export { EventsProvider } from '../context/EventsContext';
+// Exportar tipos para uso direto pelos componentes
+export { Event, EventFilterType };

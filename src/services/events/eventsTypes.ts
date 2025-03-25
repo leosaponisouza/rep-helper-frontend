@@ -6,7 +6,8 @@ export interface EventInvitation {
   userId: string;
   userName: string;
   userEmail: string;
-  userProfilePicture: string | null;
+  nickName?: string;
+  profilePictureUrl: string | null;
   status: InvitationStatus;
 }
 

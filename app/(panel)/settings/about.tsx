@@ -9,126 +9,202 @@ import {
   Image,
   Linking,
   SafeAreaView,
-  StatusBar
+  StatusBar,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import Constants from 'expo-constants';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Stack, useRouter } from 'expo-router';
 
 const AboutScreen = () => {
-  const appVersion = Constants.expoConfig?.version || '1.0.0';
+  const router = useRouter();
   
-  const handleOpenLink = (url: string) => {
-    Linking.openURL(url).catch(err => console.error('Erro ao abrir link:', err));
+  // Lista de links legais e políticas
+  const legalLinks = [
+    {
+      id: 'terms',
+      title: 'Termos de Uso',
+      description: 'Condições de uso do aplicativo',
+      icon: 'document-text',
+      route: '/(panel)/settings/terms-of-use',
+    },
+    {
+      id: 'privacy',
+      title: 'Política de Privacidade',
+      description: 'Como tratamos seus dados e informações',
+      icon: 'shield-checkmark',
+      route: '/(panel)/settings/privacy-policy',
+    },
+    {
+      id: 'licenses',
+      title: 'Licenças de Software',
+      description: 'Bibliotecas e componentes de código aberto',
+      icon: 'code-slash',
+      route: '/(panel)/settings/software-licenses',
+    },
+  ];
+  
+  // Lista de canais de contato
+  const contactChannels = [
+    {
+      id: 'email',
+      title: 'E-mail',
+      value: 'contato@rephelper.com.br',
+      icon: 'mail',
+      action: () => Linking.openURL('mailto:contato@rephelper.com.br'),
+    },
+    {
+      id: 'website',
+      title: 'Website',
+      value: 'www.rephelper.com.br',
+      icon: 'globe',
+      action: () => Linking.openURL('https://www.rephelper.com.br'),
+    },
+    {
+      id: 'instagram',
+      title: 'Instagram',
+      value: '@rephelper',
+      icon: 'logo-instagram',
+      action: () => Linking.openURL('https://instagram.com/rephelper'),
+    },
+  ];
+
+  // Renderizador de item de link
+  const LinkItem = ({ item }: { item: any }) => {
+    return (
+      <TouchableOpacity 
+        style={styles.linkItem}
+        onPress={() => router.push(item.route)}
+      >
+        <View style={styles.linkIconContainer}>
+          <Ionicons name={item.icon} size={22} color="#7B68EE" />
+        </View>
+        <View style={styles.linkContent}>
+          <Text style={styles.linkTitle}>{item.title}</Text>
+          <Text style={styles.linkDescription}>{item.description}</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={22} color="#666" />
+      </TouchableOpacity>
+    );
+  };
+  
+  // Renderizador de item de contato
+  const ContactItem = ({ item }: { item: any }) => {
+    return (
+      <TouchableOpacity 
+        style={styles.contactItem}
+        onPress={item.action}
+      >
+        <View style={styles.contactIconContainer}>
+          <Ionicons name={item.icon} size={22} color="#7B68EE" />
+        </View>
+        <View style={styles.contactContent}>
+          <Text style={styles.contactTitle}>{item.title}</Text>
+          <Text style={styles.contactValue}>{item.value}</Text>
+        </View>
+      </TouchableOpacity>
+    );
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" backgroundColor="#222" />
+      
+      <Stack.Screen
+        options={{
+          title: "Sobre o App",
+          headerStyle: {
+            backgroundColor: "#333",
+          },
+          headerTintColor: "#fff",
+          headerShadowVisible: false,
+        }}
+      />
+      
       <ScrollView style={styles.container}>
-        <View style={styles.logoContainer}>
-          <View style={styles.logoBackground}>
-            <Text style={styles.logoText}>RH</Text>
-          </View>
+        {/* Cabeçalho com logo e informações do app */}
+        <View style={styles.header}>
+          <Image 
+            source={require('../../../assets/icon.png')} 
+            style={styles.logo}
+            resizeMode="contain"
+          />
           <Text style={styles.appName}>RepHelper</Text>
-          <Text style={styles.versionText}>Versão {appVersion}</Text>
-        </View>
-        
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Sobre o App</Text>
-          <Text style={styles.sectionContent}>
-            RepHelper é um aplicativo para gerenciamento de repúblicas, facilitando 
-            a organização de tarefas, despesas e eventos entre moradores.
+          <Text style={styles.appVersion}>Versão 1.0.0</Text>
+          <Text style={styles.appDescription}>
+            O aplicativo essencial para gerenciar repúblicas e moradias compartilhadas.
           </Text>
         </View>
         
+        {/* Seção: Sobre Nós */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Recursos</Text>
-          
-          <View style={styles.featureItem}>
-            <Ionicons name="checkbox-outline" size={24} color="#7B68EE" style={styles.featureIcon} />
-            <View style={styles.featureContent}>
-              <Text style={styles.featureTitle}>Gerenciamento de Tarefas</Text>
-              <Text style={styles.featureDesc}>Organize e atribua tarefas aos moradores</Text>
-            </View>
+          <Text style={styles.sectionTitle}>Sobre Nós</Text>
+          <View style={styles.aboutCard}>
+            <Text style={styles.aboutText}>
+              RepHelper foi criado para simplificar a vida em moradias compartilhadas, ajudando a administrar despesas, tarefas e comunicação entre os moradores de forma eficiente e transparente.
+            </Text>
+            <Text style={styles.aboutText}>
+              Nossa missão é tornar a vida em república mais harmoniosa e organizada, reduzindo conflitos e facilitando a gestão financeira coletiva.
+            </Text>
           </View>
-          
-          <View style={styles.featureItem}>
-            <Ionicons name="cash-outline" size={24} color="#7B68EE" style={styles.featureIcon} />
-            <View style={styles.featureContent}>
-              <Text style={styles.featureTitle}>Controle de Despesas</Text>
-              <Text style={styles.featureDesc}>Acompanhe gastos e divida contas facilmente</Text>
+        </View>
+        
+        {/* Seção: Recursos */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Principais Recursos</Text>
+          <View style={styles.featuresContainer}>
+            <View style={styles.featureItem}>
+              <View style={styles.featureIconContainer}>
+                <MaterialCommunityIcons name="cash-multiple" size={22} color="#7B68EE" />
+              </View>
+              <Text style={styles.featureTitle}>Divisão de Despesas</Text>
             </View>
-          </View>
-          
-          <View style={styles.featureItem}>
-            <Ionicons name="calendar-outline" size={24} color="#7B68EE" style={styles.featureIcon} />
-            <View style={styles.featureContent}>
-              <Text style={styles.featureTitle}>Agenda de Eventos</Text>
-              <Text style={styles.featureDesc}>Crie e gerencie eventos compartilhados</Text>
+            
+            <View style={styles.featureItem}>
+              <View style={styles.featureIconContainer}>
+                <Ionicons name="calendar" size={22} color="#7B68EE" />
+              </View>
+              <Text style={styles.featureTitle}>Agenda Compartilhada</Text>
+            </View>
+            
+            <View style={styles.featureItem}>
+              <View style={styles.featureIconContainer}>
+                <Ionicons name="list" size={22} color="#7B68EE" />
+              </View>
+              <Text style={styles.featureTitle}>Gestão de Tarefas</Text>
+            </View>
+            
+            <View style={styles.featureItem}>
+              <View style={styles.featureIconContainer}>
+                <Ionicons name="chatbubbles" size={22} color="#7B68EE" />
+              </View>
+              <Text style={styles.featureTitle}>Chat Integrado</Text>
             </View>
           </View>
         </View>
         
+        {/* Seção: Legal e Políticas */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Termos e Políticas</Text>
-          
-          <TouchableOpacity 
-            style={styles.linkItem}
-            onPress={() => handleOpenLink('https://rephelper.com/terms')}
-          >
-            <Ionicons name="document-text-outline" size={22} color="#7B68EE" style={styles.linkIcon} />
-            <Text style={styles.linkText}>Termos de Uso</Text>
-            <Ionicons name="chevron-forward" size={20} color="#666" />
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={styles.linkItem}
-            onPress={() => handleOpenLink('https://rephelper.com/privacy')}
-          >
-            <Ionicons name="shield-outline" size={22} color="#7B68EE" style={styles.linkIcon} />
-            <Text style={styles.linkText}>Política de Privacidade</Text>
-            <Ionicons name="chevron-forward" size={20} color="#666" />
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={styles.linkItem}
-            onPress={() => handleOpenLink('https://rephelper.com/licenses')}
-          >
-            <Ionicons name="code-slash-outline" size={22} color="#7B68EE" style={styles.linkIcon} />
-            <Text style={styles.linkText}>Licenças de Software</Text>
-            <Ionicons name="chevron-forward" size={20} color="#666" />
-          </TouchableOpacity>
+          <Text style={styles.sectionTitle}>Legal e Políticas</Text>
+          <View style={styles.linksContainer}>
+            {legalLinks.map((item) => (
+              <LinkItem key={item.id} item={item} />
+            ))}
+          </View>
         </View>
         
+        {/* Seção: Contato */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Contato e Suporte</Text>
-          
-          <TouchableOpacity 
-            style={styles.linkItem}
-            onPress={() => handleOpenLink('mailto:suporte@rephelper.com')}
-          >
-            <Ionicons name="mail-outline" size={22} color="#7B68EE" style={styles.linkIcon} />
-            <Text style={styles.linkText}>suporte@rephelper.com</Text>
-            <Ionicons name="chevron-forward" size={20} color="#666" />
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={styles.linkItem}
-            onPress={() => handleOpenLink('https://rephelper.com/feedback')}
-          >
-            <Ionicons name="chatbubble-outline" size={22} color="#7B68EE" style={styles.linkIcon} />
-            <Text style={styles.linkText}>Enviar Feedback</Text>
-            <Ionicons name="chevron-forward" size={20} color="#666" />
-          </TouchableOpacity>
+          <Text style={styles.sectionTitle}>Contato</Text>
+          <View style={styles.contactsContainer}>
+            {contactChannels.map((item) => (
+              <ContactItem key={item.id} item={item} />
+            ))}
+          </View>
         </View>
         
-        <View style={styles.credits}>
-          <Text style={styles.footerText}>
-            © 2025 RepHelper. Todos os direitos reservados.
-          </Text>
-          <Text style={styles.footerText}>
-            Feito com ❤️ para estudantes e moradores de repúblicas
-          </Text>
+        {/* Créditos */}
+        <View style={styles.creditsContainer}>
+          <Text style={styles.creditsText}>© 2025 RepHelper - Todos os direitos reservados</Text>
+          <Text style={styles.creditsText}>Desenvolvido com ❤️ no Brasil</Text>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -144,100 +220,162 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#222',
   },
-  logoContainer: {
+  header: {
     alignItems: 'center',
-    justifyContent: 'center',
-    padding: 32,
+    padding: 24,
+    paddingBottom: 32,
   },
-  logoBackground: {
+  logo: {
     width: 100,
     height: 100,
-    borderRadius: 50,
-    backgroundColor: '#7B68EE',
-    alignItems: 'center',
-    justifyContent: 'center',
     marginBottom: 16,
   },
-  logoText: {
-    fontSize: 40,
-    fontWeight: 'bold',
-    color: 'white',
-  },
   appName: {
-    fontSize: 26,
+    fontSize: 24,
     fontWeight: 'bold',
-    color: 'white',
-    marginBottom: 8,
+    color: '#7B68EE',
+    marginBottom: 4,
   },
-  versionText: {
-    fontSize: 16,
+  appVersion: {
+    fontSize: 14,
     color: '#aaa',
+    marginBottom: 16,
+  },
+  appDescription: {
+    fontSize: 16,
+    color: '#ddd',
+    textAlign: 'center',
+    paddingHorizontal: 20,
   },
   section: {
-    backgroundColor: '#333',
-    borderRadius: 12,
-    marginHorizontal: 16,
     marginBottom: 24,
-    padding: 16,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#7B68EE',
-    marginBottom: 16,
+    marginHorizontal: 20,
+    marginBottom: 12,
   },
-  sectionContent: {
-    fontSize: 16,
-    color: '#fff',
-    lineHeight: 24,
+  aboutCard: {
+    backgroundColor: '#333',
+    borderRadius: 12,
+    padding: 16,
+    marginHorizontal: 16,
+  },
+  aboutText: {
+    fontSize: 15,
+    color: '#ddd',
+    marginBottom: 12,
+    lineHeight: 22,
+  },
+  featuresContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginHorizontal: 16,
   },
   featureItem: {
-    flexDirection: 'row',
-    marginBottom: 16,
-    alignItems: 'flex-start',
+    width: '48%',
+    backgroundColor: '#333',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    alignItems: 'center',
   },
-  featureIcon: {
-    marginRight: 16,
-    marginTop: 2,
-  },
-  featureContent: {
-    flex: 1,
+  featureIconContainer: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: 'rgba(123, 104, 238, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
   },
   featureTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: 'white',
-    marginBottom: 4,
-  },
-  featureDesc: {
     fontSize: 14,
-    color: '#aaa',
-    lineHeight: 20,
+    fontWeight: '500',
+    color: 'white',
+    textAlign: 'center',
+  },
+  linksContainer: {
+    backgroundColor: '#333',
+    borderRadius: 12,
+    marginHorizontal: 16,
+    overflow: 'hidden',
   },
   linkItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
+    padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#444',
   },
-  linkIcon: {
+  linkIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(123, 104, 238, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
     marginRight: 16,
   },
-  linkText: {
+  linkContent: {
     flex: 1,
-    fontSize: 16,
-    color: 'white',
   },
-  credits: {
+  linkTitle: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: 'white',
+    marginBottom: 2,
+  },
+  linkDescription: {
+    fontSize: 14,
+    color: '#aaa',
+  },
+  contactsContainer: {
+    backgroundColor: '#333',
+    borderRadius: 12,
+    marginHorizontal: 16,
+    overflow: 'hidden',
+  },
+  contactItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#444',
+  },
+  contactIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(123, 104, 238, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  contactContent: {
+    flex: 1,
+  },
+  contactTitle: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: 'white',
+    marginBottom: 2,
+  },
+  contactValue: {
+    fontSize: 14,
+    color: '#aaa',
+  },
+  creditsContainer: {
     padding: 24,
     alignItems: 'center',
   },
-  footerText: {
+  creditsText: {
     fontSize: 14,
-    color: '#aaa',
-    textAlign: 'center',
-    marginBottom: 8,
+    color: '#888',
+    marginBottom: 4,
   },
 });
 

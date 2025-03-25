@@ -54,7 +54,8 @@ module.exports = {
     // API config
     apiBaseUrl: env.API_BASE_URL || "http://192.168.100.6:3000/api/v1",
     
-    // Modo de ambiente
-    environment: process.env.EXPO_PUBLIC_ENV || 'development'
+    // Supabase config
+    supabaseUrl: env.EXPO_PUBLIC_SUPABASE_URL,
+    supabaseAnonKey: env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
   }
 };

@@ -1,10 +1,21 @@
 // components/EventItem.tsx
-import React, { memo } from 'react';
+/**
+ * Componente para exibir um evento na lista
+ * 
+ * Este componente utiliza as seguintes prioridades para exibição de avatares:
+ * 1. Foto de perfil (profilePictureUrl)
+ * 2. Inicial do nickname (nickName)
+ * 3. Inicial do nome (userName)
+ * 4. Inicial do email (userEmail)
+ * 5. Inicial do ID (userId)
+ */
+import React, { memo, useState, useMemo } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity
+  TouchableOpacity,
+  Image
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { format, parseISO } from 'date-fns';
@@ -18,12 +29,48 @@ interface EventItemProps {
   currentUserId?: string;
 }
 
+/**
+ * Extrai o nome de exibição de um usuário a partir do nome completo
+ * - Se o nome contiver um apelido entre parênteses, retorna esse apelido
+ * - Caso contrário, retorna o primeiro nome
+ * 
+ * @param fullName Nome completo do usuário
+ * @returns Nome de exibição preferido
+ */
+const extractDisplayName = (fullName: string): string => {
+  // Verifica se o nome contém um apelido entre parênteses: "Nome Sobrenome (Apelido)"
+  const nicknameMatch = fullName.match(/\(([^)]+)\)/);
+  if (nicknameMatch && nicknameMatch[1]) {
+    return nicknameMatch[1].trim();
+  }
+  
+  // Se não tiver apelido entre parênteses, retorna o primeiro nome
+  return fullName.split(' ')[0] || fullName;
+};
+
+/**
+ * Verifica se o URL da imagem de perfil é válido
+ * - Verifica se não é nulo ou vazio
+ * - Verifica se começa com http:// ou https://
+ * 
+ * @param url URL da imagem de perfil
+ * @returns Booleano indicando se o URL é válido
+ */
+const isValidProfileImageUrl = (url: string | null): boolean => {
+  if (!url || typeof url !== 'string' || url.trim() === '') return false;
+  
+  // Verificação básica para garantir que o URL é válido
+  return url.startsWith('http://') || url.startsWith('https://');
+};
+
 // Componente otimizado com memo para evitar re-renderizações desnecessárias
 const EventItem: React.FC<EventItemProps> = memo(({
   item,
   onPress,
   currentUserId
 }) => {
+  // Estado para rastrear quais imagens falharam ao carregar
+  const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
 
   // Calcular contagem de confirmados
   const confirmedCount = item.invitations ?
@@ -97,7 +144,7 @@ const EventItem: React.FC<EventItemProps> = memo(({
   };
 
   // Obter convidados confirmados para mostrar avatares
-  const getConfirmedParticipants = () => {
+  const getConfirmedParticipants = useMemo(() => {
     if (!item.invitations || !Array.isArray(item.invitations)) return [];
 
     return item.invitations
@@ -105,16 +152,17 @@ const EventItem: React.FC<EventItemProps> = memo(({
       .map(inv => ({
         userId: inv.userId,
         name: inv.userName || '',
-        status: inv.status
+        email: inv.userEmail || '',
+        nickname: inv.nickName || '',
+        status: inv.status,
+        profilePictureUrl: inv.profilePictureUrl
       }));
-  };
+  }, [item.invitations]);
 
   // Handler para clique no evento
   const handlePress = () => {
     onPress(item.id);
   };
-
-  const confirmedParticipants = getConfirmedParticipants();
 
   return (
     <TouchableOpacity
@@ -146,16 +194,37 @@ const EventItem: React.FC<EventItemProps> = memo(({
               {confirmedCount} {confirmedCount === 1 ? 'participante' : 'participantes'}
             </Text>
           </View>
-
+          
           {/* Participantes Confirmados (Avatares) */}
-          {confirmedParticipants.length > 0 && (
+          {getConfirmedParticipants.length > 0 && (
             <View style={styles.participantsContainer}>
-              {confirmedParticipants.slice(0, 3).map((participant, index) => {
+              {getConfirmedParticipants.slice(0, 3).map((participant, index) => {
                 // Verifica se é o usuário atual
                 const isCurrentUser = participant.userId === currentUserId;
 
-                // Obtém a inicial para o avatar
-                const initial = participant.name ? participant.name.charAt(0) : participant.userId.charAt(0);
+                // Obtém a inicial para o avatar (preferência: foto > nickname > name > email > userId)
+                let displayName = '';
+                
+                // Prioridade: nickname > name > email > userId
+                if (participant.nickname && participant.nickname.length > 0) {
+                  // Usa o nickName retornado diretamente pelo backend
+                  displayName = participant.nickname;
+                } else if (participant.name && participant.name.length > 0) {
+                  // Extrai o nome de exibição preferido (nickname ou primeiro nome)
+                  displayName = extractDisplayName(participant.name);
+                } else if (participant.email && participant.email.length > 0) {
+                  // Se não tiver nome, usa o email
+                  displayName = participant.email.split('@')[0]; // Usa a parte antes do @
+                } else if (participant.userId) {
+                  // Último caso, usa o ID do usuário
+                  displayName = participant.userId;
+                }
+                
+                const initial = displayName.charAt(0);
+
+                // Verifica se a imagem falhou ao carregar ou se o URL não é válido
+                const imageHasFailed = failedImages[participant.userId];
+                const hasValidImageUrl = isValidProfileImageUrl(participant.profilePictureUrl);
 
                 return (
                   <View
@@ -166,17 +235,31 @@ const EventItem: React.FC<EventItemProps> = memo(({
                       isCurrentUser && styles.currentUserAvatar
                     ]}
                   >
-                    <Text style={styles.avatarInitial}>
-                      {initial.toUpperCase()}
-                    </Text>
+                    {hasValidImageUrl && !imageHasFailed ? (
+                      <Image
+                        source={{ uri: participant.profilePictureUrl || '' }}
+                        style={styles.avatarImage}
+                        onError={() => {
+                          // Quando a imagem falha ao carregar, marca no estado
+                          setFailedImages(prev => ({
+                            ...prev,
+                            [participant.userId]: true
+                          }));
+                        }}
+                      />
+                    ) : (
+                      <Text style={styles.avatarInitial}>
+                        {initial.toUpperCase()}
+                      </Text>
+                    )}
                   </View>
                 );
               })}
 
-              {confirmedParticipants.length > 3 && (
+              {getConfirmedParticipants.length > 3 && (
                 <View style={[styles.participantAvatar, styles.moreParticipantsAvatar]}>
                   <Text style={styles.moreParticipantsText}>
-                    +{confirmedParticipants.length - 3}
+                    +{getConfirmedParticipants.length - 3}
                   </Text>
                 </View>
               )}
@@ -191,6 +274,7 @@ const EventItem: React.FC<EventItemProps> = memo(({
 }, (prevProps, nextProps) => {
   // Função de comparação personalizada para o memo
   // Retorna true se as props não mudaram (não precisa re-renderizar)
+  // Nota: O componente ainda pode re-renderizar se o estado interno (failedImages) mudar
   return (
     prevProps.item.id === nextProps.item.id &&
     prevProps.item.title === nextProps.item.title &&
@@ -212,6 +296,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginVertical: 8,
     padding: 16,
+    paddingRight: 18,
     borderLeftWidth: 5,
     overflow: 'hidden',
     ...createShadow(2)
@@ -245,6 +330,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginTop: 8,
   },
   attendeesRow: {
     flexDirection: 'row',
@@ -289,10 +375,14 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
 
-  // Estilos para avatares dos participantes
+  // Estilos para avatares dos participantes - alinhados com o TaskItem
   participantsContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'flex-end',
+    marginLeft: 'auto',
+    minWidth: 60,
+    zIndex: 5,
   },
   participantAvatar: {
     width: 26,
@@ -303,11 +393,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 2,
     borderColor: colors.background.secondary,
+    overflow: 'hidden',
   },
   avatarInitial: {
     color: colors.text.primary,
     fontSize: 12,
     fontWeight: 'bold',
+    textAlign: 'center',
+    width: '100%',
+    height: '100%',
+    textAlignVertical: 'center',
   },
   currentUserAvatar: {
     borderColor: colors.primary.main,
@@ -320,6 +415,13 @@ const styles = StyleSheet.create({
     color: colors.primary.main,
     fontSize: 10,
     fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  avatarImage: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    resizeMode: 'cover',
   }
 });
 

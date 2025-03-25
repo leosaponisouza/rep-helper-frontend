@@ -2,6 +2,10 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { Task } from '../models/task.model';
+import Constants from 'expo-constants';
+
+// Verificar se estamos no Expo Go ou em um development build
+const isExpoGo = Constants.appOwnership === 'expo';
 
 // Configure notifications
 Notifications.setNotificationHandler({
@@ -15,6 +19,11 @@ Notifications.setNotificationHandler({
 class NotificationService {
   // Request permission for notifications
   async requestPermissions() {
+    // Em Expo Go com SDK 53+, notificações push não funcionam completamente
+    if (isExpoGo) {
+      console.log('Expo Go: Notificações push não são totalmente suportadas, usando funcionalidade limitada');
+    }
+    
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;
     
@@ -59,12 +68,19 @@ class NotificationService {
     }
 
     // Schedule the notification
-    const notificationId = await Notifications.scheduleNotificationAsync({
-      content: notificationContent,
-      trigger: notificationDate,
-    });
-
-    return notificationId;
+    try {
+      const notificationId = await Notifications.scheduleNotificationAsync({
+        content: notificationContent,
+        trigger: {
+          seconds: Math.floor((notificationDate.getTime() - new Date().getTime()) / 1000),
+          channelId: 'default',
+        },
+      });
+      return notificationId;
+    } catch (error) {
+      console.error('Erro ao agendar notificação:', error);
+      return null;
+    }
   }
 
   // Schedule a notification for a recurring task that was just completed
@@ -84,22 +100,34 @@ class NotificationService {
     };
 
     // Schedule the notification for now
-    const notificationId = await Notifications.scheduleNotificationAsync({
-      content: notificationContent,
-      trigger: null, // Send immediately
-    });
-
-    return notificationId;
+    try {
+      const notificationId = await Notifications.scheduleNotificationAsync({
+        content: notificationContent,
+        trigger: null, // Send immediately
+      });
+      return notificationId;
+    } catch (error) {
+      console.error('Erro ao agendar notificação imediata:', error);
+      return null;
+    }
   }
 
   // Cancel a scheduled notification
   async cancelNotification(notificationId: string) {
-    await Notifications.cancelScheduledNotificationAsync(notificationId);
+    try {
+      await Notifications.cancelScheduledNotificationAsync(notificationId);
+    } catch (error) {
+      console.error('Erro ao cancelar notificação:', error);
+    }
   }
 
   // Cancel all notifications
   async cancelAllNotifications() {
-    await Notifications.cancelAllScheduledNotificationsAsync();
+    try {
+      await Notifications.cancelAllScheduledNotificationsAsync();
+    } catch (error) {
+      console.error('Erro ao cancelar todas as notificações:', error);
+    }
   }
 }
 

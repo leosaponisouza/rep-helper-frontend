@@ -16,7 +16,8 @@ import {
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useEventsContext, Event } from '../../../../src/context/EventsContext';
+import { useEvents } from '../../../../src/hooks/useEvents';
+import { Event } from '../../../../src/services/events';
 import { useAuth } from '../../../../src/context/AuthContext';
 import api from '../../../../src/services/api';
 
@@ -39,7 +40,7 @@ const InvitationsScreen: React.FC = () => {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
-  const { getEventById, isCurrentUserCreator, inviteUsers, updateInvitationStatus } = useEventsContext();
+  const { getEventById, isCurrentUserCreator, inviteUsers, updateInvitationStatus } = useEvents();
   
   // Animações
   const fadeAnim = useState(new Animated.Value(0))[0];

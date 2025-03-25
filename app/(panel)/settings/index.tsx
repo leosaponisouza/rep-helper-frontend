@@ -29,22 +29,6 @@ const SettingsScreen = () => {
           icon: 'person-circle',
           iconType: 'ionicons',
           route: '/(panel)/settings/account'
-        },
-        {
-          id: 'notifications',
-          title: 'Notificações',
-          description: 'Gerenciar preferências de notificação',
-          icon: 'notifications',
-          iconType: 'ionicons',
-          route: '/(panel)/settings/notifications'
-        },
-        {
-          id: 'theme',
-          title: 'Aparência',
-          description: 'Personalizar tema e interface',
-          icon: 'color-palette',
-          iconType: 'ionicons',
-          route: '/(panel)/settings/theme'
         }
       ]
     },

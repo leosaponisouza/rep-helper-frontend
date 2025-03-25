@@ -18,7 +18,8 @@ import {
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
-import { useEventsContext, Event } from '../../../src/context/EventsContext';
+import { useEvents } from '../../../src/hooks/useEvents';
+import { Event } from '../../../src/services/events';
 import { useAuth } from '../../../src/context/AuthContext';
 import { format, parseISO, isToday, isTomorrow, isPast, isAfter, differenceInMinutes } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -31,7 +32,7 @@ const EventDetailsScreen: React.FC = () => {
   const router = useRouter();
   const { id, source } = useLocalSearchParams<{ id: string, source?: string }>();
   const { user } = useAuth();
-  const { getEventById, updateInvitationStatus, deleteEvent } = useEventsContext();
+  const { getEventById, updateInvitationStatus, deleteEvent } = useEvents();
   
   // Estados
   const [event, setEvent] = useState<Event | null>(null);

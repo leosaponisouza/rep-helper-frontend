@@ -1,5 +1,5 @@
 // app/(panel)/events/index.tsx - Updated with components
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -39,6 +39,10 @@ const EventsScreen: React.FC = () => {
   const [calendarLoading, setCalendarLoading] = useState<boolean>(true);
   const [eventsLoading, setEventsLoading] = useState<boolean>(true);
   
+  // Referência para controlar se os eventos já foram carregados para evitar loop
+  const eventsLoaded = useRef(false);
+  const isRefreshing = useRef(false);
+  
   // Animação para transição suave do skeleton para conteúdo real
   const fadeAnim = useState(new Animated.Value(0))[0];
   const calendarFadeAnim = useState(new Animated.Value(0))[0];
@@ -76,8 +80,21 @@ const EventsScreen: React.FC = () => {
   // Carregar eventos quando a tela recebe foco
   useFocusEffect(
     useCallback(() => {
-      refreshCalendarEvents();
-    }, [])
+      // Só atualiza se ainda não carregou ou se está solicitando refresh explicitamente
+      if (!eventsLoaded.current || refreshing) {
+        refreshCalendarEvents();
+      }
+      
+      return () => {
+        // Quando a tela perde o foco, permitimos que seja recarregada na próxima vez
+        // mas apenas se estiver saindo completamente, não apenas indo para detalhes
+        if (router.canGoBack()) {
+          eventsLoaded.current = true;
+        } else {
+          eventsLoaded.current = false;
+        }
+      };
+    }, [refreshing])
   );
   
   // Data de hoje como string formatada
@@ -85,13 +102,20 @@ const EventsScreen: React.FC = () => {
   
   // Atualizar eventos do calendário
   const refreshCalendarEvents = useCallback(async () => {
+    // Prevenir múltiplas requisições simultâneas
+    if (isRefreshing.current) return;
+    
     try {
+      isRefreshing.current = true;
       setRefreshing(true);
       setCalendarLoading(true);
       setEventsLoading(true);
       
       await refreshEvents('all');
       updateSelectedDayEvents(selectedDate);
+      
+      // Marcar que os eventos foram carregados
+      eventsLoaded.current = true;
       
       // Simular um pequeno delay para o skeleton
       setTimeout(() => {
@@ -108,6 +132,7 @@ const EventsScreen: React.FC = () => {
       setEventsLoading(false);
     } finally {
       setRefreshing(false);
+      isRefreshing.current = false;
     }
   }, [refreshEvents, selectedDate]);
   

@@ -3,30 +3,53 @@ import axios from 'axios';
 import { getToken, getRefreshToken, storeToken, storeRefreshToken } from '../utils/storage';
 import Constants from 'expo-constants';
 import { ErrorHandler } from '../utils/errorHandling';
+import { Platform } from 'react-native';
 
 // Obter a URL base da API do Expo Constants
 const extra = Constants.expoConfig?.extra || {};
-const API_BASE_URL = 'http://192.168.100.6:3000/api/v1';
+let API_BASE_URL = extra.apiBaseUrl || process.env.EXPO_PUBLIC_API_BASE_URL || 'http://192.168.100.6:3000/api/v1';
 
-// Log para debug - remova em produção
-console.log('API Base URL:', API_BASE_URL);
+// Garantir que a URL base termina com /api/v1
+if (!API_BASE_URL.endsWith('/api/v1')) {
+  API_BASE_URL = API_BASE_URL.endsWith('/') 
+    ? `${API_BASE_URL}api/v1` 
+    : `${API_BASE_URL}/api/v1`;
+}
+
+// Log para debug - útil para diagnosticar problemas de conexão
+console.log('API Base URL completa:', API_BASE_URL);
+console.log('Platform:', Platform.OS, Platform.Version);
 
 const api = axios.create({
   baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
+    'Accept': 'application/json',
   },
-  timeout: 15000, // Timeout em ms (15 segundos)
+  timeout: 30000, // Timeout em ms (30 segundos) - aumentado para evitar timeouts prematuros
 });
+
+// Adicionar log para diagnóstico de erros de rede
+if (__DEV__) {
+  api.interceptors.request.use(request => {
+    console.log('Request:', request.method?.toUpperCase(), request.url);
+    return request;
+  });
+}
 
 // Interceptor para adicionar o token JWT a todas as requisições
 api.interceptors.request.use(
   async (config) => {
-    const token = await getToken();
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+    try {
+      const token = await getToken();
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+      return config;
+    } catch (error) {
+      console.error('Error in request interceptor:', error);
+      return config;
     }
-    return config;
   },
   async (error) => {
     ErrorHandler.logError(await ErrorHandler.parseError(error));

@@ -6,7 +6,8 @@ import {
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
-  Platform
+  Platform,
+  Image
 } from 'react-native';
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { format, parseISO } from 'date-fns';
@@ -327,9 +328,16 @@ const TaskItem: React.FC<TaskItemProps> = memo(({
                         isCurrentUser && styles.currentUserAvatar
                       ]}
                     >
-                      <Text style={styles.avatarInitial}>
-                        {initial.toUpperCase()}
-                      </Text>
+                      {assignedUser.profilePictureUrl ? (
+                        <Image
+                          source={{ uri: assignedUser.profilePictureUrl }}
+                          style={styles.avatarImage}
+                        />
+                      ) : (
+                        <Text style={styles.avatarInitial}>
+                          {initial.toUpperCase()}
+                        </Text>
+                      )}
                     </View>
                   );
                 })}
@@ -554,6 +562,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontStyle: 'italic',
     marginLeft: 4,
+  },
+  avatarImage: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
   },
 });
 
