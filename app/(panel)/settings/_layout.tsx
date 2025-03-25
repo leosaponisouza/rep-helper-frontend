@@ -16,17 +16,12 @@ export default function SettingsLayout() {
         },
         headerShadowVisible: false,
         headerBackVisible: true,
-        headerLeft: ({ canGoBack }) => 
-          canGoBack ? (
-            <Ionicons name="chevron-back" size={24} color="#7B68EE" style={{ marginLeft: 8 }} />
-          ) : null,
       }}
     >
       <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen name="account" options={{ 
         headerTitle: '',
         headerBackVisible: true,
-        headerLeft: undefined 
       }} />
       <Stack.Screen name="notifications" options={{ title: 'Notificações' }} />
       <Stack.Screen name="theme" options={{ title: 'Tema' }} />

@@ -24,20 +24,26 @@ import { ErrorHandler } from '../../../src/utils/errorHandling';
 import * as Haptics from 'expo-haptics';
 
 // Improved type definitions
-interface Republic {
-  id: string;
-  name: string;
-  code: string;
+interface AddressResponse {
   street: string;
   number: string;
   complement?: string | null;
   neighborhood: string;
   city: string;
   state: string;
-  zip_code: string;
-  owner_id: string;
-  created_at: string;
-  updated_at: string;
+  zipCode: string;
+  fullAddress: string;
+}
+
+interface Republic {
+  id: string;
+  name: string;
+  code: string;
+  address: AddressResponse;
+  ownerId: string;
+  ownerName: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface FormInputProps {
@@ -64,6 +70,11 @@ const RepublicSettingsScreen: React.FC = () => {
   const [saving, setSaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [regeneratingCode, setRegeneratingCode] = useState<boolean>(false);
+  const [customCode, setCustomCode] = useState<string>('');
+  const [showCustomCodeInput, setShowCustomCodeInput] = useState<boolean>(false);
+  const [codeLength, setCodeLength] = useState<number>(6); // Valor padrão, será atualizado com a API
+  const [customCodeFocused, setCustomCodeFocused] = useState<boolean>(false);
+  const [republicMembers, setRepublicMembers] = useState<any[]>([]);
   
   // Form state with explicit types
   const [name, setName] = useState<string>('');
@@ -86,21 +97,69 @@ const RepublicSettingsScreen: React.FC = () => {
   const [zipCodeFocused, setZipCodeFocused] = useState<boolean>(false);
   
   // Verify if the user is the owner of the republic
-  const isOwner = user?.uid === republic?.owner_id;
+  const isOwner = user?.uid === republic?.ownerId;
   
+  // Buscar membros da república para verificar se o usuário é admin
+  useEffect(() => {
+    const fetchRepublicMembers = async () => {
+      if (!user?.currentRepublicId) return;
+      
+      try {
+        const response = await api.get(`/api/v1/republics/${user.currentRepublicId}/members`);
+        setRepublicMembers(response.data);
+      } catch (error) {
+        console.error('Erro ao buscar membros:', error);
+      }
+    };
+    
+    fetchRepublicMembers();
+  }, [user?.currentRepublicId]);
+  
+  // Verificar se o usuário é admin da república
+  const isUserAdmin = republicMembers.some(m => m.uid === user?.uid && m.isAdmin);
+  
+  // Função para obter o tamanho necessário do código
+  useEffect(() => {
+    const fetchCodeLength = async () => {
+      try {
+        const response = await api.get('/api/v1/republics/code-length');
+        if (response.data && response.data.codeLength) {
+          setCodeLength(response.data.codeLength);
+        }
+      } catch (error) {
+        console.error('Erro ao obter o tamanho do código:', error);
+      }
+    };
+
+    fetchCodeLength();
+  }, []);
+
   const handleRegenerateCode = async () => {
-    if (!isOwner) {
-      Alert.alert('Erro', 'Apenas o dono da república pode gerar novos códigos');
+    if (!isOwner && !isUserAdmin) {
+      Alert.alert('Erro', 'Apenas o dono ou administradores podem gerar novos códigos');
       return;
     }
     
+    // Se estiver mostrando o input de código personalizado, esconde
+    if (showCustomCodeInput) {
+      setShowCustomCodeInput(false);
+      setCustomCode('');
+      return;
+    }
+
     Alert.alert(
       'Regenerar Código',
-      'Tem certeza que deseja criar um novo código de convite? O código atual deixará de funcionar.',
+      'Você deseja gerar um código aleatório ou criar um código personalizado?',
       [
         { text: 'Cancelar', style: 'cancel' },
         { 
-          text: 'Confirmar', 
+          text: 'Personalizado', 
+          onPress: () => {
+            setShowCustomCodeInput(true);
+          }
+        },
+        {
+          text: 'Aleatório',
           onPress: async () => {
             try {
               setRegeneratingCode(true);
@@ -127,6 +186,45 @@ const RepublicSettingsScreen: React.FC = () => {
         }
       ]
     );
+  };
+
+  const handleGenerateCustomCode = async () => {
+    if (!customCode) {
+      Alert.alert('Erro', 'Por favor, digite um código personalizado.');
+      return;
+    }
+
+    if (customCode.length !== codeLength) {
+      Alert.alert('Erro', `O código deve ter exatamente ${codeLength} caracteres.`);
+      return;
+    }
+
+    try {
+      setRegeneratingCode(true);
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      
+      const response = await api.post<{ code: string }>(`/api/v1/republics/${republic?.id}/regenerate-code`, {
+        customCode: customCode
+      });
+      
+      if (response.data?.code) {
+        setRepublic(prev => prev ? {
+          ...prev,
+          code: response.data.code
+        } : null);
+        
+        Alert.alert('Sucesso', 'Novo código de convite personalizado gerado com sucesso!');
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+      
+      setShowCustomCodeInput(false);
+      setCustomCode('');
+    } catch (error) {
+      ErrorHandler.handle(error);
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setRegeneratingCode(false);
+    }
   };
   
   const handleCopyCode = () => {
@@ -163,22 +261,32 @@ const RepublicSettingsScreen: React.FC = () => {
         const response = await api.get<Republic>(`/api/v1/republics/${user.currentRepublicId}`);
         const republicData = response.data;
         
+        console.log('Dados da república recebidos:', JSON.stringify(republicData, null, 2));
+        
         setRepublic(republicData);
         
         // Set form values with null coalescing
         setName(republicData.name ?? '');
-        setStreet(republicData.street ?? '');
-        setNumber(republicData.number ?? '');
-        setComplement(republicData.complement ?? '');
-        setNeighborhood(republicData.neighborhood ?? '');
-        setCity(republicData.city ?? '');
-        setState(republicData.state ?? '');
-        setZipCode(republicData.zip_code ?? '');
+        
+        // Acessando os dados de endereço a partir da nova estrutura
+        if (republicData.address) {
+          console.log('Dados de endereço encontrados:', republicData.address);
+          setStreet(republicData.address.street ?? '');
+          setNumber(republicData.address.number ?? '');
+          setComplement(republicData.address.complement ?? '');
+          setNeighborhood(republicData.address.neighborhood ?? '');
+          setCity(republicData.address.city ?? '');
+          setState(republicData.address.state ?? '');
+          setZipCode(republicData.address.zipCode ?? '');
+        } else {
+          console.error('Dados de endereço não encontrados na resposta:', republicData);
+        }
         
       } catch (error) {
-        const parsedError = ErrorHandler.parseError(error);
+        console.error('Erro ao buscar dados da república:', error);
+        const parsedError = await ErrorHandler.parseError(error);
         setError(parsedError.message);
-        ErrorHandler.logError(parsedError);
+        ErrorHandler.handle(error);
       } finally {
         setLoading(false);
       }
@@ -207,24 +315,44 @@ const RepublicSettingsScreen: React.FC = () => {
       
       const republicData = {
         name,
-        street,
-        number,
-        complement: complement || null,
-        neighborhood,
-        city,
-        state,
-        zip_code: zipCode
+        address: {
+          street,
+          number,
+          complement: complement || null,
+          neighborhood,
+          city,
+          state,
+          zipCode
+        }
       };
+      
+      console.log('Enviando dados para atualização:', JSON.stringify(republicData, null, 2));
       
       const response = await api.put<Republic>(`/api/v1/republics/${republic?.id}`, republicData);
       
+      console.log('Resposta da atualização:', JSON.stringify(response.data, null, 2));
+      
       if (response.data) {
         setRepublic(response.data);
+        
+        // Atualizando os campos com os dados da resposta para garantir consistência
+        setName(response.data.name);
+        if (response.data.address) {
+          setStreet(response.data.address.street ?? '');
+          setNumber(response.data.address.number ?? '');
+          setComplement(response.data.address.complement ?? '');
+          setNeighborhood(response.data.address.neighborhood ?? '');
+          setCity(response.data.address.city ?? '');
+          setState(response.data.address.state ?? '');
+          setZipCode(response.data.address.zipCode ?? '');
+        }
+        
         Alert.alert('Sucesso', 'Informações da república atualizadas com sucesso!');
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
       
     } catch (error) {
+      console.error('Erro ao salvar alterações:', error);
       ErrorHandler.handle(error);
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
@@ -290,17 +418,242 @@ const RepublicSettingsScreen: React.FC = () => {
           <View style={styles.errorContainer}>
             <Ionicons name="alert-circle" size={50} color="#FF6347" />
             <Text style={styles.errorText}>{error}</Text>
-            <TouchableOpacity 
-              style={styles.errorButton}
-              onPress={() => router.back()}
-            >
-              <Text style={styles.errorButtonText}>Voltar</Text>
-            </TouchableOpacity>
           </View>
         ) : (
-          // Rest of the render remains the same as in the original code
           <ScrollView style={styles.container}>
-            {/* Original render code */}
+            <View style={styles.header}>
+              <Text style={styles.title}>Configurações da República</Text>
+              <Text style={styles.subtitle}>Gerencie informações e configurações da sua república</Text>
+            </View>
+            
+            {/* Seção de código de convite */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Código de Convite</Text>
+              
+              <View style={styles.inviteCodeContainer}>
+                <View style={styles.codeContainer}>
+                  <Text style={styles.codeLabel}>Compartilhe este código para convidar novos membros:</Text>
+                  <Text style={styles.codeValue}>{republic?.code}</Text>
+                  
+                  {/* Custom Code Input (quando ativado) */}
+                  {showCustomCodeInput && (
+                    <View style={styles.customCodeContainer}>
+                      <Text style={styles.customCodeLabel}>Digite um código personalizado:</Text>
+                      <View style={[
+                        styles.customCodeInputContainer,
+                        customCodeFocused && styles.inputFocused
+                      ]}>
+                        <TextInput
+                          style={styles.customCodeInput}
+                          value={customCode}
+                          onChangeText={text => setCustomCode(text.toUpperCase())}
+                          placeholder={`${codeLength} caracteres`}
+                          placeholderTextColor="#aaa"
+                          maxLength={codeLength}
+                          autoCapitalize="characters"
+                          onFocus={() => setCustomCodeFocused(true)}
+                          onBlur={() => setCustomCodeFocused(false)}
+                          autoFocus={true}
+                        />
+                      </View>
+                      
+                      <View style={styles.customCodeActions}>
+                        <TouchableOpacity
+                          style={[
+                            styles.customCodeButton, 
+                            customCode.length !== codeLength ? styles.disabledButton : styles.confirmButton
+                          ]}
+                          onPress={handleGenerateCustomCode}
+                          disabled={customCode.length !== codeLength}
+                        >
+                          <Text style={styles.customCodeButtonText}>
+                            {customCode.length === codeLength ? 'Confirmar' : `Mais ${codeLength - customCode.length} caracteres`}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  )}
+                  
+                  <View style={styles.codeActions}>
+                    <TouchableOpacity style={styles.codeActionButton} onPress={handleCopyCode}>
+                      <Ionicons name="copy-outline" size={24} color="#7B68EE" />
+                    </TouchableOpacity>
+                    
+                    <TouchableOpacity style={styles.codeActionButton} onPress={handleShareCode}>
+                      <Ionicons name="share-social-outline" size={24} color="#7B68EE" />
+                    </TouchableOpacity>
+                    
+                    {(isOwner || isUserAdmin) && (
+                      <TouchableOpacity
+                        style={styles.regenerateButton}
+                        onPress={handleRegenerateCode}
+                        disabled={regeneratingCode}
+                      >
+                        {regeneratingCode ? (
+                          <ActivityIndicator size="small" color="#fff" />
+                        ) : (
+                          <>
+                            <Ionicons 
+                              name={showCustomCodeInput ? "close" : "refresh"} 
+                              size={20} 
+                              color="#fff" 
+                              style={{ marginRight: 8 }} 
+                            />
+                            <Text style={styles.regenerateButtonText}>
+                              {showCustomCodeInput ? "Cancelar" : "Gerar Novo Código"}
+                            </Text>
+                          </>
+                        )}
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </View>
+              </View>
+            </View>
+            
+            {/* Seção de informações da república */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Informações da República</Text>
+              
+              <View style={styles.formContainer}>
+                <FormInput
+                  label="Nome da República"
+                  value={name}
+                  onChangeText={setName}
+                  placeholder="Digite o nome da república"
+                  icon="home"
+                  isFocused={nameFocused}
+                  onFocus={() => setNameFocused(true)}
+                  onBlur={() => setNameFocused(false)}
+                  disabled={!isOwner}
+                  required={true}
+                />
+                
+                <FormInput
+                  label="Rua"
+                  value={street}
+                  onChangeText={setStreet}
+                  placeholder="Digite o nome da rua"
+                  icon="map"
+                  isFocused={streetFocused}
+                  onFocus={() => setStreetFocused(true)}
+                  onBlur={() => setStreetFocused(false)}
+                  disabled={!isOwner}
+                  required={true}
+                />
+                
+                <View style={styles.rowContainer}>
+                  <View style={styles.rowItem}>
+                    <FormInput
+                      label="Número"
+                      value={number}
+                      onChangeText={setNumber}
+                      placeholder="Número"
+                      icon="business"
+                      isFocused={numberFocused}
+                      onFocus={() => setNumberFocused(true)}
+                      onBlur={() => setNumberFocused(false)}
+                      disabled={!isOwner}
+                      keyboardType="number-pad"
+                      required={true}
+                    />
+                  </View>
+                  
+                  <View style={styles.rowItem}>
+                    <FormInput
+                      label="Complemento"
+                      value={complement}
+                      onChangeText={setComplement}
+                      placeholder="Complemento"
+                      icon="ellipsis-horizontal"
+                      isFocused={complementFocused}
+                      onFocus={() => setComplementFocused(true)}
+                      onBlur={() => setComplementFocused(false)}
+                      disabled={!isOwner}
+                    />
+                  </View>
+                </View>
+                
+                <FormInput
+                  label="Bairro"
+                  value={neighborhood}
+                  onChangeText={setNeighborhood}
+                  placeholder="Digite o bairro"
+                  icon="location"
+                  isFocused={neighborhoodFocused}
+                  onFocus={() => setNeighborhoodFocused(true)}
+                  onBlur={() => setNeighborhoodFocused(false)}
+                  disabled={!isOwner}
+                  required={true}
+                />
+                
+                <View style={styles.rowContainer}>
+                  <View style={styles.rowItem}>
+                    <FormInput
+                      label="Cidade"
+                      value={city}
+                      onChangeText={setCity}
+                      placeholder="Cidade"
+                      icon="business"
+                      isFocused={cityFocused}
+                      onFocus={() => setCityFocused(true)}
+                      onBlur={() => setCityFocused(false)}
+                      disabled={!isOwner}
+                      required={true}
+                    />
+                  </View>
+                  
+                  <View style={styles.rowItem}>
+                    <FormInput
+                      label="Estado"
+                      value={state}
+                      onChangeText={setState}
+                      placeholder="UF"
+                      icon="flag"
+                      isFocused={stateFocused}
+                      onFocus={() => setStateFocused(true)}
+                      onBlur={() => setStateFocused(false)}
+                      disabled={!isOwner}
+                      maxLength={2}
+                      required={true}
+                    />
+                  </View>
+                </View>
+                
+                <FormInput
+                  label="CEP"
+                  value={zipCode}
+                  onChangeText={setZipCode}
+                  placeholder="Digite o CEP"
+                  icon="mail"
+                  isFocused={zipCodeFocused}
+                  onFocus={() => setZipCodeFocused(true)}
+                  onBlur={() => setZipCodeFocused(false)}
+                  disabled={!isOwner}
+                  keyboardType="number-pad"
+                  maxLength={9}
+                  required={true}
+                />
+              </View>
+            </View>
+            
+            {/* Botão de salvar */}
+            {isOwner && (
+              <TouchableOpacity
+                style={[styles.saveButton, saving && styles.buttonDisabled]}
+                onPress={handleSaveChanges}
+                disabled={saving}
+              >
+                {saving ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <>
+                    <Ionicons name="save" size={20} color="#fff" style={styles.buttonIcon} />
+                    <Text style={styles.saveButtonText}>Salvar Alterações</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
           </ScrollView>
         )}
       </KeyboardAvoidingView>
@@ -525,7 +878,56 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontWeight: 'bold',
-  }
+  },
+  customCodeContainer: {
+    marginTop: 16,
+    marginBottom: 16,
+  },
+  customCodeLabel: {
+    color: '#aaa',
+    fontSize: 14,
+    marginBottom: 8,
+  },
+  customCodeInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#444',
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: '#555',
+    borderRadius: 8,
+  },
+  customCodeInput: {
+    flex: 1,
+    paddingVertical: 12,
+    color: 'white',
+    fontSize: 18,
+    textAlign: 'center',
+    textTransform: 'uppercase',
+    letterSpacing: 2,
+  },
+  customCodeActions: {
+    marginTop: 12,
+  },
+  customCodeButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 30,
+    borderRadius: 8,
+    alignItems: 'center',
+    width: '100%',
+  },
+  confirmButton: {
+    backgroundColor: '#7B68EE',
+  },
+  disabledButton: {
+    backgroundColor: '#555',
+    opacity: 0.5,
+  },
+  customCodeButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
 });
 
 export default RepublicSettingsScreen;
