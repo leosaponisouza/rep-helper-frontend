@@ -492,48 +492,49 @@ export const calendarTheme = {
  * Cores principais do app para fácil referência
  */
 export const colors = {
-  background: {
-    primary: '#222',
-    secondary: '#333',
-    tertiary: '#444'
-  },
-  text: {
-    primary: '#fff',
-    secondary: '#ccc',
-    tertiary: '#aaa',
-    disabled: '#666'
-  },
   primary: {
     main: '#7B68EE',
-    light: 'rgba(123, 104, 238, 0.2)',
-    dark: '#6A5ACD'
+    light: 'rgba(123, 104, 238, 0.1)',
+    dark: '#5a4ac9',
   },
   success: {
     main: '#4CAF50',
-    light: 'rgba(76, 175, 80, 0.2)',
-    dark: '#388E3C'
-  },
-  warning: {
-    main: '#FFC107',
-    light: 'rgba(255, 193, 7, 0.2)',
-    dark: '#FFA000'
+    light: 'rgba(76, 175, 80, 0.1)',
+    dark: '#388E3C',
   },
   error: {
     main: '#FF6347',
-    light: 'rgba(255, 99, 71, 0.2)',
-    dark: '#E53935'
+    light: 'rgba(255, 99, 71, 0.1)',
+    dark: '#E53935',
+  },
+  warning: {
+    main: '#FFA726',
+    light: 'rgba(255, 167, 38, 0.1)',
+    dark: '#F57C00',
+  },
+  background: {
+    primary: '#222',
+    secondary: '#333',
+    tertiary: '#444',
+    paper: '#2A2A2A',
+  },
+  text: {
+    primary: '#FFFFFF',
+    secondary: 'rgba(255, 255, 255, 0.7)',
+    tertiary: 'rgba(255, 255, 255, 0.5)',
   },
   grey: {
-    100: '#f5f5f5',
-    200: '#eeeeee',
-    300: '#e0e0e0',
-    400: '#bdbdbd',
-    500: '#9e9e9e',
-    600: '#757575',
-    700: '#616161',
-    800: '#424242',
-    900: '#212121'
-  }
+    50: '#F5F5F5',
+    100: '#EEEEEE',
+    200: '#E0E0E0',
+    300: '#BDBDBD',
+    400: '#9E9E9E',
+    500: '#757575',
+    600: '#616161',
+    700: '#424242',
+    800: '#212121',
+    900: '#121212',
+  },
 };
 
 /**
