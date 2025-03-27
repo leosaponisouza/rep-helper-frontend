@@ -31,6 +31,17 @@ import api from '@/src/services/api';
 
 const { width } = Dimensions.get('window');
 
+// Função para navegar com timeout
+const navigateWithTimeout = (mainRoute: string, detailRoute?: string) => {
+  router.push(mainRoute as any);
+  
+  if (detailRoute) {
+    setTimeout(() => {
+      router.push(detailRoute as any);
+    }, 100); // 100ms de delay para garantir que a primeira navegação seja concluída
+  }
+};
+
 // Componente simples para exibir um evento (não usa o EventItem completo)
 const SimpleEventCard = ({ 
   title, 
@@ -188,7 +199,7 @@ const HomeScreen = () => {
   
   // Função para navegar para os detalhes das tarefas
   const handleTaskPress = useCallback((taskId: number) => {
-    router.push(`/(panel)/tasks/${taskId}`);
+    navigateWithTimeout('/(panel)/tasks', `/(panel)/tasks/${taskId}`);
   }, []);
   
   // Controlar exibição do painel de notificações
@@ -279,8 +290,7 @@ const HomeScreen = () => {
             
             <TouchableOpacity 
               style={styles.profileButton}
-              // @ts-ignore - Ignorar erro de tipagem temporariamente
-              onPress={() => router.push('/(panel)/settings/account')}
+              onPress={() => navigateWithTimeout('/(panel)/settings', '/(panel)/settings/account')}
             >
               {profileImageUrl ? (
                 <Image 
@@ -348,7 +358,7 @@ const HomeScreen = () => {
         <View style={styles.summaryCardsContainer}>
           <TouchableOpacity 
             style={[styles.summaryCard, styles.primaryCard]}
-            onPress={() => router.push('/(panel)/tasks')}
+            onPress={() => navigateWithTimeout('/(panel)/tasks')}
           >
             <View style={styles.summaryCardContent}>
               <View style={styles.summaryIconContainer}>
@@ -364,7 +374,7 @@ const HomeScreen = () => {
           
           <TouchableOpacity 
             style={[styles.summaryCard, styles.secondaryCard]}
-            onPress={() => router.push('/(panel)/events')}
+            onPress={() => navigateWithTimeout('/(panel)/events')}
           >
             <View style={styles.summaryCardContent}>
               <View style={styles.summaryIconContainer}>
@@ -383,7 +393,7 @@ const HomeScreen = () => {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Resumo Financeiro mensal</Text>
-            <TouchableOpacity onPress={() => router.push('/(panel)/finances')}>
+            <TouchableOpacity onPress={() => navigateWithTimeout('/(panel)/finances')}>
               <Text style={styles.sectionAction}>Ver detalhes</Text>
             </TouchableOpacity>
           </View>
@@ -434,7 +444,7 @@ const HomeScreen = () => {
                 {pendingActions && pendingActions.length > 0 && (
                   <TouchableOpacity
                     style={styles.pendingActionsButton}
-                    onPress={() => router.push('/(panel)/finances')}
+                    onPress={() => navigateWithTimeout('/(panel)/finances')}
                   >
                     <Ionicons name="alert-circle-outline" size={18} color={colors.warning.main} />
                     <Text style={styles.pendingActionsText}>
@@ -458,7 +468,7 @@ const HomeScreen = () => {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Minhas Tarefas</Text>
-            <TouchableOpacity onPress={() => router.push('/(panel)/tasks')}>
+            <TouchableOpacity onPress={() => navigateWithTimeout('/(panel)/tasks')}>
               <Text style={styles.sectionAction}>Ver todas</Text>
             </TouchableOpacity>
           </View>
@@ -490,7 +500,7 @@ const HomeScreen = () => {
                 </Text>
                 <TouchableOpacity 
                   style={styles.createButton}
-                  onPress={() => router.push('/(panel)/tasks/new')}
+                  onPress={() => navigateWithTimeout('/(panel)/tasks', '/(panel)/tasks/new')}
                 >
                   <Text style={styles.createButtonText}>Criar Tarefa</Text>
                 </TouchableOpacity>
@@ -503,7 +513,7 @@ const HomeScreen = () => {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Próximos Eventos</Text>
-            <TouchableOpacity onPress={() => router.push('/(panel)/events')}>
+            <TouchableOpacity onPress={() => navigateWithTimeout('/(panel)/events')}>
               <Text style={styles.sectionAction}>Ver todos</Text>
             </TouchableOpacity>
           </View>
@@ -520,7 +530,7 @@ const HomeScreen = () => {
                   key={`event-${event.id}`}
                   title={event.title}
                   date={event.startDate}
-                  onPress={() => router.push(`/(panel)/events/${event.id}`)}
+                  onPress={() => navigateWithTimeout('/(panel)/events', `/(panel)/events/${event.id}`)}
                 />
               ))
             ) : (
@@ -531,7 +541,7 @@ const HomeScreen = () => {
                 </Text>
                 <TouchableOpacity
                   style={styles.createButton}
-                  onPress={() => router.push('/(panel)/events/new')}
+                  onPress={() => navigateWithTimeout('/(panel)/events', '/(panel)/events/new')}
                 >
                   <Text style={styles.createButtonText}>Criar Evento</Text>
                 </TouchableOpacity>
@@ -541,7 +551,7 @@ const HomeScreen = () => {
             {filteredEvents && filteredEvents.length > 0 && (
               <TouchableOpacity
                 style={styles.createEventButton}
-                onPress={() => router.push('/(panel)/events/new')}
+                onPress={() => navigateWithTimeout('/(panel)/events', '/(panel)/events/new')}
               >
                 <Ionicons name="add-circle-outline" size={24} color={colors.primary.main} />
                 <Text style={styles.createEventButtonText}>Criar Novo Evento</Text>
@@ -577,7 +587,7 @@ const HomeScreen = () => {
       {/* Botão de ação flutuante (FAB) */}
       <TouchableOpacity 
         style={styles.fab} 
-        onPress={() => router.push('/(panel)/quick-actions')}
+        onPress={() => navigateWithTimeout('/(panel)/quick-actions')}
       >
         <Ionicons name="add" size={30} color="#fff" />
       </TouchableOpacity>
