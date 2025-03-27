@@ -37,6 +37,8 @@ const SignUpScreen = () => {
   
   // Estados de foco
   const [nameFocused, setNameFocused] = useState(false);
+  const [nicknameFocused, setNicknameFocused] = useState(false);
+  const [phoneFocused, setPhoneFocused] = useState(false);
   const [emailFocused, setEmailFocused] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
   const [confirmPasswordFocused, setConfirmPasswordFocused] = useState(false);
@@ -49,6 +51,8 @@ const SignUpScreen = () => {
     resolver: zodResolver(signUpSchema),
     defaultValues: {
       name: '',
+      nickname: '',
+      phone: '',
       email: '',
       password: '',
       confirmPassword: ''
@@ -97,6 +101,8 @@ const SignUpScreen = () => {
       
       const userData = {
           name: data.name,
+          nickname: data.nickname,
+          phone: data.phone,
           email: data.email,
           firebaseUid: firebaseUser.uid,
           provider: 'EMAIL',
@@ -241,6 +247,72 @@ const SignUpScreen = () => {
                 <View style={styles.errorContainer}>
                   <Ionicons name="alert-circle" size={18} color="#FF6347" />
                   <Text style={styles.errorText}>{errors.name.message}</Text>
+                </View>
+              )}
+
+              <Controller
+                control={control}
+                name="nickname"
+                render={({ field: { onChange, onBlur, value } }) => (
+                  <View style={[
+                    styles.inputContainer, 
+                    nicknameFocused && styles.inputFocused,
+                    errors.nickname && styles.inputError
+                  ]}>
+                    <Ionicons name="person-circle-outline" size={20} color="#7B68EE" style={styles.inputIcon} />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Apelido (opcional)"
+                      placeholderTextColor="#aaa"
+                      value={value}
+                      onChangeText={onChange}
+                      autoCapitalize="words"
+                      onFocus={() => setNicknameFocused(true)}
+                      onBlur={() => {
+                        setNicknameFocused(false);
+                        onBlur();
+                      }}
+                    />
+                  </View>
+                )}
+              />
+              {errors.nickname && (
+                <View style={styles.errorContainer}>
+                  <Ionicons name="alert-circle" size={18} color="#FF6347" />
+                  <Text style={styles.errorText}>{errors.nickname.message}</Text>
+                </View>
+              )}
+
+              <Controller
+                control={control}
+                name="phone"
+                render={({ field: { onChange, onBlur, value } }) => (
+                  <View style={[
+                    styles.inputContainer, 
+                    phoneFocused && styles.inputFocused,
+                    errors.phone && styles.inputError
+                  ]}>
+                    <Ionicons name="call-outline" size={20} color="#7B68EE" style={styles.inputIcon} />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Telefone (opcional)"
+                      placeholderTextColor="#aaa"
+                      value={value}
+                      onChangeText={onChange}
+                      keyboardType="phone-pad"
+                      onFocus={() => setPhoneFocused(true)}
+                      onBlur={() => {
+                        setPhoneFocused(false);
+                        onBlur();
+                      }}
+                    />
+                  </View>
+                )}
+              />
+              {errors.phone && (
+                <View style={styles.errorContainer}>
+                  <Ionicons name="alert-circle" size={18} color="#FF6347" />
+                  <Text style={styles.errorText}>{errors.phone.message}</Text>
                 </View>
               )}
 
@@ -395,7 +467,7 @@ const SignUpScreen = () => {
               <View style={styles.loginContainer}>
                 <Text style={styles.loginText}>Já tem uma conta?</Text>
                 <Link href="/(auth)/sign-in" asChild>
-                  <TouchableOpacity>
+                  <TouchableOpacity style={styles.loginLinkContainer}>
                     <Text style={styles.loginLink}>Entrar</Text>
                   </TouchableOpacity>
                 </Link>
@@ -422,12 +494,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   scrollContent: {
-    paddingBottom: 40,
+    flexGrow: 1,
+    justifyContent: 'center',
+    paddingVertical: 20,
   },
   headerContainer: {
     alignItems: 'center',
-    marginTop: 20,
-    marginBottom: 24,
+    marginBottom: 30,
   },
   title: {
     fontSize: 28,
@@ -443,6 +516,8 @@ const styles = StyleSheet.create({
   },
   formContainer: {
     width: '100%',
+    maxWidth: 340,
+    alignSelf: 'center',
   },
   inputContainer: {
     flexDirection: 'row',
@@ -505,6 +580,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 4.65,
     elevation: 8,
+    flexDirection: 'row',
   },
   buttonDisabled: {
     backgroundColor: '#5a5a5a',
@@ -522,11 +598,16 @@ const styles = StyleSheet.create({
   loginContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
+    alignItems: 'center',
     marginTop: 20,
   },
   loginText: {
     color: '#fff',
     fontSize: 16,
+    marginRight: 8,
+  },
+  loginLinkContainer: {
+    marginLeft: 4,
   },
   loginLink: {
     fontWeight: 'bold',

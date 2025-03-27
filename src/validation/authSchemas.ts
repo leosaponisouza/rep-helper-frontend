@@ -21,6 +21,15 @@ const errorMessages = {
     max: 'O nome não pode ter mais de 100 caracteres',
     required: 'Nome é obrigatório',
   },
+  nickname: {
+    min: 'O apelido deve ter pelo menos 2 caracteres',
+    max: 'O apelido não pode ter mais de 30 caracteres',
+    required: 'Apelido é obrigatório',
+  },
+  phone: {
+    invalid: 'Por favor, insira um número de telefone válido',
+    required: 'Telefone é obrigatório',
+  },
   confirmPassword: {
     match: 'As senhas não coincidem',
     required: 'Confirmação de senha é obrigatória',
@@ -49,6 +58,15 @@ export const signUpSchema = z
       .min(2, { message: errorMessages.name.min })
       .max(100, { message: errorMessages.name.max })
       .trim(),
+    nickname: z
+      .string()
+      .min(2, { message: errorMessages.nickname.min })
+      .max(30, { message: errorMessages.nickname.max })
+      .trim()
+      .optional(),
+    phone: z
+      .string()
+      .optional(),
     email: z
       .string({ required_error: errorMessages.email.required })
       .min(1, { message: errorMessages.email.required })

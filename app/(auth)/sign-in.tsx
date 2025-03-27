@@ -298,7 +298,7 @@ const LoginScreen = () => {
                             <View style={styles.signupContainer}>
                                 <Text style={styles.signupText}>Não tem uma conta?</Text>
                                 <Link href="/(auth)/sign-up" asChild>
-                                    <TouchableOpacity>
+                                    <TouchableOpacity style={styles.signupLinkContainer}>
                                         <Text style={styles.signupLink}>Cadastre-se</Text>
                                     </TouchableOpacity>
                                 </Link>
@@ -321,15 +321,14 @@ const styles = StyleSheet.create({
     },
     container: {
         flex: 1,
-        justifyContent: 'space-between',
+        justifyContent: 'center',
         alignItems: 'center',
         padding: 24,
         backgroundColor: '#222',
     },
     logoContainer: {
         alignItems: 'center',
-        marginTop: 40,
-        marginBottom: 20,
+        marginBottom: 40,
     },
     logo: {
         fontSize: 38,
@@ -346,7 +345,6 @@ const styles = StyleSheet.create({
     formContainer: {
         width: '100%',
         maxWidth: 340,
-        marginVertical: 20,
     },
     inputContainer: {
         flexDirection: 'row',
@@ -435,6 +433,10 @@ const styles = StyleSheet.create({
     signupText: {
         color: '#ccc',
         fontSize: 15,
+        marginRight: 8,
+    },
+    signupLinkContainer: {
+        marginLeft: 4,
     },
     signupLink: {
         fontWeight: 'bold',

@@ -547,16 +547,6 @@ const HomeScreen = () => {
                 </TouchableOpacity>
               </View>
             )}
-            
-            {filteredEvents && filteredEvents.length > 0 && (
-              <TouchableOpacity
-                style={styles.createEventButton}
-                onPress={() => navigateWithTimeout('/(panel)/events', '/(panel)/events/new')}
-              >
-                <Ionicons name="add-circle-outline" size={24} color={colors.primary.main} />
-                <Text style={styles.createEventButtonText}>Criar Novo Evento</Text>
-              </TouchableOpacity>
-            )}
           </View>
         </View>
         
