@@ -16,9 +16,6 @@ const firebaseConfig = {
   appId: extra.firebaseAppId
 };
 
-// Log para debug - remova em produção
-console.log('Firebase Config:', JSON.stringify(firebaseConfig));
-
 // Inicializar Firebase
 const app = initializeApp(firebaseConfig);
 
@@ -41,7 +38,7 @@ export const getFreshFirebaseToken = async (forceRefresh: boolean = false): Prom
   try {
     return await getIdToken(auth.currentUser, forceRefresh);
   } catch (error) {
-    console.error('Erro ao obter token Firebase:', error);
+    // Removendo log de erro para produção
     throw error;
   }
 };

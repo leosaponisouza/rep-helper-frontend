@@ -422,18 +422,21 @@ export class ErrorHandler {
    * Método de log de erros (pode ser integrado com serviço de logging)
    */
   static logError(error: ErrorDetails): void {
-    const logPrefix = `[${error.severity?.toUpperCase() || 'ERROR'}] [${error.type.toUpperCase()}]`;
-    const logData = {
-      code: error.code,
-      timestamp: error.timestamp || new Date().toISOString(),
-      context: error.context || {},
-      platform: Platform.OS,
-      appVersion: Platform.Version,
-      originalError: error.originalError
-    };
-    
-    // Log no console para desenvolvimento
-    console.error(`${logPrefix} ${error.message}`, logData);
+    // Em ambiente de produção, não exibimos logs no console
+    if (__DEV__) {
+      const logPrefix = `[${error.severity?.toUpperCase() || 'ERROR'}] [${error.type.toUpperCase()}]`;
+      const logData = {
+        code: error.code,
+        timestamp: error.timestamp || new Date().toISOString(),
+        context: error.context || {},
+        platform: Platform.OS,
+        appVersion: Platform.Version,
+        originalError: error.originalError
+      };
+      
+      // Log no console apenas para desenvolvimento
+      console.error(`${logPrefix} ${error.message}`, logData);
+    }
     
     // Aqui você poderia enviar o erro para um serviço de monitoramento
     // como Sentry, Firebase Crashlytics, etc.

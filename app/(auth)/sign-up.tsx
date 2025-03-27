@@ -24,18 +24,16 @@ import { Link, useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { ErrorHandler } from '../../src/utils/errorHandling';
 import { checkApiConnection } from '../../src/services/api';
+import { useForm, Controller } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { signUpSchema, SignUpFormData } from '../../src/validation/authSchemas';
 
 const SignUpScreen = () => {
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [networkStatus, setNetworkStatus] = useState({ connected: true, checking: true });
-  const [debugInfo, setDebugInfo] = useState('Aguardando ação...');
   
   // Estados de foco
   const [nameFocused, setNameFocused] = useState(false);
@@ -45,100 +43,69 @@ const SignUpScreen = () => {
 
   const { login } = useAuth();
   const router = useRouter();
+  
+  // Configuração do React Hook Form com Zod
+  const { control, handleSubmit, formState: { errors } } = useForm<SignUpFormData>({
+    resolver: zodResolver(signUpSchema),
+    defaultValues: {
+      name: '',
+      email: '',
+      password: '',
+      confirmPassword: ''
+    }
+  });
 
   // Verificar conectividade ao montar
   React.useEffect(() => {
-    checkNetworkConnectivity();
+    // Em produção, não precisamos verificar a conectividade automaticamente
+    // checkNetworkConnectivity();
   }, []);
 
   const checkNetworkConnectivity = async () => {
     try {
-      setDebugInfo('Verificando conectividade...');
       const isConnected = await checkApiConnection();
       setNetworkStatus({ connected: isConnected, checking: false });
-      setDebugInfo(`Conectividade: ${isConnected ? 'OK' : 'Falha'}`);
     } catch (error: unknown) {
       setNetworkStatus({ connected: false, checking: false });
-      setDebugInfo(`Erro de conectividade: ${error instanceof Error ? error.message : 'Desconhecido'}`);
-      console.log('Falha na verificação de conexão:', error);
+      // Removendo logs para produção
     }
   };
 
-  const handleSignUp = async () => {
+  const handleSignUp = async (data: SignUpFormData) => {
     try {
-      setDebugInfo('Iniciando cadastro...');
       Keyboard.dismiss();
-
-      // Validação de campos obrigatórios
-      if (!name || !email || !password || !confirmPassword) {
-        setError('Por favor, preencha todos os campos.');
-        setDebugInfo('Erro: campos incompletos');
-        return;
-      }
-
-      // // Validação de formato de email
-      // const emailRegex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;
-      // if (!emailRegex.test(email)) {
-      //   setError('Por favor, insira um email válido.');
-      //   setDebugInfo('Erro: email inválido');
-      //   return;
-      // }
-
-      // Validação de senhas
-      if (password !== confirmPassword) {
-        setError('As senhas não coincidem.');
-        setDebugInfo('Erro: senhas não coincidem');
-        return;
-      }
-
-      if (password.length < 6) {
-        setError('A senha deve ter pelo menos 6 caracteres.');
-        setDebugInfo('Erro: senha muito curta');
-        return;
-      }
-
       setLoading(true);
       setError('');
-      setDebugInfo('Verificando conexão com API...');
 
       // Verificar conexão com a API antes de tentar cadastro
       const isConnected = await checkApiConnection();
       if (!isConnected) {
-        setDebugInfo('Erro: Sem conexão com servidor');
         throw new Error('Sem conexão com o servidor. Verifique sua internet.');
       }
       
-      setDebugInfo('Criando usuário no Firebase...');
-      
       // 1. Criar o usuário no Firebase Auth
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
       const firebaseUser = userCredential.user;
       
-      setDebugInfo('Obtendo token Firebase...');
       const firebaseToken = await firebaseUser.getIdToken(true);
 
       // 2. Criar o usuário no backend com timeout
       const controller = new AbortController();
       const timeoutId = setTimeout(() => {
-        setDebugInfo('Timeout na requisição ao backend');
         controller.abort();
       }, 15000);
       
       const userData = {
-          name,
-          email,
+          name: data.name,
+          email: data.email,
           firebaseUid: firebaseUser.uid,
           provider: 'EMAIL',
           isAdmin: true,
           status: 'active'
       };
-
-      setDebugInfo('Enviando dados para backend...');
       
       try {
-        console.log('URL da API:', api.defaults.baseURL);
-        console.log('Dados enviados:', userData);
-        console.log('Token Firebase:', firebaseToken.substring(0, 20) + '...');
+        // Removendo logs de dados sensíveis para produção
         
         const response = await api.post('api/v1/auth/signup', userData, {
           headers: {
@@ -149,27 +116,19 @@ const SignUpScreen = () => {
         });
         
         clearTimeout(timeoutId);
-        setDebugInfo('Resposta do backend recebida');
         
-        // Debug da resposta
-        console.log('Resposta do backend:', JSON.stringify(response.data, null, 2));
-        console.log('Token tipo:', typeof response.data.token);
-        console.log('Token valor:', response.data.token);
-        console.log('User tipo:', typeof response.data.user);
+        // Removendo logs de depuração para produção
         
         // Verificar se os dados necessários existem
         if (!response.data.token) {
-          setDebugInfo('Token ausente na resposta');
           throw new Error('Token de autenticação não encontrado na resposta');
         }
         
         if (!response.data.user) {
-          setDebugInfo('Dados do usuário ausentes na resposta');
           throw new Error('Dados do usuário não encontrados na resposta');
         }
         
         // 3. Login (armazenar o token e dados do usuário)
-        setDebugInfo('Realizando login...');
         
         // Converter token para string se não for
         const tokenString = typeof response.data.token === 'string' 
@@ -187,35 +146,28 @@ const SignUpScreen = () => {
           refreshTokenString
         );
         
-        setDebugInfo('Redirecionando...');
         // 4. Navegar para a tela de escolha de república 
         router.replace('/(republic)/choice');
       } catch (apiError: unknown) {
         const errorMessage = apiError instanceof Error ? apiError.message : 'Erro desconhecido';
-        setDebugInfo(`Erro na API: ${errorMessage}`);
-        console.error('Erro na API:', apiError);
+        // Removendo logs de depuração para produção
         
         // Se o usuário foi criado no Firebase, mas falhou no backend
         // Podemos tentar excluir o usuário do Firebase
         try {
           if (firebaseUser) {
-            setDebugInfo('Tentando excluir usuário Firebase após falha');
             await firebaseUser.delete();
           }
-        } catch (deleteError: unknown) {
-          const errorMessage = deleteError instanceof Error ? deleteError.message : 'Erro desconhecido';
-          setDebugInfo(`Erro ao excluir usuário Firebase: ${errorMessage}`);
-          console.error('Erro ao excluir usuário Firebase após falha no backend:', deleteError);
+        } catch (deleteError) {
+          // Removendo logs de erro para produção
         }
         
         throw apiError;
       }
-    } catch (error) {
+    } catch (error: unknown) {
       const parsedError = await ErrorHandler.parseError(error);
       setError(parsedError.message);
-      setDebugInfo(`Erro final: ${parsedError.message} (${parsedError.type})`);
-      ErrorHandler.logError(parsedError);
-      Alert.alert("Erro no cadastro", `${parsedError.message}\n\nTipo: ${parsedError.type}`);
+      // Removendo logs de erro para produção
     } finally {
       setLoading(false);
     }
@@ -243,8 +195,10 @@ const SignUpScreen = () => {
             showsVerticalScrollIndicator={false}
           >
             <View style={styles.headerContainer}>
-              <Text style={styles.title}>Crie sua Conta</Text>
-              <Text style={styles.subtitle}>Preencha os campos abaixo para se cadastrar</Text>
+              <Text style={styles.title}>Criar Conta</Text>
+              <Text style={styles.subtitle}>
+                Preencha os campos abaixo para criar sua conta
+              </Text>
             </View>
 
             {!networkStatus.connected && !networkStatus.checking && (
@@ -257,85 +211,163 @@ const SignUpScreen = () => {
             )}
 
             <View style={styles.formContainer}>
-              <View style={[
-                styles.inputContainer, 
-                nameFocused && styles.inputFocused
-              ]}>
-                <Ionicons name="person" size={20} color="#7B68EE" style={styles.inputIcon} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="Nome Completo"
-                  placeholderTextColor="#aaa"
-                  value={name}
-                  onChangeText={setName}
-                  autoCapitalize="words"
-                  onFocus={() => setNameFocused(true)}
-                  onBlur={() => setNameFocused(false)}
-                  testID="name-input"
-                />
-              </View>
+              <Controller
+                control={control}
+                name="name"
+                render={({ field: { onChange, onBlur, value } }) => (
+                  <View style={[
+                    styles.inputContainer, 
+                    nameFocused && styles.inputFocused,
+                    errors.name && styles.inputError
+                  ]}>
+                    <Ionicons name="person-outline" size={20} color="#7B68EE" style={styles.inputIcon} />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Nome completo"
+                      placeholderTextColor="#aaa"
+                      value={value}
+                      onChangeText={onChange}
+                      autoCapitalize="words"
+                      onFocus={() => setNameFocused(true)}
+                      onBlur={() => {
+                        setNameFocused(false);
+                        onBlur();
+                      }}
+                    />
+                  </View>
+                )}
+              />
+              {errors.name && (
+                <View style={styles.errorContainer}>
+                  <Ionicons name="alert-circle" size={18} color="#FF6347" />
+                  <Text style={styles.errorText}>{errors.name.message}</Text>
+                </View>
+              )}
 
-              <View style={[
-                styles.inputContainer, 
-                emailFocused && styles.inputFocused
-              ]}>
-                <Ionicons name="mail" size={20} color="#7B68EE" style={styles.inputIcon} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="Email"
-                  placeholderTextColor="#aaa"
-                  value={email}
-                  onChangeText={setEmail}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  onFocus={() => setEmailFocused(true)}
-                  onBlur={() => setEmailFocused(false)}
-                  testID="email-input"
-                />
-              </View>
+              <Controller
+                control={control}
+                name="email"
+                render={({ field: { onChange, onBlur, value } }) => (
+                  <View style={[
+                    styles.inputContainer, 
+                    emailFocused && styles.inputFocused,
+                    errors.email && styles.inputError
+                  ]}>
+                    <Ionicons name="mail-outline" size={20} color="#7B68EE" style={styles.inputIcon} />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Email"
+                      placeholderTextColor="#aaa"
+                      value={value}
+                      onChangeText={onChange}
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      onFocus={() => setEmailFocused(true)}
+                      onBlur={() => {
+                        setEmailFocused(false);
+                        onBlur();
+                      }}
+                    />
+                  </View>
+                )}
+              />
+              {errors.email && (
+                <View style={styles.errorContainer}>
+                  <Ionicons name="alert-circle" size={18} color="#FF6347" />
+                  <Text style={styles.errorText}>{errors.email.message}</Text>
+                </View>
+              )}
 
-              <View style={[
-                styles.inputContainer, 
-                passwordFocused && styles.inputFocused
-              ]}>
-                <Ionicons name="lock-closed" size={20} color="#7B68EE" style={styles.inputIcon} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="Senha"
-                  placeholderTextColor="#aaa"
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry={!showPassword}
-                  onFocus={() => setPasswordFocused(true)}
-                  onBlur={() => setPasswordFocused(false)}
-                  testID="password-input"
-                />
-                <TouchableOpacity onPress={toggleShowPassword} style={styles.eyeIcon}>
-                  <Ionicons name={showPassword ? 'eye-off' : 'eye'} size={20} color="#7B68EE" />
-                </TouchableOpacity>
-              </View>
+              <Controller
+                control={control}
+                name="password"
+                render={({ field: { onChange, onBlur, value } }) => (
+                  <View style={[
+                    styles.inputContainer, 
+                    passwordFocused && styles.inputFocused,
+                    errors.password && styles.inputError
+                  ]}>
+                    <Ionicons name="lock-closed-outline" size={20} color="#7B68EE" style={styles.inputIcon} />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Senha"
+                      placeholderTextColor="#aaa"
+                      value={value}
+                      onChangeText={onChange}
+                      secureTextEntry={!showPassword}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      onFocus={() => setPasswordFocused(true)}
+                      onBlur={() => {
+                        setPasswordFocused(false);
+                        onBlur();
+                      }}
+                    />
+                    <TouchableOpacity 
+                      style={styles.passwordToggle} 
+                      onPress={toggleShowPassword}
+                    >
+                      <Ionicons 
+                        name={showPassword ? "eye-off-outline" : "eye-outline"} 
+                        size={20} 
+                        color="#aaa" 
+                      />
+                    </TouchableOpacity>
+                  </View>
+                )}
+              />
+              {errors.password && (
+                <View style={styles.errorContainer}>
+                  <Ionicons name="alert-circle" size={18} color="#FF6347" />
+                  <Text style={styles.errorText}>{errors.password.message}</Text>
+                </View>
+              )}
 
-              <View style={[
-                styles.inputContainer, 
-                confirmPasswordFocused && styles.inputFocused
-              ]}>
-                <Ionicons name="lock-closed" size={20} color="#7B68EE" style={styles.inputIcon} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="Confirmar Senha"
-                  placeholderTextColor="#aaa"
-                  value={confirmPassword}
-                  onChangeText={setConfirmPassword}
-                  secureTextEntry={!showConfirmPassword}
-                  onFocus={() => setConfirmPasswordFocused(true)}
-                  onBlur={() => setConfirmPasswordFocused(false)}
-                  testID="confirm-password-input"
-                />
-                <TouchableOpacity onPress={toggleShowConfirmPassword} style={styles.eyeIcon}>
-                  <Ionicons name={showConfirmPassword ? 'eye-off' : 'eye'} size={20} color="#7B68EE" />
-                </TouchableOpacity>
-              </View>
+              <Controller
+                control={control}
+                name="confirmPassword"
+                render={({ field: { onChange, onBlur, value } }) => (
+                  <View style={[
+                    styles.inputContainer, 
+                    confirmPasswordFocused && styles.inputFocused,
+                    errors.confirmPassword && styles.inputError
+                  ]}>
+                    <Ionicons name="lock-closed-outline" size={20} color="#7B68EE" style={styles.inputIcon} />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Confirmar senha"
+                      placeholderTextColor="#aaa"
+                      value={value}
+                      onChangeText={onChange}
+                      secureTextEntry={!showConfirmPassword}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      onFocus={() => setConfirmPasswordFocused(true)}
+                      onBlur={() => {
+                        setConfirmPasswordFocused(false);
+                        onBlur();
+                      }}
+                    />
+                    <TouchableOpacity 
+                      style={styles.passwordToggle} 
+                      onPress={toggleShowConfirmPassword}
+                    >
+                      <Ionicons 
+                        name={showConfirmPassword ? "eye-off-outline" : "eye-outline"} 
+                        size={20} 
+                        color="#aaa" 
+                      />
+                    </TouchableOpacity>
+                  </View>
+                )}
+              />
+              {errors.confirmPassword && (
+                <View style={styles.errorContainer}>
+                  <Ionicons name="alert-circle" size={18} color="#FF6347" />
+                  <Text style={styles.errorText}>{errors.confirmPassword.message}</Text>
+                </View>
+              )}
 
               {error ? (
                 <View style={styles.errorContainer}>
@@ -344,33 +376,27 @@ const SignUpScreen = () => {
                 </View>
               ) : null}
 
-              {/* Info de debug - remova quando não for mais necessário */}
-              <View style={styles.debugContainer}>
-                <Text style={styles.debugText}>Status: {debugInfo}</Text>
-              </View>
-
               <TouchableOpacity 
-                style={[
-                  styles.button, 
-                  (loading) && styles.buttonDisabled
-                ]} 
-                onPress={handleSignUp}
+                style={[styles.button, loading && styles.buttonDisabled]} 
+                onPress={handleSubmit(handleSignUp)}
                 disabled={loading}
                 activeOpacity={0.8}
-                testID="signup-button"
               >
                 {loading ? (
                   <ActivityIndicator size="small" color="#fff" />
                 ) : (
-                  <Text style={styles.buttonText}>Criar Conta</Text>
+                  <>
+                    <Ionicons name="person-add" size={20} color="#fff" style={styles.buttonIcon} />
+                    <Text style={styles.buttonText}>Criar Conta</Text>
+                  </>
                 )}
               </TouchableOpacity>
 
-              <View style={styles.signInContainer}>
-                <Text style={styles.signInText}>Já tem uma conta? </Text>
+              <View style={styles.loginContainer}>
+                <Text style={styles.loginText}>Já tem uma conta?</Text>
                 <Link href="/(auth)/sign-in" asChild>
                   <TouchableOpacity>
-                    <Text style={styles.signInLink}>Entrar</Text>
+                    <Text style={styles.loginLink}>Entrar</Text>
                   </TouchableOpacity>
                 </Link>
               </View>
@@ -383,152 +409,145 @@ const SignUpScreen = () => {
 };
 
 const styles = StyleSheet.create({
-    safeArea: {
-        flex: 1,
-        backgroundColor: '#222',
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#222',
+  },
+  keyboardView: {
+    flex: 1,
+  },
+  container: {
+    flex: 1,
+    backgroundColor: '#222',
+    paddingHorizontal: 24,
+  },
+  scrollContent: {
+    paddingBottom: 40,
+  },
+  headerContainer: {
+    alignItems: 'center',
+    marginTop: 20,
+    marginBottom: 24,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  subtitle: {
+    fontSize: 16,
+    color: '#aaa',
+    textAlign: 'center',
+  },
+  formContainer: {
+    width: '100%',
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#333',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#444',
+    marginBottom: 16,
+    height: 56,
+    paddingHorizontal: 16,
+  },
+  inputFocused: {
+    borderColor: '#7B68EE',
+    backgroundColor: '#393939',
+  },
+  inputError: {
+    borderColor: '#FF6347',
+  },
+  inputIcon: {
+    marginRight: 12,
+  },
+  input: {
+    flex: 1,
+    color: '#fff',
+    fontSize: 16,
+    height: '100%',
+  },
+  passwordToggle: {
+    padding: 10,
+  },
+  errorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+    backgroundColor: 'rgba(255, 99, 71, 0.15)',
+    padding: 12,
+    borderRadius: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: '#FF6347',
+  },
+  errorText: {
+    color: '#FF6347',
+    marginLeft: 8,
+    fontSize: 14,
+    flex: 1,
+  },
+  button: {
+    backgroundColor: '#7B68EE',
+    height: 56,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginVertical: 16,
+    shadowColor: "#7B68EE",
+    shadowOffset: {
+      width: 0,
+      height: 4,
     },
-    keyboardView: {
-        flex: 1,
-    },
-    container: {
-        flex: 1,
-        backgroundColor: '#222',
-        paddingHorizontal: 24,
-    },
-    scrollContent: {
-        paddingBottom: 40,
-    },
-    headerContainer: {
-        alignItems: 'center',
-        marginTop: 20,
-        marginBottom: 24,
-    },
-    title: {
-        fontSize: 28,
-        fontWeight: 'bold',
-        color: '#fff',
-        marginBottom: 12,
-        textAlign: 'center',
-    },
-    subtitle: {
-        fontSize: 16,
-        color: '#aaa',
-        textAlign: 'center',
-    },
-    formContainer: {
-        width: '100%',
-    },
-    inputContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#333',
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: '#444',
-        marginBottom: 16,
-        height: 56,
-        paddingHorizontal: 16,
-    },
-    inputFocused: {
-        borderColor: '#7B68EE',
-        backgroundColor: '#393939',
-    },
-    inputIcon: {
-        marginRight: 12,
-    },
-    input: {
-        flex: 1,
-        color: '#fff',
-        fontSize: 16,
-        height: '100%',
-    },
-    eyeIcon: {
-        padding: 10,
-    },
-    errorContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 16,
-        backgroundColor: 'rgba(255, 99, 71, 0.15)',
-        padding: 12,
-        borderRadius: 8,
-        borderLeftWidth: 3,
-        borderLeftColor: '#FF6347',
-    },
-    errorText: {
-        color: '#FF6347',
-        marginLeft: 8,
-        fontSize: 14,
-        flex: 1,
-    },
-    button: {
-        backgroundColor: '#7B68EE',
-        height: 56,
-        borderRadius: 12,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginVertical: 16,
-        shadowColor: "#7B68EE",
-        shadowOffset: {
-            width: 0,
-            height: 4,
-        },
-        shadowOpacity: 0.3,
-        shadowRadius: 4.65,
-        elevation: 8,
-    },
-    buttonDisabled: {
-        backgroundColor: '#5a5a5a',
-        shadowOpacity: 0,
-        elevation: 0,
-    },
-    buttonText: {
-        color: '#fff',
-        fontSize: 18,
-        fontWeight: 'bold',
-    },
-    signInContainer: {
-        flexDirection: 'row',
-        justifyContent: 'center',
-        marginTop: 20,
-    },
-    signInText: {
-        color: '#fff',
-        fontSize: 16,
-    },
-    signInLink: {
-        fontWeight: 'bold',
-        color: '#7B68EE',
-        fontSize: 16,
-    },
-    networkAlert: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: '#FF4757',
-      paddingVertical: 10,
-      paddingHorizontal: 16,
-      borderRadius: 8,
-      marginBottom: 20,
-      width: '100%',
-    },
-    networkAlertText: {
-      color: 'white',
-      marginLeft: 8,
-      fontWeight: '500',
-    },
-    // Estilos para debug
-    debugContainer: {
-      padding: 10,
-      backgroundColor: '#333',
-      borderRadius: 8,
-      marginBottom: 16,
-      borderLeftWidth: 3,
-      borderLeftColor: '#7B68EE',
-    },
-    debugText: {
-      color: '#aaa',
-      fontSize: 12,
-    }
+    shadowOpacity: 0.3,
+    shadowRadius: 4.65,
+    elevation: 8,
+  },
+  buttonDisabled: {
+    backgroundColor: '#5a5a5a',
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  buttonIcon: {
+    marginRight: 8,
+  },
+  buttonText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  loginContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 20,
+  },
+  loginText: {
+    color: '#fff',
+    fontSize: 16,
+  },
+  loginLink: {
+    fontWeight: 'bold',
+    color: '#7B68EE',
+    fontSize: 16,
+  },
+  networkAlert: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FF4757',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginBottom: 20,
+    width: '100%',
+  },
+  networkAlertText: {
+    color: 'white',
+    marginLeft: 8,
+    fontWeight: '500',
+  },
 });
 
 export default SignUpScreen;

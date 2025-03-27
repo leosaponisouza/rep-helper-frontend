@@ -22,10 +22,11 @@ import api from '../../src/services/api';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { ErrorHandler } from '../../src/utils/errorHandling';
 import { checkApiConnection } from '../../src/services/api';
+import { useForm, Controller } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { loginSchema, LoginFormData } from '../../src/validation/authSchemas';
 
 const LoginScreen = () => {
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [showPassword, setShowPassword] = useState(false);
@@ -35,10 +36,20 @@ const LoginScreen = () => {
 
     const { login } = useAuth();
     const router = useRouter();
+    
+    // Configuração do React Hook Form com Zod
+    const { control, handleSubmit, formState: { errors } } = useForm<LoginFormData>({
+        resolver: zodResolver(loginSchema),
+        defaultValues: {
+            email: '',
+            password: ''
+        }
+    });
 
     // Verificar conectividade na montagem do componente
     useEffect(() => {
-        checkNetworkConnectivity();
+        // Em produção, não precisamos verificar a conectividade automaticamente
+        // checkNetworkConnectivity();
     }, []);
 
     const checkNetworkConnectivity = async () => {
@@ -47,31 +58,16 @@ const LoginScreen = () => {
             setNetworkStatus({ connected: isConnected, checking: false });
         } catch (error) {
             setNetworkStatus({ connected: false, checking: false });
-            console.log('Falha na verificação de conexão:', error);
+            // Removendo log para produção
         }
     };
 
-    const handleLogin = async () => {
+    const handleLogin = async (data: LoginFormData) => {
         Keyboard.dismiss();
         setLoading(true);
         setError('');
 
         try {
-            // Validação de formulário
-            if (!email.trim()) {
-                throw new Error('Por favor, insira seu email.');
-            }
-
-            if (!password) {
-                throw new Error('Por favor, insira sua senha.');
-            }
-
-            // Validação de formato de email
-            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-            if (!emailRegex.test(email)) {
-                throw new Error('Por favor, insira um email válido.');
-            }
-
             // Verificar conexão com a API antes de tentar login
             const isConnected = await checkApiConnection();
             if (!isConnected) {
@@ -80,7 +76,7 @@ const LoginScreen = () => {
 
             try {
                 // Autenticação Firebase
-                await signInWithEmailAndPassword(auth, email, password);
+                await signInWithEmailAndPassword(auth, data.email, data.password);
             } catch (firebaseError: any) {
                 // Tratar erros do Firebase Authentication
                 // Para erros de senha/email incorretos, usar mensagem genérica de segurança
@@ -157,7 +153,7 @@ const LoginScreen = () => {
             // Usar o utilitário de tratamento de erros
             const parsedError = await ErrorHandler.parseError(error);
             setError(parsedError.message);
-            ErrorHandler.logError(parsedError);
+            // Removendo log de erro para produção
         } finally {
             setLoading(false);
         }
@@ -191,50 +187,85 @@ const LoginScreen = () => {
                         )}
 
                         <View style={styles.formContainer}>
-                            <View style={[
-                                styles.inputContainer, 
-                                emailFocused && styles.inputFocused
-                            ]}>
-                                <Ionicons name="mail-outline" size={20} color="#7B68EE" style={styles.inputIcon} />
-                                <TextInput
-                                    style={styles.input}
-                                    placeholder="Email"
-                                    placeholderTextColor="#aaa"
-                                    value={email}
-                                    onChangeText={setEmail}
-                                    keyboardType="email-address"
-                                    autoCapitalize="none"
-                                    autoCorrect={false}
-                                    onFocus={() => setEmailFocused(true)}
-                                    onBlur={() => setEmailFocused(false)}
-                                    testID="email-input"
-                                />
-                            </View>
+                            <Controller
+                                control={control}
+                                name="email"
+                                render={({ field: { onChange, onBlur, value } }) => (
+                                    <View style={[
+                                        styles.inputContainer, 
+                                        emailFocused && styles.inputFocused,
+                                        errors.email && styles.inputError
+                                    ]}>
+                                        <Ionicons name="mail-outline" size={20} color="#7B68EE" style={styles.inputIcon} />
+                                        <TextInput
+                                            style={styles.input}
+                                            placeholder="Email"
+                                            placeholderTextColor="#aaa"
+                                            value={value}
+                                            onChangeText={onChange}
+                                            keyboardType="email-address"
+                                            autoCapitalize="none"
+                                            autoCorrect={false}
+                                            onFocus={() => setEmailFocused(true)}
+                                            onBlur={() => {
+                                                setEmailFocused(false);
+                                                onBlur();
+                                            }}
+                                        />
+                                    </View>
+                                )}
+                            />
+                            {errors.email && (
+                                <View style={styles.errorContainer}>
+                                    <Ionicons name="alert-circle" size={18} color="#FF6347" />
+                                    <Text style={styles.errorText}>{errors.email.message}</Text>
+                                </View>
+                            )}
 
-                            <View style={[
-                                styles.inputContainer, 
-                                passwordFocused && styles.inputFocused
-                            ]}>
-                                <Ionicons name="lock-closed-outline" size={20} color="#7B68EE" style={styles.inputIcon} />
-                                <TextInput
-                                    style={styles.input}
-                                    placeholder="Senha"
-                                    placeholderTextColor="#aaa"
-                                    value={password}
-                                    onChangeText={setPassword}
-                                    secureTextEntry={!showPassword}
-                                    onFocus={() => setPasswordFocused(true)}
-                                    onBlur={() => setPasswordFocused(false)}
-                                    testID="password-input"
-                                />
-                                <TouchableOpacity 
-                                    onPress={toggleShowPassword} 
-                                    style={styles.eyeIcon}
-                                    accessibilityLabel={showPassword ? "Esconder senha" : "Mostrar senha"}
-                                >
-                                    <Ionicons name={showPassword ? 'eye-off' : 'eye'} size={20} color="#7B68EE" />
-                                </TouchableOpacity>
-                            </View>
+                            <Controller
+                                control={control}
+                                name="password"
+                                render={({ field: { onChange, onBlur, value } }) => (
+                                    <View style={[
+                                        styles.inputContainer, 
+                                        passwordFocused && styles.inputFocused,
+                                        errors.password && styles.inputError
+                                    ]}>
+                                        <Ionicons name="lock-closed-outline" size={20} color="#7B68EE" style={styles.inputIcon} />
+                                        <TextInput
+                                            style={styles.input}
+                                            placeholder="Senha"
+                                            placeholderTextColor="#aaa"
+                                            value={value}
+                                            onChangeText={onChange}
+                                            secureTextEntry={!showPassword}
+                                            autoCapitalize="none"
+                                            autoCorrect={false}
+                                            onFocus={() => setPasswordFocused(true)}
+                                            onBlur={() => {
+                                                setPasswordFocused(false);
+                                                onBlur();
+                                            }}
+                                        />
+                                        <TouchableOpacity 
+                                            style={styles.passwordToggle} 
+                                            onPress={toggleShowPassword}
+                                        >
+                                            <Ionicons 
+                                                name={showPassword ? "eye-off-outline" : "eye-outline"} 
+                                                size={20} 
+                                                color="#aaa" 
+                                            />
+                                        </TouchableOpacity>
+                                    </View>
+                                )}
+                            />
+                            {errors.password && (
+                                <View style={styles.errorContainer}>
+                                    <Ionicons name="alert-circle" size={18} color="#FF6347" />
+                                    <Text style={styles.errorText}>{errors.password.message}</Text>
+                                </View>
+                            )}
 
                             {error ? (
                                 <View style={styles.errorContainer}>
@@ -244,14 +275,10 @@ const LoginScreen = () => {
                             ) : null}
 
                             <TouchableOpacity 
-                                style={[
-                                    styles.button, 
-                                    (!networkStatus.connected || loading) && styles.buttonDisabled
-                                ]} 
-                                onPress={handleLogin}
-                                disabled={!networkStatus.connected || loading}
-                                accessibilityLabel="Entrar"
-                                testID="login-button"
+                                style={[styles.button, loading && styles.buttonDisabled]} 
+                                onPress={handleSubmit(handleLogin)}
+                                disabled={loading}
+                                activeOpacity={0.8}
                             >
                                 {loading ? (
                                     <ActivityIndicator size="small" color="#fff" />
@@ -260,23 +287,22 @@ const LoginScreen = () => {
                                 )}
                             </TouchableOpacity>
 
-                            <Link href="/(auth)/forgot-password" asChild>
-                                <TouchableOpacity 
-                                    style={styles.forgotPassword}
-                                    accessibilityLabel="Esqueceu sua senha?"
-                                >
-                                    <Text style={styles.link}>Esqueceu sua senha?</Text>
-                                </TouchableOpacity>
-                            </Link>
-                        </View>
+                            <View style={styles.forgotPasswordContainer}>
+                                <Link href="/(auth)/forgot-password" asChild>
+                                    <TouchableOpacity>
+                                        <Text style={styles.forgotPasswordText}>Esqueceu sua senha?</Text>
+                                    </TouchableOpacity>
+                                </Link>
+                            </View>
 
-                        <View style={styles.footer}>
-                            <Text style={styles.signUpText}>Não tem uma conta? </Text>
-                            <Link href="/(auth)/sign-up" asChild>
-                                <TouchableOpacity accessibilityLabel="Criar agora">
-                                    <Text style={styles.signUpLink}>Criar agora</Text>
-                                </TouchableOpacity>
-                            </Link>
+                            <View style={styles.signupContainer}>
+                                <Text style={styles.signupText}>Não tem uma conta?</Text>
+                                <Link href="/(auth)/sign-up" asChild>
+                                    <TouchableOpacity>
+                                        <Text style={styles.signupLink}>Cadastre-se</Text>
+                                    </TouchableOpacity>
+                                </Link>
+                            </View>
                         </View>
                     </View>
                 </TouchableWithoutFeedback>
@@ -346,7 +372,7 @@ const styles = StyleSheet.create({
         fontSize: 16,
         height: '100%',
     },
-    eyeIcon: {
+    passwordToggle: {
         padding: 10,
     },
     errorContainer: {
@@ -391,13 +417,32 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: 'bold',
     },
-    forgotPassword: {
+    forgotPasswordContainer: {
         alignItems: 'center',
         padding: 8,
     },
-    link: {
+    forgotPasswordText: {
         color: '#7B68EE',
         fontSize: 15,
+    },
+    signupContainer: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingVertical: 20,
+        width: '100%',
+    },
+    signupText: {
+        color: '#ccc',
+        fontSize: 15,
+    },
+    signupLink: {
+        fontWeight: 'bold',
+        color: '#7B68EE',
+        fontSize: 15,
+    },
+    inputError: {
+        borderColor: '#FF6347',
     },
     networkAlert: {
         flexDirection: 'row',
@@ -413,22 +458,6 @@ const styles = StyleSheet.create({
         color: 'white',
         marginLeft: 8,
         fontWeight: '500',
-    },
-    footer: {
-        flexDirection: 'row',
-        justifyContent: 'center',
-        alignItems: 'center',
-        paddingVertical: 20,
-        width: '100%',
-    },
-    signUpText: {
-        color: '#ccc',
-        fontSize: 15,
-    },
-    signUpLink: {
-        fontWeight: 'bold',
-        color: '#7B68EE',
-        fontSize: 15,
     },
 });
 

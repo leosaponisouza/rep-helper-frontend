@@ -16,9 +16,7 @@ if (!API_BASE_URL.endsWith('/api/v1')) {
     : `${API_BASE_URL}/api/v1`;
 }
 
-// Log para debug - útil para diagnosticar problemas de conexão
-console.log('API Base URL completa:', API_BASE_URL);
-console.log('Platform:', Platform.OS, Platform.Version);
+// Removendo logs de depuração para produção
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -29,7 +27,7 @@ const api = axios.create({
   timeout: 30000, // Timeout em ms (30 segundos) - aumentado para evitar timeouts prematuros
 });
 
-// Adicionar log para diagnóstico de erros de rede
+// Adicionar log para diagnóstico de erros de rede apenas em desenvolvimento
 if (__DEV__) {
   api.interceptors.request.use(request => {
     console.log('Request:', request.method?.toUpperCase(), request.url);
@@ -47,11 +45,12 @@ api.interceptors.request.use(
       }
       return config;
     } catch (error) {
-      console.error('Error in request interceptor:', error);
+      // Removendo log de erro para produção
       return config;
     }
   },
   async (error) => {
+    // Em produção, apenas registramos o erro através do ErrorHandler
     ErrorHandler.logError(await ErrorHandler.parseError(error));
     return Promise.reject(error);
   }
@@ -95,8 +94,7 @@ api.interceptors.response.use(
           return axios(originalRequest);
         }
       } catch (refreshError) {
-        // Falha na renovação do token
-        console.error('Falha ao renovar token:', refreshError);
+        // Falha na renovação do token - removendo log para produção
       }
     }
     
@@ -114,7 +112,7 @@ export const checkApiConnection = async (): Promise<boolean> => {
     await api.get('api/v1/health', { timeout: 5000 });
     return true;
   } catch (error) {
-    console.error('Falha na verificação de conexão com API:', error);
+    // Removendo log de erro para produção
     return false;
   }
 };
