@@ -414,10 +414,19 @@ const TasksListScreen = () => {
         <View style={styles.headerContent}>
           <Text style={styles.headerTitle}>Tarefas</Text>
           <TouchableOpacity 
-            style={styles.addButton} 
+            style={styles.addButtonContainer} 
             onPress={() => router.push('/(panel)/tasks/create')}
+            activeOpacity={0.9}
           >
-            <Ionicons name="add" size={24} color="white" />
+            <LinearGradient
+              colors={['#9370DB', '#7B68EE', '#6A5ACD']}
+              style={styles.addButton}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            >
+              <Ionicons name="add" size={22} color="white" style={styles.buttonIcon} />
+              <Text style={styles.buttonText}>Nova</Text>
+            </LinearGradient>
           </TouchableOpacity>
         </View>
       </View>
@@ -618,24 +627,36 @@ const styles = StyleSheet.create({
     paddingHorizontal: 40,
   },
   // Botão de adicionar
-  addButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#7B68EE',
-    justifyContent: 'center',
-    alignItems: 'center',
+  addButtonContainer: {
+    borderRadius: 12,
+    overflow: 'hidden',
     ...Platform.select({
       ios: {
         shadowColor: '#7B68EE',
         shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
+        shadowOpacity: 0.4,
+        shadowRadius: 10,
       },
       android: {
-        elevation: 8,
+        elevation: 10,
       },
     }),
+  },
+  addButton: {
+    width: 100,
+    height: 40,
+    borderRadius: 12,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  buttonIcon: {
+    marginRight: 5,
+  },
+  buttonText: {
+    color: 'white',
+    fontWeight: '600',
+    fontSize: 16,
   },
 });
   

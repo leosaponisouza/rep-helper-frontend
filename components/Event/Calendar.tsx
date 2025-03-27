@@ -9,11 +9,24 @@ import {
   Dimensions,
   ActivityIndicator,
 } from 'react-native';
-import { Calendar as RNCalendar } from 'react-native-calendars';
-import { format, parseISO } from 'date-fns';
+import { Calendar as RNCalendar, LocaleConfig, CalendarList } from 'react-native-calendars';
+import { format, parseISO, addMonths, subMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Ionicons } from '@expo/vector-icons';
 import EventItem from './EventItem';
+
+// Configurar localização em português
+LocaleConfig.locales['pt-br'] = {
+  monthNames: [
+    'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 
+    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+  ],
+  monthNamesShort: ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'],
+  dayNames: ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'],
+  dayNamesShort: ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'],
+  today: 'Hoje'
+};
+LocaleConfig.defaultLocale = 'pt-br';
 
 // Obter dimensões da tela
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
@@ -47,7 +60,8 @@ const Calendar: React.FC<CalendarProps> = ({
   const [dayEvents, setDayEvents] = useState<any[]>([]);
   const slideAnim = useRef(new Animated.Value(20)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
-
+  const calendarRef = useRef<any>(null);
+  
   // Organiza os eventos por data
   useEffect(() => {
     const grouped: EventsByDate = {};
@@ -155,51 +169,113 @@ const Calendar: React.FC<CalendarProps> = ({
       />
     );
   }, [onEventPress, currentUserId]);
+  
+  // Função para navegar para o mês anterior
+  const goToPreviousMonth = useCallback(() => {
+    if (selectedDay) {
+      try {
+        const currentDate = parseISO(selectedDay);
+        const newDate = subMonths(currentDate, 1);
+        const newDateString = format(newDate, 'yyyy-MM-dd');
+        setSelectedDay(newDateString);
+        
+        // Se o calendário tem uma referência, podemos usar seus métodos nativos
+        if (calendarRef.current) {
+          calendarRef.current.scrollToMonth(newDateString);
+        }
+      } catch (error) {
+        console.error('Erro ao navegar para o mês anterior:', error);
+      }
+    }
+  }, [selectedDay]);
+  
+  // Função para navegar para o próximo mês
+  const goToNextMonth = useCallback(() => {
+    if (selectedDay) {
+      try {
+        const currentDate = parseISO(selectedDay);
+        const newDate = addMonths(currentDate, 1);
+        const newDateString = format(newDate, 'yyyy-MM-dd');
+        setSelectedDay(newDateString);
+        
+        // Se o calendário tem uma referência, podemos usar seus métodos nativos
+        if (calendarRef.current) {
+          calendarRef.current.scrollToMonth(newDateString);
+        }
+      } catch (error) {
+        console.error('Erro ao navegar para o próximo mês:', error);
+      }
+    }
+  }, [selectedDay]);
 
   return (
     <View style={[styles.container, { height: containerHeight }]}>
-      {/* Calendário */}
-      <View style={styles.calendarContainer}>
-        <View style={styles.monthHeader}>
+      {/* Cabeçalho do mês com setas de navegação */}
+      <View style={styles.monthHeader}>
+        <TouchableOpacity 
+          onPress={goToPreviousMonth}
+          style={styles.monthNavButton}
+          hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
+        >
+          <Ionicons name="chevron-back" size={22} color="#7B68EE" />
+        </TouchableOpacity>
+        
+        <View style={styles.monthTextContainer}>
           <Text style={styles.monthText}>{currentMonth}</Text>
-          <View style={styles.arrowsContainer}>
-            <TouchableOpacity>
-              <Ionicons name="chevron-back" size={24} color="#aaa" />
-            </TouchableOpacity>
-            <TouchableOpacity>
-              <Ionicons name="chevron-forward" size={24} color="#aaa" />
-            </TouchableOpacity>
+          <View style={styles.swipeIndicator}>
+            <View style={styles.swipeDot} />
+            <View style={styles.swipeDot} />
+            <View style={styles.swipeDot} />
           </View>
         </View>
         
-        <RNCalendar
-          current={selectedDay}
-          onDayPress={handleDateSelect}
-          markedDates={markedDates}
-          hideExtraDays={false}
-          theme={{
-            backgroundColor: 'transparent',
-            calendarBackground: 'transparent',
-            textSectionTitleColor: '#aaa',
-            selectedDayBackgroundColor: '#7B68EE',
-            selectedDayTextColor: '#fff',
-            todayTextColor: '#7B68EE',
-            dayTextColor: '#fff',
-            textDisabledColor: '#555',
-            dotColor: '#7B68EE',
-            selectedDotColor: '#fff',
-            arrowColor: '#7B68EE',
-            monthTextColor: '#fff',
-            indicatorColor: '#7B68EE',
-            textDayFontWeight: '300',
-            textMonthFontWeight: 'bold',
-            textDayHeaderFontWeight: '300',
-            textDayFontSize: 14,
-            textMonthFontSize: 16,
-            textDayHeaderFontSize: 13
-          }}
-        />
+        <TouchableOpacity 
+          onPress={goToNextMonth}
+          style={styles.monthNavButton}
+          hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
+        >
+          <Ionicons name="chevron-forward" size={22} color="#7B68EE" />
+        </TouchableOpacity>
       </View>
+      
+      {/* Calendário com scroll horizontal */}
+      <CalendarList
+        ref={calendarRef}
+        current={selectedDay}
+        onDayPress={handleDateSelect}
+        markedDates={markedDates}
+        pastScrollRange={6}
+        futureScrollRange={6}
+        scrollEnabled={true}
+        showScrollIndicator={false}
+        horizontal={true}
+        pagingEnabled={true}
+        calendarWidth={screenWidth}
+        firstDay={0} // Semana começa no domingo
+        theme={{
+          backgroundColor: 'transparent',
+          calendarBackground: 'transparent',
+          textSectionTitleColor: '#aaa',
+          selectedDayBackgroundColor: '#7B68EE',
+          selectedDayTextColor: '#fff',
+          todayTextColor: '#7B68EE',
+          dayTextColor: '#fff',
+          textDisabledColor: '#555',
+          dotColor: '#7B68EE',
+          selectedDotColor: '#fff',
+          arrowColor: '#7B68EE',
+          monthTextColor: '#fff',
+          indicatorColor: '#7B68EE',
+          textDayFontWeight: '300',
+          textMonthFontWeight: 'bold',
+          textDayHeaderFontWeight: '300',
+          textDayFontSize: 14,
+          textMonthFontSize: 16,
+          textDayHeaderFontSize: 13
+        }}
+        // Esconder o cabeçalho padrão do mês
+        renderHeader={(date) => null}
+      />
       
       {/* Eventos */}
       <View style={styles.eventsContainer}>
@@ -225,7 +301,7 @@ const Calendar: React.FC<CalendarProps> = ({
           <>
             {dayEvents.length === 0 ? (
               <View style={styles.noEventsContainer}>
-                <Text style={styles.noEventsText}>Nenhum evento para este dia</Text>
+                <Text style={styles.noEventsText}>Nenhum compromisso para este dia</Text>
               </View>
             ) : (
               <Animated.FlatList
@@ -254,28 +330,42 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#222',
   },
-  calendarContainer: {
-    paddingTop: 5,
-    paddingBottom: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#333',
-  },
   monthHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
+    justifyContent: 'space-between',
     paddingVertical: 10,
+    paddingHorizontal: 15,
+  },
+  monthNavButton: {
+    padding: 5,
+  },
+  monthTextContainer: {
+    alignItems: 'center',
   },
   monthText: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '600',
     color: '#fff',
+    textTransform: 'capitalize',
+    marginBottom: 5,
   },
-  arrowsContainer: {
+  swipeIndicator: {
     flexDirection: 'row',
-    width: 70,
-    justifyContent: 'space-between',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  swipeDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#7B68EE',
+    marginHorizontal: 2,
+    opacity: 0.7,
+  },
+  calendarContainer: {
+    position: 'relative',
+    width: '100%',
   },
   eventsContainer: {
     flex: 1,

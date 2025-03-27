@@ -34,7 +34,7 @@ export default function PanelLayout() {
       <Tabs.Screen
         name="events"
         options={{
-          tabBarLabel: 'Eventos',
+          tabBarLabel: 'Agenda',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="calendar-outline" color={color} size={size} />
           ),

@@ -12,7 +12,7 @@ import {
   Dimensions,
   ActivityIndicator,
   Animated,
-  Platform
+  Platform,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -28,6 +28,7 @@ import TaskItem from '@/components/TaskItem';
 import NotificationCenter from '@/components/NotificationCenter';
 import { Task } from '@/src/models/task.model';
 import api from '@/src/services/api';
+import { LinearGradient } from 'expo-linear-gradient';
 
 const { width } = Dimensions.get('window');
 
@@ -154,11 +155,11 @@ const HomeScreen = () => {
   // Valor animado para o cabeçalho
   const scrollY = useRef(new Animated.Value(0)).current;
   
-  // Animar altura do cabeçalho ao rolar
+  // Calcula a altura do header baseado no scroll
   const headerHeight = scrollY.interpolate({
     inputRange: [0, 100],
-    outputRange: [180, 100],
-    extrapolate: 'clamp'
+    outputRange: [Platform.OS === 'ios' ? 150 : 140, Platform.OS === 'ios' ? 100 : 90],
+    extrapolate: 'clamp',
   });
   
   // Animar opacidade do conteúdo do cabeçalho
@@ -267,76 +268,66 @@ const HomeScreen = () => {
       {/* Cabeçalho Animado */}
       <Animated.View style={[styles.header, { height: headerHeight }]}>
         <View style={styles.headerTop}>
-          <View style={styles.userInfo}>
-            <Text style={styles.greeting}>Olá,</Text>
+          <TouchableOpacity 
+            style={styles.profileButton}
+            onPress={() => navigateWithTimeout('/(panel)/settings', '/(panel)/settings/account')}
+          >
+            {profileImageUrl ? (
+              <Image 
+                source={{ uri: profileImageUrl }} 
+                style={styles.profilePhoto}
+              />
+            ) : (
+              <View style={styles.profilePhotoPlaceholder}>
+                <Text style={styles.profilePhotoInitial}>
+                  {getDisplayName(user, true).charAt(0).toUpperCase()}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+          
+          <View style={styles.userInfoContainer}>
+            <Text style={styles.greeting}>Bem-vindo,</Text>
             <Text style={styles.userName}>{getDisplayName(user)}</Text>
           </View>
           
-          <View style={styles.headerActions}>
-            <TouchableOpacity 
-              style={styles.notificationButton}
-              onPress={toggleNotifications}
-            >
-              <Ionicons name="notifications" size={24} color={colors.primary.main} />
-              {/* Badge de notificação somente se houver notificações não lidas */}
-              {unreadCount > 0 && (
-                <View style={styles.notificationBadge}>
-                  <Text style={styles.notificationCount}>
-                    {unreadCount > 9 ? '9+' : unreadCount}
-                  </Text>
-                </View>
-              )}
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={styles.profileButton}
-              onPress={() => navigateWithTimeout('/(panel)/settings', '/(panel)/settings/account')}
-            >
-              {profileImageUrl ? (
-                <Image 
-                  source={{ uri: profileImageUrl }} 
-                  style={styles.profilePhoto}
-                />
-              ) : (
-                <View style={styles.profilePhotoPlaceholder}>
-                  <Text style={styles.profilePhotoInitial}>
-                    {getDisplayName(user, true).charAt(0).toUpperCase()}
-                  </Text>
-                </View>
-              )}
-            </TouchableOpacity>
-          </View>
-        </View>
-        
-        <Animated.View style={[styles.republicInfo, { opacity: headerContentOpacity }]}>
-          <View style={styles.republicNameContainer}>
-            {loadingRepublic ? (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="small" color="#fff" />
-                <Text style={[styles.republicName, { marginLeft: 8 }]}>
-                  Carregando...
+          <TouchableOpacity 
+            style={styles.notificationButton}
+            onPress={toggleNotifications}
+          >
+            <Ionicons name="notifications" size={24} color={colors.primary.main} />
+            {unreadCount > 0 && (
+              <View style={styles.notificationBadge}>
+                <Text style={styles.notificationCount}>
+                  {unreadCount > 9 ? '9+' : unreadCount}
                 </Text>
               </View>
-            ) : user?.currentRepublicId ? (
-              <>
-                <MaterialCommunityIcons name="home-group" size={18} color="#fff" />
-                <Text style={[styles.republicName, { marginLeft: 8 }]}>
-                  {republicName}
-                </Text>
-              </>
-            ) : (
-              <Text style={styles.republicName}>Bem-vindo</Text>
             )}
-          </View>
-          <Text style={styles.lastUpdated}>
-            Deslize para atualizar os dados
-          </Text>
-        </Animated.View>
+          </TouchableOpacity>
+        </View>
+        
+        {user?.currentRepublicId && (
+          <Animated.View style={[styles.republicInfoContainer, { opacity: headerContentOpacity }]}>
+            {loadingRepublic ? (
+              <ActivityIndicator size="small" color={colors.primary.main} />
+            ) : (
+              <LinearGradient
+                colors={['rgba(123, 104, 238, 0.95)', 'rgba(123, 104, 238, 1)']}
+                style={styles.republicBar}
+                start={{x: 0, y: 0}}
+                end={{x: 1, y: 0}}
+              >
+                <MaterialCommunityIcons name="home-group" size={16} color="#fff" />
+                <Text style={styles.republicName}>{republicName}</Text>
+              </LinearGradient>
+            )}
+          </Animated.View>
+        )}
       </Animated.View>
       
       {/* Conteúdo Principal - ScrollView animada */}
       <Animated.ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingTop: 15 }]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -380,7 +371,7 @@ const HomeScreen = () => {
               <View style={styles.summaryIconContainer}>
                 <Ionicons name="calendar-outline" size={28} color="#fff" />
               </View>
-              <Text style={styles.summaryTitle}>Eventos</Text>
+              <Text style={styles.summaryTitle}>Agenda</Text>
               <Text style={styles.summaryValue}>
                 {filteredEvents.length}
               </Text>
@@ -512,7 +503,7 @@ const HomeScreen = () => {
         {/* Seção de Eventos (simplificada) */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Próximos Eventos</Text>
+            <Text style={styles.sectionTitle}>Próximos Compromissos</Text>
             <TouchableOpacity onPress={() => navigateWithTimeout('/(panel)/events')}>
               <Text style={styles.sectionAction}>Ver todos</Text>
             </TouchableOpacity>
@@ -594,34 +585,31 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background.secondary,
     paddingTop: Platform.OS === 'ios' ? 50 : StatusBar.currentHeight || 20,
     paddingHorizontal: 20,
-    paddingBottom: 15,
+    paddingBottom: 0,
     borderBottomLeftRadius: 20,
     borderBottomRightRadius: 20,
     ...createShadow(5),
     zIndex: 10,
+    overflow: 'hidden',
   },
   headerTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 5,
+    marginBottom: 15,
   },
-  userInfo: {
+  userInfoContainer: {
     flex: 1,
+    paddingHorizontal: 15,
   },
   greeting: {
-    fontSize: 16,
+    fontSize: 14,
     color: colors.text.secondary,
-    marginBottom: 4,
   },
   userName: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: 'bold',
     color: colors.text.primary,
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
   },
   notificationButton: {
     width: 44,
@@ -630,7 +618,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background.tertiary,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
   },
   notificationBadge: {
     position: 'absolute',
@@ -651,10 +638,12 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   profileButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: colors.primary.light,
   },
   profilePhoto: {
     width: '100%',
@@ -669,40 +658,39 @@ const styles = StyleSheet.create({
   },
   profilePhotoInitial: {
     color: colors.primary.main,
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: 'bold',
   },
-  republicNameContainer: {
+  republicInfoContainer: {
+    width: '120%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 0,
+    position: 'absolute',
+    bottom: 0,
+    left: -10,
+    right: -10,
+    zIndex: 20,
+    overflow: 'visible',
+  },
+  republicBar: {
+    height: 34,
+    width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  republicInfo: {
-    padding: 16,
-    paddingTop: 0,
+    justifyContent: 'center',
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
   },
   republicName: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: colors.text.primary,
-    marginBottom: 2,
-  },
-  lastUpdated: {
-    fontSize: 12,
-    color: colors.text.tertiary,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#fff',
+    marginLeft: 6,
   },
   scrollContent: {
     paddingTop: 20,
     paddingBottom: 100,
-  },
-  loadingContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 40,
-  },
-  loadingText: {
-    color: colors.text.secondary,
-    marginTop: 16,
-    fontSize: 16,
   },
   loadingSectionContainer: {
     alignItems: 'center',

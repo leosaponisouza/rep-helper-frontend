@@ -7,7 +7,8 @@ import {
   TouchableOpacity,
   StatusBar,
   SafeAreaView,
-  Animated
+  Animated,
+  Platform
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,6 +16,7 @@ import { useEvents } from '@/src/hooks/useEvents';
 import { useAuth } from '@/src/context/AuthContext';
 import { format } from 'date-fns';
 import { useFocusEffect } from '@react-navigation/native';
+import { LinearGradient } from 'expo-linear-gradient';
 
 // Importar componentes
 import CalendarSkeleton from '@/components/Event/CalendarSkeleton';
@@ -164,9 +166,26 @@ const EventsScreen: React.FC = () => {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#222" />
       
-      {/* Header */}
+      {/* Header com título e botão de adicionar */}
       <View style={styles.headerContainer}>
-        <Text style={styles.headerTitle}>Eventos</Text>
+        <View style={styles.headerContent}>
+          <Text style={styles.headerTitle}>Agenda</Text>
+          <TouchableOpacity 
+            style={styles.addButtonContainer} 
+            onPress={handleAddEvent}
+            activeOpacity={0.9}
+          >
+            <LinearGradient
+              colors={['#9370DB', '#7B68EE', '#6A5ACD']}
+              style={styles.addButton}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            >
+              <Ionicons name="add" size={22} color="white" style={styles.buttonIcon} />
+              <Text style={styles.buttonText}>Novo</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
       </View>
       
       {calendarLoading ? (
@@ -181,14 +200,6 @@ const EventsScreen: React.FC = () => {
           loading={calendarLoading}
         />
       )}
-      
-      {/* Botão flutuante de adicionar */}
-      <TouchableOpacity 
-        style={styles.addButton}
-        onPress={handleAddEvent}
-      >
-        <Ionicons name="add" size={24} color="white" />
-      </TouchableOpacity>
     </SafeAreaView>
   );
 };
@@ -199,36 +210,52 @@ const styles = StyleSheet.create({
     backgroundColor: '#222',
   },
   headerContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     backgroundColor: '#333',
     paddingVertical: 16,
     paddingHorizontal: 20,
     borderBottomWidth: 1,
     borderBottomColor: '#444',
   },
+  headerContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
   headerTitle: {
-    fontSize: 20,
+    fontSize: 28,
     fontWeight: 'bold',
     color: '#fff',
   },
+  addButtonContainer: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#7B68EE',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.4,
+        shadowRadius: 10,
+      },
+      android: {
+        elevation: 10,
+      },
+    }),
+  },
   addButton: {
-    position: 'absolute',
-    bottom: 20,
-    right: 20,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#7B68EE',
+    width: 100,
+    height: 40,
+    borderRadius: 12,
+    flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#7B68EE',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4.65,
-    elevation: 8,
-    zIndex: 100,
+  },
+  buttonIcon: {
+    marginRight: 5,
+  },
+  buttonText: {
+    color: 'white',
+    fontWeight: '600',
+    fontSize: 16,
   },
 });
 

@@ -302,7 +302,7 @@ const EventDetailsScreen: React.FC = () => {
       <SafeAreaView style={styles.loadingContainer}>
         <StatusBar barStyle="light-content" backgroundColor="#222" />
         <ActivityIndicator size="large" color="#7B68EE" />
-        <Text style={styles.loadingText}>Carregando detalhes do evento...</Text>
+        <Text style={styles.loadingText}>Carregando detalhes do compromisso...</Text>
       </SafeAreaView>
     );
   }
@@ -337,12 +337,12 @@ const EventDetailsScreen: React.FC = () => {
       <SafeAreaView style={styles.errorContainer}>
         <StatusBar barStyle="light-content" backgroundColor="#222" />
         <Ionicons name="calendar" size={64} color="#7B68EE" />
-        <Text style={styles.errorTitle}>Evento não encontrado</Text>
+        <Text style={styles.errorTitle}>Compromisso não encontrado</Text>
         <TouchableOpacity 
           style={styles.backButton}
           onPress={() => router.push('/(panel)/events')}
         >
-          <Text style={styles.backButtonText}>Voltar para Eventos</Text>
+          <Text style={styles.backButtonText}>Voltar para Agenda</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );
@@ -440,7 +440,7 @@ const EventDetailsScreen: React.FC = () => {
           {/* Status do evento */}
           {eventHasPassed ? (
             <View style={styles.eventStatusBadge}>
-              <Text style={styles.eventStatusText}>Evento finalizado</Text>
+              <Text style={styles.eventStatusText}>Compromisso finalizado</Text>
             </View>
           ) : eventIsHappening ? (
             <View style={[styles.eventStatusBadge, styles.happeningNowBadge]}>

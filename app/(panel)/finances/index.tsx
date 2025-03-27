@@ -1,5 +1,5 @@
 // app/(panel)/finances/index.tsx - Correção das abas e navegação
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,12 +10,17 @@ import {
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
-  useWindowDimensions
+  useWindowDimensions,
+  Animated,
+  TouchableWithoutFeedback,
+  Modal,
+  Platform
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFinances } from '../../../src/hooks/useFinances';
 import { PendingAction, Transaction } from '../../../src/models/finances.model';
+import { LinearGradient } from 'expo-linear-gradient';
 
 // Components
 import FinancialSummary from '../../../components/Finances/FinancialSummary';
@@ -36,6 +41,8 @@ const FinancesDashboardScreen = () => {
   const { width } = useWindowDimensions();
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
+  const [showSubmenu, setShowSubmenu] = useState(false);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
 
   // Set active tab from URL parameter
   useEffect(() => {
@@ -124,6 +131,35 @@ const FinancesDashboardScreen = () => {
     navigateToExpenseDetails(action.id);
   }, [navigateToExpenseDetails]);
 
+  // Toggle submenu visibility
+  const toggleSubmenu = useCallback(() => {
+    if (showSubmenu) {
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }).start(() => setShowSubmenu(false));
+    } else {
+      setShowSubmenu(true);
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [showSubmenu, fadeAnim]);
+
+  // Close submenu
+  const closeSubmenu = useCallback(() => {
+    if (showSubmenu) {
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }).start(() => setShowSubmenu(false));
+    }
+  }, [showSubmenu, fadeAnim]);
+
   const renderPendingActionsSection = () => {
     // Add debugging to help identify issues
     console.log("Rendering pending actions section with: ", {
@@ -185,28 +221,6 @@ const FinancesDashboardScreen = () => {
               onPressExpenses={navigateToExpensesList}
               onPressIncomes={navigateToIncomesList}
             />
-
-            {/* Quick Actions */}
-            <View style={styles.actionsSection}>
-              <Text style={styles.sectionTitle}>Ações Rápidas</Text>
-              <View style={styles.actionsContainer}>
-                <TouchableOpacity
-                  style={[styles.actionButton, styles.expenseButton]}
-                  onPress={navigateToCreateExpense}
-                >
-                  <Ionicons name="add-circle-outline" size={22} color="#fff" />
-                  <Text style={styles.actionButtonText}>Nova Despesa</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.actionButton, styles.incomeButton]}
-                  onPress={navigateToCreateIncome}
-                >
-                  <Ionicons name="add-circle-outline" size={22} color="#fff" />
-                  <Text style={styles.actionButtonText}>Nova Receita</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
             
             {/* Recent Transactions */}
             <RecentTransactions
@@ -250,7 +264,71 @@ const FinancesDashboardScreen = () => {
 
       <View style={styles.headerContainer}>
         <Text style={styles.headerTitle}>Finanças</Text>
+        <TouchableOpacity 
+          style={styles.addButtonContainer} 
+          onPress={toggleSubmenu}
+          activeOpacity={0.9}
+        >
+          <LinearGradient
+            colors={['#9370DB', '#7B68EE', '#6A5ACD']}
+            style={styles.addButton}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+          >
+            <Ionicons name="add" size={22} color="white" style={styles.buttonIcon} />
+            <Text style={styles.buttonText}>Novo</Text>
+          </LinearGradient>
+        </TouchableOpacity>
       </View>
+
+      {/* Submenu Modal */}
+      <Modal
+        transparent={true}
+        visible={showSubmenu}
+        animationType="none"
+        onRequestClose={closeSubmenu}
+      >
+        <TouchableWithoutFeedback onPress={closeSubmenu}>
+          <View style={styles.modalOverlay}>
+            <Animated.View 
+              style={[
+                styles.submenuContainer,
+                {
+                  opacity: fadeAnim,
+                  transform: [{
+                    translateY: fadeAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [-20, 0]
+                    })
+                  }]
+                }
+              ]}
+            >
+              <TouchableOpacity 
+                style={[styles.submenuItem, styles.expenseItem]}
+                onPress={() => {
+                  closeSubmenu();
+                  navigateToCreateExpense();
+                }}
+              >
+                <Ionicons name="add-circle-outline" size={20} color="#FF6347" />
+                <Text style={[styles.submenuItemText, styles.expenseItemText]}>Nova Despesa</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[styles.submenuItem, styles.incomeItem]}
+                onPress={() => {
+                  closeSubmenu();
+                  navigateToCreateIncome();
+                }}
+              >
+                <Ionicons name="add-circle-outline" size={20} color="#4CAF50" />
+                <Text style={[styles.submenuItemText, styles.incomeItemText]}>Nova Receita</Text>
+              </TouchableOpacity>
+            </Animated.View>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
 
       {/* Navigation tabs */}
       <View style={styles.tabsContainer}>
@@ -286,19 +364,6 @@ const FinancesDashboardScreen = () => {
       <View style={styles.container}>
         {renderContent()}
       </View>
-
-      {/* Floating action button */}
-      {activeTab !== 'dashboard' && (
-        <TouchableOpacity
-          style={[
-            styles.floatingButton,
-            activeTab === 'incomes' ? styles.incomeFloatingButton : styles.expenseFloatingButton
-          ]}
-          onPress={activeTab === 'incomes' ? navigateToCreateIncome : navigateToCreateExpense}
-        >
-          <Ionicons name="add" size={28} color="#fff" />
-        </TouchableOpacity>
-      )}
     </SafeAreaView>
   );
 };
@@ -419,7 +484,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#444',
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: 28,
     fontWeight: 'bold',
     color: '#fff',
   },
@@ -661,27 +726,85 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: 'bold',
   },
-  floatingButton: {
-    position: 'absolute',
-    bottom: 20,
-    right: 20,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+  addButtonContainer: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#7B68EE',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.4,
+        shadowRadius: 10,
+      },
+      android: {
+        elevation: 10,
+      },
+    }),
+  },
+  addButton: {
+    width: 100,
+    height: 40,
+    borderRadius: 12,
+    flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4.65,
-    elevation: 8,
   },
-  expenseFloatingButton: {
-    backgroundColor: '#FF6347',
-    shadowColor: '#FF6347',
+  buttonIcon: {
+    marginRight: 5,
   },
-  incomeFloatingButton: {
-    backgroundColor: '#4CAF50',
-    shadowColor: '#4CAF50',
+  buttonText: {
+    color: 'white',
+    fontWeight: '600',
+    fontSize: 16,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-start',
+    alignItems: 'flex-end',
+  },
+  submenuContainer: {
+    backgroundColor: '#333',
+    borderRadius: 12,
+    marginTop: 80, // Posicionado abaixo do cabeçalho
+    marginRight: 20,
+    overflow: 'hidden',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 8,
+      },
+    }),
+  },
+  submenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#444',
+  },
+  expenseItem: {
+    backgroundColor: 'rgba(255, 99, 71, 0.1)',
+  },
+  incomeItem: {
+    backgroundColor: 'rgba(76, 175, 80, 0.1)',
+  },
+  submenuItemText: {
+    fontSize: 16,
+    fontWeight: '500',
+    marginLeft: 10,
+  },
+  expenseItemText: {
+    color: '#FF6347',
+  },
+  incomeItemText: {
+    color: '#4CAF50',
   },
 });
 

@@ -303,7 +303,7 @@ const CreateEventScreen: React.FC = () => {
           >
             <Ionicons name="arrow-back" size={24} color={colors.primary.main} />
           </TouchableOpacity>
-          <Text style={sharedStyles.headerTitle}>Criar Evento</Text>
+          <Text style={sharedStyles.headerTitle}>Criar Compromisso</Text>
         </View>
         
         <Animated.ScrollView 
