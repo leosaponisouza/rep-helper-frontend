@@ -17,10 +17,12 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFinances } from '@/src/hooks/useFinances';
 import IncomeItem from '@/components/Finances/IncomeItem';
 import { Income } from '@/src/models/finances.model';
+import { useAuth } from '@/src/context/AuthContext';
 
 const IncomesScreen = ({ hideHeader = false }) => {
   const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
+  const { user } = useAuth();
   
   // Get incomes data from the hook
   const {
@@ -130,6 +132,7 @@ const IncomesScreen = ({ hideHeader = false }) => {
           <IncomeItem 
             income={item}
             onPress={() => handleIncomePress(item)}
+            currentUserId={user?.uid}
           />
         )}
         contentContainerStyle={[

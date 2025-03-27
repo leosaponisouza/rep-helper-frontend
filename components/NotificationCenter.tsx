@@ -16,11 +16,17 @@ import {
   Platform,
   ActivityIndicator
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { colors, createShadow } from '@/src/styles/sharedStyles';
 import { formatLocalDate } from '@/src/utils/dateUtils';
 import { useNotifications, Notification, NotificationType } from '@/src/hooks/useNotifications';
+import { LinearGradient } from 'expo-linear-gradient';
+
+// Para compatibilidade com tipos adicionais vindos da API
+type NotificationWithRawType = Omit<Notification, 'type'> & {
+  type: string;
+}
 
 // Props para o componente NotificationCenter
 interface NotificationCenterProps {
@@ -34,8 +40,8 @@ const NotificationItem = ({
   onPress, 
   onMarkAsRead 
 }: { 
-  notification: Notification,
-  onPress: (notification: Notification) => void,
+  notification: NotificationWithRawType,
+  onPress: (notification: NotificationWithRawType) => void,
   onMarkAsRead: (id: string) => void
 }) => {
   // Formatar data da notificação
@@ -43,87 +49,189 @@ const NotificationItem = ({
   
   // Obter ícone com base no tipo
   const getTypeIcon = () => {
-    switch (notification.type) {
-      case 'task':
-        return 'checkbox';
-      case 'event':
-        return 'calendar';
-      case 'finance':
-        return 'cash';
-      default:
-        return 'notifications';
+    const entityType = notification.entityType?.toLowerCase() || '';
+    
+    if (entityType === 'tasks') {
+      return 'checkbox-marked-outline';
+    } else if (entityType === 'events') {
+      return 'calendar-month';
+    } else if (entityType === 'expenses') {
+      return 'cash-multiple';
+    } else if (entityType === 'incomes') {
+      return 'cash-plus';
+    } else {
+      return 'bell-outline';
     }
   };
   
+  // Cor com base no tipo
+  const getTypeColor = () => {
+    const entityType = notification.entityType?.toLowerCase() || '';
+    
+    if (entityType === 'tasks') {
+      return '#4CAF50';
+    } else if (entityType === 'events') {
+      return '#FF9800';
+    } else if (entityType === 'expenses') {
+      return '#FF5252';
+    } else if (entityType === 'incomes') {
+      return '#4CAF50';
+    } else {
+      return colors.primary.main;
+    }
+  };
+  
+  // Obter um nome mais amigável para o tipo de notificação
+  const getFriendlyTypeName = () => {
+    const type = notification.type;
+    
+    if (type === 'TASK_ASSIGNED') return 'Tarefa atribuída';
+    if (type === 'TASK_COMPLETED') return 'Tarefa concluída';
+    if (type === 'EXPENSE_CREATED') return 'Despesa criada';
+    if (type === 'EXPENSE_ADDED') return 'Despesa adicionada';
+    if (type === 'EXPENSE_APPROVED') return 'Despesa aprovada';
+    if (type === 'EXPENSE_REIMBURSED') return 'Despesa reembolsada';
+    
+    // Fallback para outros tipos não mapeados explicitamente
+    return type.split('_').map(word => 
+      word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+    ).join(' ');
+  };
+  
+  // Texto de destino
+  const getDestinationText = () => {
+    if (!notification.entityId || !notification.entityType) return null;
+    
+    // Verificar o tipo de entidade
+    const entityType = notification.entityType.toLowerCase();
+    
+    if (entityType === 'task') {
+      return "Ver tarefa";
+    } else if (entityType === 'events') {
+      return "Ver evento";
+    } else if (entityType === 'expenses') {
+      return "Ver despesa";
+    } else if (entityType === 'incomes') {
+      return "Ver receita";
+    } else {
+      return "Ver detalhes";
+    }
+  };
+  
+  const typeColor = getTypeColor();
+  const destinationText = getDestinationText();
+  
   return (
-    <TouchableOpacity 
+    <Animated.View
       style={[
         styles.notificationItem,
         !notification.read && styles.unreadNotification
       ]}
-      onPress={() => onPress(notification)}
     >
-      <View style={styles.notificationIcon}>
-        <View style={[
-          styles.iconContainer,
-          !notification.read && styles.unreadIconContainer,
-          notification.type === 'task' && styles.taskIconContainer,
-          notification.type === 'event' && styles.eventIconContainer,
-          notification.type === 'finance' && styles.financeIconContainer,
-        ]}>
-          <Ionicons 
-            name={getTypeIcon()} 
-            size={22} 
-            color={notification.read ? colors.text.secondary : colors.text.primary} 
-          />
-        </View>
-      </View>
-      
-      <View style={styles.notificationContent}>
-        <View style={styles.notificationHeader}>
-          <Text 
-            style={[
-              styles.notificationTitle,
-              !notification.read && styles.unreadTitle
-            ]}
-            numberOfLines={1}
-          >
-            {notification.title}
-          </Text>
-          <Text style={styles.notificationTime}>{formattedDate}</Text>
-        </View>
-        
-        <Text 
-          style={styles.notificationMessage} 
-          numberOfLines={2}
+      <TouchableOpacity
+        activeOpacity={0.7}
+        onPress={() => onPress(notification)}
+        disabled={!notification.entityId}
+      >
+        <LinearGradient
+          colors={!notification.read ? 
+            ['rgba(123, 104, 238, 0.05)', 'rgba(123, 104, 238, 0.08)'] : 
+            ['#252525', '#222']}
+          start={{x: 0, y: 0}}
+          end={{x: 1, y: 0}}
+          style={styles.notificationGradient}
         >
-          {notification.message}
-        </Text>
-        
-        {notification.actionText && (
-          <View style={styles.actionContainer}>
-            <Text style={styles.actionText}>
-              {notification.actionText}
+          <View style={styles.notificationContent}>
+            <View style={styles.notificationHeader}>
+              <View style={styles.titleRow}>
+                <View style={[
+                  styles.iconContainer,
+                  { backgroundColor: `${typeColor}20` }
+                ]}>
+                  <MaterialCommunityIcons 
+                    name={getTypeIcon()} 
+                    size={22} 
+                    color={typeColor} 
+                  />
+                </View>
+                
+                <Text 
+                  style={[
+                    styles.notificationTitle,
+                    !notification.read && styles.unreadTitle
+                  ]}
+                  numberOfLines={1}
+                >
+                  {notification.title}
+                </Text>
+              </View>
+              
+              <View style={styles.timeRow}>
+                <Text style={styles.notificationTime}>{formattedDate}</Text>
+                {!notification.read && (
+                  <View style={styles.unreadDot} />
+                )}
+              </View>
+            </View>
+            
+            <View style={styles.typeContainer}>
+              <Text style={[styles.typeText, { color: typeColor }]}>
+                {getFriendlyTypeName()}
+              </Text>
+            </View>
+            
+            <Text 
+              style={styles.notificationMessage} 
+              numberOfLines={2}
+            >
+              {notification.message}
             </Text>
+            
+            <View style={styles.actionRow}>
+              {notification.entityId && (
+                <View style={styles.entityIdContainer}>
+                  <Text style={styles.entityIdText}>
+                    ID: {notification.entityId}
+                  </Text>
+                </View>
+              )}
+              
+              {destinationText && (
+                <TouchableOpacity 
+                  style={[styles.viewButton, { backgroundColor: `${typeColor}20` }]}
+                  onPress={() => onPress(notification)}
+                >
+                  <Text style={[styles.viewButtonText, { color: typeColor }]}>
+                    {destinationText}
+                  </Text>
+                  <MaterialCommunityIcons name="arrow-right" size={16} color={typeColor} />
+                </TouchableOpacity>
+              )}
+              
+              {!notification.read && (
+                <TouchableOpacity 
+                  style={styles.readButton}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    onMarkAsRead(notification.id);
+                  }}
+                >
+                  <MaterialCommunityIcons name="check-circle-outline" size={20} color={colors.text.secondary} />
+                  <Text style={styles.readButtonText}>Marcar como lida</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
-        )}
-      </View>
-      
-      {!notification.read && (
-        <TouchableOpacity 
-          style={styles.readButton}
-          onPress={() => onMarkAsRead(notification.id)}
-        >
-          <Ionicons name="checkmark-circle" size={22} color={colors.primary.main} />
-        </TouchableOpacity>
-      )}
-    </TouchableOpacity>
+        </LinearGradient>
+      </TouchableOpacity>
+    </Animated.View>
   );
 };
 
 const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClose }) => {
-  const [activeTab, setActiveTab] = useState<NotificationType>('all');
+  const [activeTab, setActiveTab] = useState<NotificationType>('unread');
   const slideAnim = useRef(new Animated.Value(Dimensions.get('window').width)).current;
+  const opacityAnim = useRef(new Animated.Value(0)).current;
   const router = useRouter();
   
   // Usar o hook de notificações
@@ -139,22 +247,36 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
   // Animação de entrada
   useEffect(() => {
     if (visible) {
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 250,
-        useNativeDriver: true,
-      }).start();
+      Animated.parallel([
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.timing(opacityAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        })
+      ]).start();
       
       // Carregar notificações quando o centro é aberto
       fetchNotifications(activeTab);
     } else {
-      Animated.timing(slideAnim, {
-        toValue: Dimensions.get('window').width,
-        duration: 200,
-        useNativeDriver: true,
-      }).start();
+      Animated.parallel([
+        Animated.timing(slideAnim, {
+          toValue: Dimensions.get('window').width,
+          duration: 250,
+          useNativeDriver: true,
+        }),
+        Animated.timing(opacityAnim, {
+          toValue: 0,
+          duration: 250,
+          useNativeDriver: true,
+        })
+      ]).start();
     }
-  }, [visible, slideAnim, activeTab, fetchNotifications]);
+  }, [visible, slideAnim, opacityAnim, activeTab, fetchNotifications]);
   
   // Efeito para recarregar notificações quando a tab muda
   useEffect(() => {
@@ -174,38 +296,49 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
   };
   
   // Manipular clique em uma notificação
-  const handleNotificationPress = async (notification: Notification) => {
+  const handleNotificationPress = async (notification: NotificationWithRawType) => {
     // Marcar como lida
     if (!notification.read) {
       await markAsRead(notification.id);
     }
     
-    // Navegar com base no tipo de notificação e ID da entidade
-    if (notification.entityId) {
-      switch (notification.type) {
-        case 'task':
-          router.push(`/(panel)/tasks/${notification.entityId}`);
-          break;
-        case 'event':
-          router.push(`/(panel)/events/${notification.entityId}`);
-          break;
-        case 'finance':
-          // Se for de tipo específico de finança, direcionar para tela apropriada
-          if (notification.entityType === 'EXPENSE') {
-            router.push(`/(panel)/finances/expenses/${notification.entityId}`);
-          } else if (notification.entityType === 'INCOME') {
-            router.push(`/(panel)/finances/incomes/${notification.entityId}`);
-          } else {
-            router.push('/(panel)/finances');
-          }
-          break;
-        default:
-          // Para notificações gerais, apenas fechar o centro
-          break;
+    // Navegar com base no tipo de entidade e ID
+    if (notification.entityId && notification.entityType) {
+      // Fechar o painel de notificações primeiro
+      onClose();
+      
+      // Definir rotas principais e específicas
+      let mainRoute = '';
+      let detailRoute = '';
+      
+      if (notification.entityType === 'task') {
+        mainRoute = '/(panel)/tasks';
+        detailRoute = `/(panel)/tasks/${notification.entityId}`;
+      } else if (notification.entityType === 'event') {
+        mainRoute = '/(panel)/events';
+        detailRoute = `/(panel)/events/${notification.entityId}`;
+      } else if (notification.entityType === 'expense') {
+        mainRoute = '/(panel)/finances/expenses';
+        detailRoute = `/(panel)/finances/expenses/${notification.entityId}`;
+      } else if (notification.entityType === 'income') {
+        mainRoute = '/(panel)/finances/incomes';
+        detailRoute = `/(panel)/finances/incomes/${notification.entityId}`;
       }
+      
+      // Navegar para a tela principal primeiro
+      if (mainRoute) {
+        router.push(mainRoute as any);
+        
+        // Depois de um curto delay, navegar para a tela específica
+        setTimeout(() => {
+          router.push(detailRoute as any);
+        }, 100); // 100ms de delay para garantir que a primeira navegação seja concluída
+      }
+      
+      return; // Retornar mais cedo, pois já chamamos onClose()
     }
     
-    // Fechar o painel de notificações
+    // Fechar o painel de notificações se não houver navegação
     onClose();
   };
   
@@ -222,11 +355,14 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
     
     return (
       <View style={styles.emptyContainer}>
-        <Ionicons name="notifications-off" size={48} color={colors.text.tertiary} />
+        <MaterialCommunityIcons name="bell-off-outline" size={64} color={colors.text.tertiary} />
+        <Text style={styles.emptyTitle}>
+          {activeTab === 'unread' ? 'Sem notificações não lidas' : 'Nenhuma notificação'}
+        </Text>
         <Text style={styles.emptyText}>
           {activeTab === 'unread' 
             ? 'Você não tem notificações não lidas'
-            : 'Nenhuma notificação encontrada'}
+            : 'Você não tem notificações para visualizar'}
         </Text>
       </View>
     );
@@ -244,7 +380,18 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
         backgroundColor="rgba(0,0,0,0.5)" 
       />
       
-      <View style={styles.modalOverlay}>
+      <Animated.View 
+        style={[
+          styles.modalOverlay,
+          { opacity: opacityAnim }
+        ]}
+      >
+        <TouchableOpacity 
+          style={styles.dismissArea}
+          activeOpacity={1}
+          onPress={onClose}
+        />
+        
         <Animated.View 
           style={[
             styles.container,
@@ -252,30 +399,28 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
           ]}
         >
           {/* Cabeçalho */}
-          <View style={styles.header}>
+          <LinearGradient
+            colors={['#1a1a1a', '#222']}
+            style={styles.header}
+          >
             <View style={styles.headerContent}>
               <Text style={styles.headerTitle}>Notificações</Text>
               <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-                <Ionicons name="close" size={24} color="#fff" />
+                <MaterialCommunityIcons name="close-circle" size={28} color="#fff" />
               </TouchableOpacity>
             </View>
             
+            {/* Contador de não lidas */}
+            {unreadCount > 0 && (
+              <View style={styles.unreadCountContainer}>
+                <Text style={styles.unreadCountText}>
+                  {unreadCount} {unreadCount === 1 ? 'não lida' : 'não lidas'}
+                </Text>
+              </View>
+            )}
+            
             {/* Abas */}
             <View style={styles.tabs}>
-              <TouchableOpacity 
-                style={[styles.tab, activeTab === 'all' && styles.activeTab]}
-                onPress={() => setActiveTab('all')}
-              >
-                <Text 
-                  style={[
-                    styles.tabText, 
-                    activeTab === 'all' && styles.activeTabText
-                  ]}
-                >
-                  Todas
-                </Text>
-              </TouchableOpacity>
-              
               <TouchableOpacity 
                 style={[styles.tab, activeTab === 'unread' && styles.activeTab]}
                 onPress={() => setActiveTab('unread')}
@@ -289,38 +434,48 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
                   Não lidas
                 </Text>
               </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[styles.tab, activeTab === 'all' && styles.activeTab]}
+                onPress={() => setActiveTab('all')}
+              >
+                <Text 
+                  style={[
+                    styles.tabText, 
+                    activeTab === 'all' && styles.activeTabText
+                  ]}
+                >
+                  Todas
+                </Text>
+              </TouchableOpacity>
             </View>
-          </View>
+          </LinearGradient>
           
           {/* Ações */}
-          <View style={styles.actions}>
-            <TouchableOpacity 
-              style={styles.actionButton}
-              onPress={handleMarkAllAsRead}
-              disabled={!notifications.some(n => !n.read)}
-            >
-              <Ionicons 
-                name="checkmark-done-circle" 
-                size={18} 
-                color={!notifications.some(n => !n.read) ? '#666' : colors.primary.main} 
-              />
-              <Text 
-                style={[
-                  styles.actionButtonText,
-                  !notifications.some(n => !n.read) && styles.disabledText
-                ]}
+          {notifications.some(n => !n.read) && (
+            <View style={styles.actions}>
+              <TouchableOpacity 
+                style={styles.actionButton}
+                onPress={handleMarkAllAsRead}
               >
-                Marcar todas como lidas
-              </Text>
-            </TouchableOpacity>
-          </View>
+                <MaterialCommunityIcons 
+                  name="check-all" 
+                  size={20} 
+                  color={colors.primary.main} 
+                />
+                <Text style={styles.actionButtonText}>
+                  Marcar todas como lidas
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
           
           {/* Lista de notificações */}
           {notifications.length === 0 ? (
             renderEmptyContent()
           ) : (
             <FlatList
-              data={notifications}
+              data={notifications as NotificationWithRawType[]}
               keyExtractor={(item) => item.id}
               renderItem={({ item }) => (
                 <NotificationItem
@@ -334,7 +489,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
             />
           )}
         </Animated.View>
-      </View>
+      </Animated.View>
     </Modal>
   );
 };
@@ -343,25 +498,30 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
 const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.7)',
+  },
+  dismissArea: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   container: {
     position: 'absolute',
     top: 0,
     bottom: 0,
     right: 0,
-    width: '85%',
+    width: '90%',
     backgroundColor: '#222',
-    shadowColor: '#000',
-    shadowOffset: { width: -2, height: 0 },
-    shadowOpacity: 0.25,
-    shadowRadius: 5,
-    elevation: 5,
+    borderTopLeftRadius: 20,
+    borderBottomLeftRadius: 20,
+    overflow: 'hidden',
+    ...createShadow(10),
   },
   header: {
     paddingTop: Platform.OS === 'ios' ? 50 : StatusBar.currentHeight,
     paddingBottom: 0,
-    backgroundColor: '#111',
   },
   headerContent: {
     flexDirection: 'row',
@@ -371,98 +531,123 @@ const styles = StyleSheet.create({
     paddingBottom: 15,
   },
   headerTitle: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: 'bold',
     color: '#fff',
   },
   closeButton: {
     padding: 5,
   },
+  unreadCountContainer: {
+    marginHorizontal: 20,
+    marginBottom: 16,
+    backgroundColor: 'rgba(123, 104, 238, 0.15)',
+    padding: 8,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+  },
+  unreadCountText: {
+    color: colors.primary.main,
+    fontWeight: '500',
+    fontSize: 14,
+  },
   tabs: {
     flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderBottomColor: '#333',
+    paddingHorizontal: 10,
   },
   tab: {
     flex: 1,
     paddingVertical: 15,
     alignItems: 'center',
+    marginHorizontal: 4,
+    borderRadius: 12,
   },
   activeTab: {
-    borderBottomWidth: 2,
-    borderBottomColor: colors.primary.main,
+    backgroundColor: 'rgba(123, 104, 238, 0.15)',
   },
   tabText: {
-    fontSize: 16,
+    fontSize: 14,
     color: '#aaa',
+    fontWeight: '500',
   },
   activeTabText: {
     color: colors.primary.main,
-    fontWeight: '500',
+    fontWeight: 'bold',
   },
   actions: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
-    padding: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#333',
+    padding: 15,
+    backgroundColor: 'rgba(34, 34, 34, 0.8)',
   },
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 8,
+    backgroundColor: 'rgba(123, 104, 238, 0.1)',
+    borderRadius: 20,
+    paddingHorizontal: 16,
   },
   actionButtonText: {
     fontSize: 14,
     color: colors.primary.main,
-    marginLeft: 5,
+    marginLeft: 8,
+    fontWeight: '500',
   },
   disabledText: {
     color: '#666',
   },
   listContent: {
-    paddingBottom: 20,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
   },
   notificationItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#333',
+    borderRadius: 16,
+    marginBottom: 12,
+    overflow: 'hidden',
+    ...createShadow(3),
+  },
+  notificationGradient: {
+    borderRadius: 16,
+    overflow: 'hidden',
   },
   unreadNotification: {
-    backgroundColor: 'rgba(123, 104, 238, 0.05)',
-  },
-  notificationIcon: {
-    marginRight: 15,
-  },
-  iconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(150, 150, 150, 0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  unreadIconContainer: {
-    backgroundColor: 'rgba(123, 104, 238, 0.15)',
-  },
-  taskIconContainer: {
-    backgroundColor: 'rgba(76, 175, 80, 0.15)',
-  },
-  eventIconContainer: {
-    backgroundColor: 'rgba(255, 193, 7, 0.15)',
-  },
-  financeIconContainer: {
-    backgroundColor: 'rgba(33, 150, 243, 0.15)',
+    borderLeftWidth: 3,
+    borderLeftColor: colors.primary.main,
   },
   notificationContent: {
+    padding: 16,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     flex: 1,
+    marginRight: 12,
   },
   notificationHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 5,
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  timeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  unreadDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.primary.main,
+    marginLeft: 8,
+  },
+  iconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
   },
   notificationTitle: {
     fontSize: 16,
@@ -477,24 +662,39 @@ const styles = StyleSheet.create({
   notificationTime: {
     fontSize: 12,
     color: '#888',
-    marginLeft: 10,
   },
   notificationMessage: {
     fontSize: 14,
     color: '#aaa',
     lineHeight: 20,
+    marginBottom: 12,
   },
-  actionContainer: {
-    marginTop: 8,
+  actionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
-  actionText: {
+  viewButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  viewButtonText: {
     fontSize: 13,
-    color: colors.primary.main,
-    fontWeight: '500',
+    fontWeight: '600',
+    marginRight: 4,
   },
   readButton: {
-    padding: 5,
-    marginLeft: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 6,
+  },
+  readButtonText: {
+    fontSize: 13,
+    color: colors.text.secondary,
+    marginLeft: 6,
   },
   emptyContainer: {
     flex: 1,
@@ -503,12 +703,35 @@ const styles = StyleSheet.create({
     padding: 40,
     marginTop: 40,
   },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: colors.text.secondary,
+    marginTop: 16,
+    marginBottom: 8,
+  },
   emptyText: {
     fontSize: 14,
     color: '#999',
     textAlign: 'center',
     lineHeight: 20,
-  }
+  },
+  entityIdContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  entityIdText: {
+    fontSize: 12,
+    color: '#888',
+  },
+  typeContainer: {
+    marginBottom: 8,
+  },
+  typeText: {
+    fontSize: 12,
+    color: '#888',
+  },
 });
 
 export default NotificationCenter;

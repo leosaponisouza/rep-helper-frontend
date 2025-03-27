@@ -11,9 +11,10 @@ import {
   Alert
 } from 'react-native';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
-import { PendingAction } from '../../src/models/finances.model';
+import { PendingAction, Expense } from '../../src/models/finances.model';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import FinanceItem from './FinanceItem';
 
 interface PendingActionsProps {
   actions: PendingAction[];
@@ -32,29 +33,7 @@ const PendingActionItem: React.FC<{
   onApprove?: (id: number) => Promise<void>;
   onReject?: (id: number) => Promise<void>;
 }> = ({ item, onPress, onApprove, onReject }) => {
-  // Formatar valor monetário
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL'
-    }).format(value);
-  };
-
-  // Formatação de data - supports both date and expenseDate fields
-  const formatDate = (dateString?: string) => {
-    if (!dateString) return '';
-    
-    try {
-      const date = parseISO(dateString);
-      return format(date, "dd MMM yyyy", { locale: ptBR });
-    } catch (error) {
-      return dateString;
-    }
-  };
-
-  // Get date from either date or expenseDate field
-  const displayDate = item.expenseDate;
-
+  
   // Handle approve action
   const handleApprove = async () => {
     if (!onApprove) return;
@@ -103,87 +82,38 @@ const PendingActionItem: React.FC<{
   };
 
   return (
-    <TouchableOpacity 
-      style={styles.actionItem}
-      onPress={() => onPress(item)}
-      activeOpacity={0.7}
-    >
-      <View 
-        style={[
-          styles.statusIndicator, 
-          { backgroundColor: '#FFC107' }
-        ]} 
+    <View style={styles.pendingItemWrapper}>
+      <FinanceItem 
+        item={item} 
+        type="expense" 
+        onPress={() => onPress(item)}
       />
       
-      <View style={styles.actionContent}>
-        <View style={styles.actionHeader}>
-          <Text style={styles.actionTitle} numberOfLines={1}>
-            {item.description}
-          </Text>
+      {/* Quick action buttons */}
+      {(onApprove || onReject) && (
+        <View style={styles.quickActions}>
+          {onApprove && (
+            <TouchableOpacity 
+              style={[styles.actionButton, styles.approveButton]}
+              onPress={handleApprove}
+            >
+              <MaterialIcons name="check-circle" size={16} color="#fff" />
+              <Text style={styles.actionButtonText}>Aprovar</Text>
+            </TouchableOpacity>
+          )}
           
-          <Text style={styles.actionAmount}>
-            {formatCurrency(item.amount)}
-          </Text>
+          {onReject && (
+            <TouchableOpacity 
+              style={[styles.actionButton, styles.rejectButton]}
+              onPress={handleReject}
+            >
+              <MaterialIcons name="cancel" size={16} color="#fff" />
+              <Text style={styles.actionButtonText}>Rejeitar</Text>
+            </TouchableOpacity>
+          )}
         </View>
-        
-        <View style={styles.actionFooter}>
-          <View style={styles.creatorContainer}>
-            {item.creatorProfilePictureUrl ? (
-              <Image 
-                source={{ uri: item.creatorProfilePictureUrl }} 
-                style={styles.creatorAvatar}
-              />
-            ) : (
-              <View style={styles.creatorAvatarPlaceholder}>
-                <Text style={styles.creatorInitials}>
-                  {item.creatorName.charAt(0).toUpperCase()}
-                </Text>
-              </View>
-            )}
-            <Text style={styles.creatorName}>
-              {item.creatorNickname || item.creatorName}
-            </Text>
-          </View>
-          
-          <View style={styles.actionMeta}>
-            <Text style={styles.actionDate}>
-              {formatDate(displayDate)}
-            </Text>
-            
-            <View style={styles.statusBadge}>
-              <Text style={styles.statusText}>
-                Pendente
-              </Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Quick action buttons */}
-        {(onApprove || onReject) && (
-          <View style={styles.quickActions}>
-            {onApprove && (
-              <TouchableOpacity 
-                style={[styles.actionButton, styles.approveButton]}
-                onPress={handleApprove}
-              >
-                <MaterialIcons name="check-circle" size={16} color="#fff" />
-                <Text style={styles.actionButtonText}>Aprovar</Text>
-              </TouchableOpacity>
-            )}
-            
-            {onReject && (
-              <TouchableOpacity 
-                style={[styles.actionButton, styles.rejectButton]}
-                onPress={handleReject}
-              >
-                <MaterialIcons name="cancel" size={16} color="#fff" />
-                <Text style={styles.actionButtonText}>Rejeitar</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
-      </View>
-    </TouchableOpacity>
+      )}
+    </View>
   );
 };
 
@@ -352,111 +282,28 @@ const styles = StyleSheet.create({
   actionsListContent: {
     paddingBottom: 8,
   },
-  actionItem: {
-    flexDirection: 'row',
-    backgroundColor: '#444',
-    borderRadius: 12,
-    marginBottom: 8,
-    overflow: 'hidden',
-  },
-  statusIndicator: {
-    width: 4,
-    height: '100%',
-  },
-  actionContent: {
-    flex: 1,
-    padding: 12,
-  },
-  actionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  actionTitle: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#fff',
-    flex: 1,
-    marginRight: 8,
-  },
-  actionAmount: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#fff',
-  },
-  actionFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  creatorContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  creatorAvatar: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    marginRight: 6,
-  },
-  creatorAvatarPlaceholder: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: '#555',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 6,
-  },
-  creatorInitials: {
-    color: '#fff',
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
-  creatorName: {
-    fontSize: 12,
-    color: '#ccc',
-  },
-  actionMeta: {
-    alignItems: 'flex-end',
-  },
-  actionDate: {
-    fontSize: 12,
-    color: '#aaa',
-    marginBottom: 4,
-  },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255, 193, 7, 0.2)',
-  },
-  statusText: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    color: '#FFC107',
+  pendingItemWrapper: {
+    marginBottom: 12,
   },
   quickActions: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
+    marginTop: 8,
     gap: 8,
-    marginTop: 4,
   },
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 8,
     justifyContent: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
   },
   approveButton: {
-    backgroundColor: 'rgba(76, 175, 80, 0.8)', // Green with opacity
+    backgroundColor: '#4CAF50',
   },
   rejectButton: {
-    backgroundColor: 'rgba(255, 99, 71, 0.8)', // Red with opacity
+    backgroundColor: '#FF6347',
   },
   actionButtonText: {
     color: '#fff',

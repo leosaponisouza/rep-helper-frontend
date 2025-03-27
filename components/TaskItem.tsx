@@ -1,19 +1,17 @@
-// components/TaskItem.tsx
-import React, { memo, useMemo } from 'react';
+import React, { memo } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  ActivityIndicator,
   Platform,
   Image
 } from 'react-native';
-import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Task, RecurrenceType } from '../src/models/task.model';
-import { colors, createShadow } from '../src/styles/sharedStyles';
+import { Task } from '../src/models/task.model';
+import { LinearGradient } from 'expo-linear-gradient';
 
 interface TaskItemProps {
   item: Task;
@@ -22,552 +20,356 @@ interface TaskItemProps {
   pendingTaskIds: number[];
   onPress: (taskId: number) => void;
   onStopRecurrence?: (taskId: number) => void;
+  variant?: 'compact' | 'detailed';
 }
 
-// Componente para exibir informações de recorrência de forma consistente
-const RecurrenceIndicator = memo(({ 
-  type, 
-  compact = false 
-}: { 
-  type?: RecurrenceType; 
-  compact?: boolean 
-}) => {
-  // Texto amigável para o tipo de recorrência
-  const recurrenceText = useMemo(() => {
-    switch (type) {
-      case 'DAILY': return 'Diária';
-      case 'WEEKLY': return 'Semanal';
-      case 'MONTHLY': return 'Mensal';
-      case 'YEARLY': return 'Anual';
-      default: return 'Recorrente';
-    }
-  }, [type]);
-
-  if (compact) {
-    return (
-      <Text style={styles.recurringIndicator}>
-        {" "}<Ionicons name="repeat" size={14} color={colors.success.main} />
-      </Text>
-    );
-  }
-
-  return (
-    <View style={styles.recurrenceChip}>
-      <Ionicons name="repeat" size={12} color={colors.success.main} />
-      <Text style={styles.recurrenceText}>
-        {recurrenceText}
-      </Text>
-    </View>
-  );
-});
-
-// Componente otimizado com memo para evitar re-renderizações desnecessárias
-const TaskItem: React.FC<TaskItemProps> = memo(({
-  item,
-  onToggleStatus,
-  currentUserId,
+const TaskItem = memo(({ 
+  item, 
+  onPress, 
+  onToggleStatus, 
+  currentUserId, 
   pendingTaskIds,
-  onPress,
-  onStopRecurrence
-}) => {
-  // Memoize valores calculados para evitar recálculos em cada renderização
-  const isAssignedToCurrentUser = useMemo(() =>
-    item.assignedUsers?.some((user) => user.uid === currentUserId),
-    [item.assignedUsers, currentUserId]
-  );
-
+  onStopRecurrence,
+  variant = 'detailed'
+}: TaskItemProps) => {
   const isPending = pendingTaskIds.includes(item.id);
-
-  // Determinando a cor do status - memoizado
-  const statusColor = useMemo(() => {
+  const isAssigned = item.assignedUsers?.some(u => u.uid === currentUserId);
+  const dueDate = item.dueDate ? format(parseISO(item.dueDate), "d 'de' MMMM", { locale: ptBR }) : null;
+  
+  // Obter o usuário atribuído atual, caso exista
+  const assignedUser = item.assignedUsers?.find(u => u.uid === currentUserId) || 
+                      (item.assignedUsers?.length ? item.assignedUsers[0] : null);
+      
+  // Pegar a imagem de perfil do usuário atribuído
+  const userProfilePic = assignedUser?.profilePictureUrl || null;
+  const userName = isAssigned 
+    ? 'Você' 
+    : assignedUser?.name || 'Usuário';
+  
+  // Obter informações de status para exibição
+  const getStatusInfo = () => {
     switch (item.status) {
-      case 'COMPLETED': return colors.success.main;
-      case 'IN_PROGRESS': return colors.primary.main;
-      case 'PENDING': return colors.warning.main;
-      case 'OVERDUE': return colors.error.main;
-      case 'CANCELLED': return colors.grey[500];
-      default: return colors.grey[500];
-    }
-  }, [item.status]);
-
-  // Texto amigável do status - memoizado
-  const statusText = useMemo(() => {
-    switch (item.status) {
-      case 'COMPLETED': return 'Concluída';
-      case 'IN_PROGRESS': return 'Em andamento';
-      case 'PENDING': return 'Pendente';
-      case 'OVERDUE': return 'Atrasada';
-      case 'CANCELLED': return 'Cancelada';
-      default: return item.status;
-    }
-  }, [item.status]);
-
-  // Formatação de data - memoizada
-  const formattedDate = useMemo(() => {
-    if (!item.due_date) return null;
-
-    const date = new Date(item.due_date);
-    const today = new Date();
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-
-    const isToday = date.toDateString() === today.toDateString();
-    const isTomorrow = date.toDateString() === tomorrow.toDateString();
-    const isOverdue = date < today && !isToday;
-
-    const formattedDate = format(date, "dd/MM", { locale: ptBR });
-    const formattedTime = format(date, "HH:mm", { locale: ptBR });
-
-    if (isToday) {
-      return { text: `Hoje, ${formattedTime}`, isSpecial: true, isOverdue: false, color: colors.warning.main };
-    }
-
-    if (isTomorrow) {
-      return { text: `Amanhã, ${formattedTime}`, isSpecial: true, isOverdue: false, color: colors.primary.main };
-    }
-
-    return {
-      text: `${formattedDate}, ${formattedTime}`,
-      isSpecial: false,
-      isOverdue: isOverdue,
-      color: isOverdue ? colors.error.main : colors.primary.main
-    };
-  }, [item.due_date]);
-
-  // Verificar se há descrição - memoizado
-  const hasDescription = useMemo(() =>
-    item.description && item.description.trim().length > 0,
-    [item.description]
-  );
-
-  // Função para formatar o padrão de recorrência de forma amigável
-  const getRecurrencePattern = useMemo(() => {
-    if (!item.recurring) return null;
-    
-    const interval = item.recurrenceInterval || 1;
-    let text;
-    
-    switch (item.recurrenceType) {
-      case 'DAILY':
-        text = interval === 1 ? 'Diária' : `A cada ${interval} dias`;
-        break;
-      case 'WEEKLY':
-        text = interval === 1 ? 'Semanal' : `A cada ${interval} semanas`;
-        break;
-      case 'MONTHLY':
-        text = interval === 1 ? 'Mensal' : `A cada ${interval} meses`;
-        break;
-      case 'YEARLY':
-        text = interval === 1 ? 'Anual' : `A cada ${interval} anos`;
-        break;
-      default:
-        text = 'Recorrente';
-    }
-    
-    return text;
-  }, [item.recurring, item.recurrenceType, item.recurrenceInterval]);
-
-  // Handler para toggle status
-  const handleToggleStatus = () => {
-    onToggleStatus(item);
-  };
-
-  // Handler para stop recurrence
-  const handleStopRecurrence = () => {
-    if (onStopRecurrence) {
-      onStopRecurrence(item.id);
+      case 'COMPLETED': 
+        return { 
+          color: '#4CAF50', 
+          text: 'Concluída',
+          icon: 'check-circle'
+        };
+      case 'IN_PROGRESS': 
+        return { 
+          color: '#2196F3', 
+          text: 'Em Andamento',
+          icon: 'clock-outline'
+        };
+      case 'OVERDUE': 
+        return { 
+          color: '#F44336', 
+          text: 'Atrasada',
+          icon: 'alert-circle'
+        };
+      case 'CANCELLED': 
+        return { 
+          color: '#9E9E9E', 
+          text: 'Cancelada',
+          icon: 'cancel'
+        };
+      default: 
+        return { 
+          color: '#FFA500', 
+          text: 'Pendente',
+          icon: 'clock-outline'
+        };
     }
   };
 
-  // Handler para press
-  const handlePress = () => {
-    onPress(item.id);
-  };
+  const statusInfo = getStatusInfo();
 
   return (
-    <TouchableOpacity
+    <TouchableOpacity 
       style={[
-        styles.taskItem,
-        { borderLeftColor: statusColor },
-        item.status === 'COMPLETED' && styles.completedTask,
-        isPending && styles.pendingTaskItem,
-        isAssignedToCurrentUser && styles.myTaskItem,
-        item.recurring && styles.recurringTaskItem
+        styles.container,
+        item.status === 'COMPLETED' && styles.completedContainer
       ]}
-      onPress={handlePress}
-      disabled={isPending}
+      onPress={() => onPress(item.id)}
+      activeOpacity={0.9}
     >
-      <View style={styles.taskContent}>
-        <TouchableOpacity
-          onPress={handleToggleStatus}
-          style={styles.checkboxContainer}
-          disabled={isPending || item.status === 'CANCELLED'}
-        >
-          {isPending ? (
-            <ActivityIndicator size="small" color={colors.primary.main} />
-          ) : (
-            <Ionicons
-              name={item.status === 'COMPLETED' ? 'checkbox' : 'square-outline'}
-              size={24}
-              color={item.status === 'COMPLETED' ? colors.success.main :
-                item.status === 'CANCELLED' ? colors.grey[500] : colors.primary.main}
-            />
-          )}
-        </TouchableOpacity>
-
-        <View style={styles.taskMainContent}>
-          <View style={styles.taskHeader}>
-            <Text
-              style={[
-                styles.taskTitle,
-                item.status === 'COMPLETED' && styles.completedTaskText,
-                item.status === 'CANCELLED' && styles.cancelledTaskText
-              ]}
-              numberOfLines={1}
-            >
+      <LinearGradient
+        colors={['#2A2A2A', '#333']}
+        style={styles.gradient}
+        start={{x: 0, y: 0}}
+        end={{x: 1, y: 0}}
+      >
+        <View style={styles.header}>
+          <View style={styles.titleContainer}>
+            <Text style={[
+              styles.title, 
+              item.status === 'COMPLETED' && styles.completedText
+            ]} numberOfLines={1}>
               {item.title}
-              {item.recurring && (
-                <RecurrenceIndicator compact={true} />
-              )}
             </Text>
-
-            <View style={[styles.statusBadge, { backgroundColor: `${statusColor}20` }]}>
-              <Text style={[styles.statusText, { color: statusColor }]}>
-                {statusText}
+            <View style={[
+              styles.categoryBadge,
+              { backgroundColor: `${statusInfo.color}20` }
+            ]}>
+              <MaterialCommunityIcons 
+                name="tag-outline" 
+                size={12} 
+                color={statusInfo.color} 
+              />
+              <Text style={[styles.categoryText, { color: statusInfo.color }]}>
+                {item.category || 'Sem categoria'}
               </Text>
             </View>
           </View>
-
-          {/* Descrição da tarefa */}
-          {hasDescription && (
-            <Text
-              style={[
-                styles.taskDescription,
-                item.status === 'COMPLETED' && styles.completedTaskText,
-                item.status === 'CANCELLED' && styles.cancelledTaskText
-              ]}
-              numberOfLines={2}
-              ellipsizeMode="tail"
-            >
-              {item.description}
-            </Text>
-          )}
-
-          <View style={styles.taskFooter}>
-            {/* Due date com ícone */}
-            {formattedDate && (
-              <View style={styles.dueDateContainer}>
-                <Ionicons
-                  name="calendar-outline"
-                  size={14}
-                  color={formattedDate.color}
-                />
-                <Text
-                  style={[
-                    styles.dueDateText,
-                    { color: formattedDate.color },
-                    formattedDate.isSpecial && styles.specialDateText,
-                    formattedDate.isOverdue && styles.overdueDateText
-                  ]}
-                >
-                  {formattedDate.text}
-                </Text>
-              </View>
-            )}
-
-            {/* Category */}
-            {item.category && (
-              <View style={styles.categoryChip}>
-                <FontAwesome5 name="tag" size={12} color={colors.primary.main} />
-                <Text style={styles.categoryText}>{item.category}</Text>
-              </View>
-            )}
-
-            {/* Recurrence indicator com padrão detalhado */}
+          
+          <View style={styles.statusContainer}>
+            <View style={[
+              styles.statusBadge, 
+              { backgroundColor: `${statusInfo.color}20` }
+            ]}>
+              <MaterialCommunityIcons 
+                name={statusInfo.icon as any} 
+                size={12} 
+                color={statusInfo.color} 
+              />
+              <Text style={[
+                styles.statusText, 
+                { color: statusInfo.color }
+              ]}>
+                {statusInfo.text}
+              </Text>
+            </View>
             {item.recurring && (
-              <View style={styles.recurrenceChip}>
-                <Ionicons name="repeat" size={12} color={colors.success.main} />
-                <Text style={styles.recurrenceText}>
-                  {getRecurrencePattern}
-                </Text>
-                {onStopRecurrence && (
-                  <TouchableOpacity
-                    style={styles.stopRecurrenceButton}
-                    onPress={handleStopRecurrence}
-                  >
-                    <Ionicons name="close-circle" size={14} color={colors.error.main} />
-                  </TouchableOpacity>
-                )}
+              <View style={styles.recurringBadge}>
+                <MaterialCommunityIcons name="repeat" size={12} color="#9C27B0" />
+                <Text style={styles.recurringText}>Recorrente</Text>
               </View>
             )}
+          </View>
+        </View>
+        
+        {item.description && (
+          <Text style={[
+            styles.notes, 
+            item.status === 'COMPLETED' && styles.completedText
+          ]} numberOfLines={2}>
+            {item.description}
+          </Text>
+        )}
+        
+        <View style={styles.footer}>
+          <View style={styles.infoContainer}>
+            {dueDate && (
+              <View style={styles.infoItem}>
+                <MaterialCommunityIcons name="calendar" size={16} color="#aaa" />
+                <Text style={styles.infoText}>{dueDate}</Text>
+              </View>
+            )}
+          </View>
 
-            {item.assignedUsers && item.assignedUsers.length > 0 && (
-              <View style={styles.assigneesContainer}>
-                {item.assignedUsers.slice(0, 3).map((assignedUser, index) => {
-                  // Verifica se é o usuário atual
-                  const isCurrentUser = assignedUser.uid === currentUserId;
-
-                  // Obtém a inicial para o avatar (preferência: nickname > name > email > id)
-                  let initial = '?';
-                  if (assignedUser.nickname && assignedUser.nickname.length > 0) {
-                    initial = assignedUser.nickname.charAt(0);
-                  } else if (assignedUser.name && assignedUser.name.length > 0) {
-                    initial = assignedUser.name.charAt(0);
-                  } else if (assignedUser.email && assignedUser.email.length > 0) {
-                    initial = assignedUser.email.charAt(0);
-                  } else if (assignedUser.uid) {
-                    initial = assignedUser.uid.charAt(0);
-                  }
-
-                  return (
-                    <View
-                      key={assignedUser.uid || `user-${index}`}
-                      style={[
-                        styles.assigneeAvatar,
-                        { zIndex: 10 - index, marginLeft: index > 0 ? -10 : 0 },
-                        isCurrentUser && styles.currentUserAvatar
-                      ]}
-                    >
-                      {assignedUser.profilePictureUrl ? (
-                        <Image
-                          source={{ uri: assignedUser.profilePictureUrl }}
-                          style={styles.avatarImage}
-                        />
-                      ) : (
-                        <Text style={styles.avatarInitial}>
-                          {initial.toUpperCase()}
-                        </Text>
-                      )}
-                    </View>
-                  );
-                })}
-
-                {item.assignedUsers.length > 3 && (
-                  <View style={[styles.assigneeAvatar, styles.moreAssigneesAvatar]}>
-                    <Text style={styles.moreAssigneesText}>
-                      +{item.assignedUsers.length - 3}
+          <View style={styles.userContainer}>
+            {assignedUser && (
+              <View style={styles.creatorContainer}>
+                {userProfilePic ? (
+                  <Image 
+                    source={{ uri: userProfilePic }} 
+                    style={styles.creatorAvatar}
+                  />
+                ) : (
+                  <View style={styles.creatorAvatarPlaceholder}>
+                    <Text style={styles.creatorInitials}>
+                      {userName.charAt(0).toUpperCase()}
                     </Text>
                   </View>
                 )}
+                <Text style={styles.creatorName} numberOfLines={1}>
+                  {userName}
+                </Text>
               </View>
             )}
+            {item.recurring && onStopRecurrence && (
+              <TouchableOpacity
+                style={styles.stopRecurrenceButton}
+                onPress={() => onStopRecurrence(item.id)}
+              >
+                <MaterialCommunityIcons name="stop-circle" size={20} color="#F44336" />
+              </TouchableOpacity>
+            )}
           </View>
-          
-          {/* Informação da tarefa pai, se existir */}
-          {item.parentTaskId && (
-            <View style={styles.parentTaskInfo}>
-              <Ionicons name="git-branch" size={12} color={colors.text.tertiary} />
-              <Text style={styles.parentTaskText}>
-                Gerada por recorrência
-              </Text>
-            </View>
-          )}
         </View>
-      </View>
+      </LinearGradient>
     </TouchableOpacity>
-  );
-}, (prevProps, nextProps) => {
-  // Função de comparação personalizada para o memo
-  // Retorna true se as props não mudaram (não precisa re-renderizar)
-  return (
-    prevProps.item.id === nextProps.item.id &&
-    prevProps.item.title === nextProps.item.title &&
-    prevProps.item.description === nextProps.item.description &&
-    prevProps.item.status === nextProps.item.status &&
-    prevProps.item.due_date === nextProps.item.due_date &&
-    prevProps.item.category === nextProps.item.category &&
-    prevProps.item.recurring === nextProps.item.recurring &&
-    prevProps.item.recurrenceType === nextProps.item.recurrenceType &&
-    prevProps.item.recurrenceInterval === nextProps.item.recurrenceInterval &&
-    prevProps.item.parentTaskId === nextProps.item.parentTaskId &&
-    JSON.stringify(prevProps.item.assignedUsers) === JSON.stringify(nextProps.item.assignedUsers) &&
-    prevProps.currentUserId === nextProps.currentUserId &&
-    JSON.stringify(prevProps.pendingTaskIds) === JSON.stringify(nextProps.pendingTaskIds)
   );
 });
 
 const styles = StyleSheet.create({
-  taskItem: {
-    flexDirection: 'row',
-    backgroundColor: colors.background.secondary,
-    borderRadius: 12,
-    marginHorizontal: 16,
-    marginVertical: 8,
-    borderLeftWidth: 5,
+  container: {
+    width: '100%',
+    borderRadius: 20,
     overflow: 'hidden',
-    ...createShadow(2)
+    marginBottom: 16,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 6,
+      },
+    }),
   },
-  taskContent: {
-    flex: 1,
+  gradient: {
+    padding: 20,
+    paddingLeft: 16,
+    minHeight: 150,
+  },
+  header: {
     flexDirection: 'row',
-    padding: 15,
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
   },
-  taskMainContent: {
+  titleContainer: {
     flex: 1,
-    marginLeft: 10,
+    marginRight: 12,
   },
-  taskHeader: {
+  title: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 4,
+  },
+  statusContainer: {
+    alignItems: 'flex-end',
+  },
+  categoryBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+  },
+  categoryText: {
+    fontSize: 12,
+    marginLeft: 4,
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginTop: 4,
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    marginLeft: 4,
+  },
+  recurringBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    backgroundColor: 'rgba(156, 39, 176, 0.2)',
+    marginTop: 4,
+  },
+  recurringText: {
+    fontSize: 12,
+    color: '#9C27B0',
+    marginLeft: 4,
+    fontWeight: 'bold',
+  },
+  notes: {
+    fontSize: 14,
+    color: '#aaa',
+    marginBottom: 16,
+    lineHeight: 20,
+  },
+  footer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 6,
+    marginTop: 'auto',
   },
-  taskTitle: {
+  infoContainer: {
     flex: 1,
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: colors.text.primary,
+  },
+  infoItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  infoText: {
+    fontSize: 12,
+    color: '#aaa',
+    marginLeft: 8,
+  },
+  userContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  creatorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
     marginRight: 8,
   },
-  taskDescription: {
-    fontSize: 14,
-    color: colors.text.secondary,
-    marginBottom: 8,
-    lineHeight: 20,
+  creatorAvatar: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    marginRight: 6,
   },
-  taskFooter: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  creatorAvatarPlaceholder: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#555',
+    justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 6,
-    gap: 8,
+    marginRight: 6,
   },
-  dueDateContainer: {
+  creatorInitials: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  creatorName: {
+    fontSize: 12,
+    color: '#ddd',
+  },
+  assignedBadge: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: 'rgba(123, 104, 238, 0.2)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
     marginRight: 8,
   },
-  dueDateText: {
-    marginLeft: 4,
+  assignedText: {
     fontSize: 12,
-    fontWeight: '500',
-  },
-  specialDateText: {
-    fontWeight: 'bold',
-  },
-  overdueDateText: {
-    fontWeight: 'bold',
-  },
-  categoryChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: `${colors.primary.main}15`,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 12,
-  },
-  categoryText: {
-    color: colors.primary.main,
-    fontSize: 12,
-    marginLeft: 4,
-  },
-  recurrenceChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: `${colors.success.main}15`,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 12,
-  },
-  recurrenceText: {
-    color: colors.success.main,
-    fontSize: 12,
+    color: '#7B68EE',
     marginLeft: 4,
   },
   stopRecurrenceButton: {
-    marginLeft: 4,
-    padding: 2,
+    padding: 4,
   },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 12,
-  },
-  statusText: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    textTransform: 'uppercase',
-  },
-  completedTask: {
+  completedText: {
+    textDecorationLine: 'line-through',
     opacity: 0.7,
   },
-  completedTaskText: {
-    textDecorationLine: 'line-through',
-    color: colors.text.tertiary,
-  },
-  cancelledTaskText: {
-    color: colors.text.tertiary,
-    fontStyle: 'italic',
-  },
-  pendingTaskItem: {
-    opacity: 0.8,
-  },
-  myTaskItem: {
-    borderLeftWidth: 5,
-    borderLeftColor: colors.primary.main,
-  },
-  recurringTaskItem: {
-    borderRightWidth: 3,
-    borderRightColor: colors.success.main,
-  },
-  recurringIndicator: {
-    color: colors.success.main,
-  },
-  checkboxContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 8,
-    width: 24,
-    height: 24,
-  },
-  assigneesContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginLeft: 'auto',
-  },
-  assigneeAvatar: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: colors.background.tertiary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: colors.background.secondary,
-  },
-  avatarInitial: {
-    color: colors.text.primary,
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  currentUserAvatar: {
-    borderColor: colors.primary.main,
-    backgroundColor: colors.background.secondary,
-  },
-  moreAssigneesAvatar: {
-    backgroundColor: colors.primary.light,
-  },
-  moreAssigneesText: {
-    color: colors.primary.main,
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
-  parentTaskInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  parentTaskText: {
-    color: colors.text.tertiary,
-    fontSize: 12,
-    fontStyle: 'italic',
-    marginLeft: 4,
-  },
-  avatarImage: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+  completedContainer: {
+    opacity: 0.85,
   },
 });
 
-export default TaskItem;
+export default memo(TaskItem); 

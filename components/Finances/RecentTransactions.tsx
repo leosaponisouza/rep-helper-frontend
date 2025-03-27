@@ -6,7 +6,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
-  ScrollView
+  FlatList
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { format, parseISO } from 'date-fns';
@@ -212,19 +212,19 @@ const RecentTransactions: React.FC<RecentTransactionsProps> = ({
           </Text>
         </View>
       ) : (
-        <ScrollView
-          style={styles.transactionsList}
-          showsVerticalScrollIndicator={true}
-          nestedScrollEnabled={true}
-        >
-          {filteredTransactions.map((item, index) => (
+        <FlatList
+          data={filteredTransactions}
+          keyExtractor={(item, index) => `transaction-${item.type}-${item.id}-${index}`}
+          renderItem={({ item }) => (
             <TransactionItem
-              key={`transaction-${item.type}-${item.id}-${index}`}
               item={item}
               onPress={onPressTransaction}
             />
-          ))}
-        </ScrollView>
+          )}
+          style={styles.transactionsList}
+          showsVerticalScrollIndicator={true}
+          nestedScrollEnabled={true}
+        />
       )}
     </View>
   );

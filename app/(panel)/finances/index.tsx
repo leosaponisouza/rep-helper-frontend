@@ -135,6 +135,7 @@ const FinancesDashboardScreen = () => {
     // Check if we have any pending actions to show
     if (Array.isArray(safePendingActions) && safePendingActions.length === 0 && !loadingDashboard) {
       console.log("No pending actions to display");
+      return null; // Não renderizar nada se não houver ações pendentes
     }
     
     return (
@@ -148,81 +149,6 @@ const FinancesDashboardScreen = () => {
       />
     );
   };
-
-  // Render dashboard content
-  const renderDashboardContent = () => (
-    <>
-     {/* Financial Summary */}
-     <FinancialSummary
-        currentBalance={dashboardSummary?.currentBalance ?? 0}
-        pendingExpenses={dashboardSummary?.pendingExpensesAmount ?? 0}
-        approvedExpenses={dashboardSummary?.approvedExpensesAmount ?? 0}
-        totalIncomes={dashboardSummary?.totalIncomes ?? 0}
-        totalExpensesCurrentMonth={dashboardSummary?.totalExpensesCurrentMonth}
-        totalIncomesCurrentMonth={dashboardSummary?.totalIncomesCurrentMonth}
-        loading={loadingDashboard}
-        error={dashboardError}
-        onRetry={handleRefresh}
-        onPressExpenses={navigateToExpensesList}
-        onPressIncomes={navigateToIncomesList}
-      />
-
-      {/* Quick Actions */}
-      <View style={styles.actionsSection}>
-        <Text style={styles.sectionTitle}>Ações Rápidas</Text>
-        <View style={styles.actionsContainer}>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.expenseButton]}
-            onPress={navigateToCreateExpense}
-          >
-            <Ionicons name="add-circle-outline" size={22} color="#fff" />
-            <Text style={styles.actionButtonText}>Nova Despesa</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.actionButton, styles.incomeButton]}
-            onPress={navigateToCreateIncome}
-          >
-            <Ionicons name="add-circle-outline" size={22} color="#fff" />
-            <Text style={styles.actionButtonText}>Nova Receita</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-      {/* Recent Transactions */}
-      <RecentTransactions
-        transactions={recentTransactions || []}
-        loading={loadingDashboard}
-        error={dashboardError}
-        onRetry={handleRefresh}
-        onPressTransaction={handleTransactionPress}
-        onPressViewAll={() => {
-          // Você pode decidir qual aba mostrar ao clicar em "Ver todas" 
-          // ou adicionar uma nova rota para uma visão completa de transações
-          handleTabChange('dashboard'); // Ou qualquer outra navegação apropriada
-        }}
-      />
-      {/* Pending Actions */}
-      {renderPendingActionsSection()}
-      {/* Monthly Chart */}
-      <MonthlyChart
-        data={monthlyData || undefined}
-        title="Movimentação Financeira"
-        loading={loadingDashboard}
-      />
-
-      {/* Category Chart - only show if we have category data */}
-      {categoryExpenses.length > 0 && (
-        <CategoryChart
-          data={categoryExpenses}
-          title="Despesas por Categoria"
-        />
-      )}
-
-
-
-
-    </>
-  );
 
   // Renderizar conteúdo com base na aba ativa
   const renderContent = () => {
@@ -245,7 +171,74 @@ const FinancesDashboardScreen = () => {
               />
             }
           >
-            {renderDashboardContent()}
+            {/* Financial Summary */}
+            <FinancialSummary
+              currentBalance={dashboardSummary?.currentBalance ?? 0}
+              pendingExpenses={dashboardSummary?.pendingExpensesAmount ?? 0}
+              approvedExpenses={dashboardSummary?.approvedExpensesAmount ?? 0}
+              totalIncomes={dashboardSummary?.totalIncomes ?? 0}
+              totalExpensesCurrentMonth={dashboardSummary?.totalExpensesCurrentMonth}
+              totalIncomesCurrentMonth={dashboardSummary?.totalIncomesCurrentMonth}
+              loading={loadingDashboard}
+              error={dashboardError}
+              onRetry={handleRefresh}
+              onPressExpenses={navigateToExpensesList}
+              onPressIncomes={navigateToIncomesList}
+            />
+
+            {/* Quick Actions */}
+            <View style={styles.actionsSection}>
+              <Text style={styles.sectionTitle}>Ações Rápidas</Text>
+              <View style={styles.actionsContainer}>
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.expenseButton]}
+                  onPress={navigateToCreateExpense}
+                >
+                  <Ionicons name="add-circle-outline" size={22} color="#fff" />
+                  <Text style={styles.actionButtonText}>Nova Despesa</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.incomeButton]}
+                  onPress={navigateToCreateIncome}
+                >
+                  <Ionicons name="add-circle-outline" size={22} color="#fff" />
+                  <Text style={styles.actionButtonText}>Nova Receita</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+            
+            {/* Recent Transactions */}
+            <RecentTransactions
+              transactions={recentTransactions || []}
+              loading={loadingDashboard}
+              error={dashboardError}
+              onRetry={handleRefresh}
+              onPressTransaction={handleTransactionPress}
+              onPressViewAll={() => {
+                // Você pode decidir qual aba mostrar ao clicar em "Ver todas" 
+                // ou adicionar uma nova rota para uma visão completa de transações
+                handleTabChange('dashboard'); // Ou qualquer outra navegação apropriada
+              }}
+            />
+            
+            {/* Pending Actions */}
+            {renderPendingActionsSection()}
+            
+            {/* Monthly Chart */}
+            <MonthlyChart
+              data={monthlyData || undefined}
+              title="Movimentação Financeira"
+              loading={loadingDashboard}
+            />
+
+            {/* Category Chart - only show if we have category data */}
+            {categoryExpenses.length > 0 && (
+              <CategoryChart
+                data={categoryExpenses}
+                title="Despesas por Categoria"
+              />
+            )}
           </ScrollView>
         );
     }

@@ -49,6 +49,7 @@ export interface Income extends Transaction {
   source: string;
   contributorId?: string;
   contributorName?: string;
+  contributorProfilePictureUrl?: string;
 }
 
 /**

@@ -153,7 +153,6 @@ const recentTransactions = useMemo<Transaction[]>(() => {
     
     if (data) {
       setIncomes(data);
-      console.log(data);
     }
   }, [republicId]);
 

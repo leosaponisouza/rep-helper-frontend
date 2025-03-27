@@ -15,6 +15,7 @@ import { useFinances, ExpenseFilterType } from '@/src/hooks/useFinances';
 import ExpenseItem from '@/components/Finances/ExpenseItem';
 import ExpenseFilters from '@/components/Finances/ExpenseFilters';
 import { Expense } from '@/src/models/finances.model';
+import { useAuth } from '@/src/context/AuthContext';
 
 // Define the filter option interface
 interface FilterOption {
@@ -34,6 +35,7 @@ const availableFilters: FilterOption[] = [
 const ExpensesScreen = ({ hideHeader = false }) => {
   const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
+  const { user } = useAuth();
 
   // Get expenses and related functions from useFinances hook
   const {
@@ -167,6 +169,7 @@ const ExpensesScreen = ({ hideHeader = false }) => {
           <ExpenseItem 
             expense={item}
             onPress={() => handleExpensePress(item)}
+            currentUserId={user?.uid}
           />
         )}
         contentContainerStyle={[

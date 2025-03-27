@@ -470,16 +470,18 @@ const HomeScreen = () => {
                 <Text style={styles.loadingSectionText}>Carregando tarefas...</Text>
               </View>
             ) : userTasks && userTasks.length > 0 ? (
-              userTasks.map(task => (
-                <TaskItem
-                  key={`task-${task.id}`}
-                  item={task}
-                  onToggleStatus={handleToggleStatus}
-                  currentUserId={user?.uid}
-                  pendingTaskIds={[]}
-                  onPress={handleTaskPress}
-                />
-              ))
+              <View style={styles.tasksList}>
+                {userTasks.map(task => (
+                  <TaskItem
+                    key={`task-${task.id}`}
+                    item={task}
+                    onToggleStatus={handleToggleStatus}
+                    currentUserId={user?.uid}
+                    pendingTaskIds={[]}
+                    onPress={handleTaskPress}
+                  />
+                ))}
+              </View>
             ) : (
               <View style={styles.emptyState}>
                 <Ionicons name="checkbox" size={48} color={colors.primary.light} />
@@ -977,6 +979,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     ...createShadow(8, colors.primary.main),
+  },
+  tasksList: {
+    marginHorizontal: 16,
   },
 });
 
