@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <style name="Theme.App.Starting" parent="Theme.SplashScreen">
+    <!-- Adicione o fundo da janela para evitar a black screen durante o carregamento -->
+    <item name="android:windowBackground">@drawable/splashscreen</item>
+  </style>
+</resources> 

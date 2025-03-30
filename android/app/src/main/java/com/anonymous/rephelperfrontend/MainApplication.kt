@@ -2,6 +2,7 @@ package com.anonymous.rephelperfrontend
 
 import android.app.Application
 import android.content.res.Configuration
+import androidx.multidex.MultiDexApplication
 
 import com.facebook.react.PackageList
 import com.facebook.react.ReactApplication
@@ -16,7 +17,7 @@ import com.facebook.soloader.SoLoader
 import expo.modules.ApplicationLifecycleDispatcher
 import expo.modules.ReactNativeHostWrapper
 
-class MainApplication : Application(), ReactApplication {
+class MainApplication : MultiDexApplication(), ReactApplication {
 
   override val reactNativeHost: ReactNativeHost = ReactNativeHostWrapper(
         this,
