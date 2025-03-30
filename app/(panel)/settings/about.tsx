@@ -123,7 +123,7 @@ const AboutScreen = () => {
         {/* Cabeçalho com logo e informações do app */}
         <View style={styles.header}>
           <Image 
-            source={require('../../../assets/icon.png')} 
+            source={require('../../../assets/images/icon.png')} 
             style={styles.logo}
             resizeMode="contain"
           />
