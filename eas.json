@@ -32,6 +32,15 @@
       "env": {
         "EXPO_PUBLIC_ENV": "production"
       }
+    },
+    "aab": {
+      "android": {
+        "buildType": "app-bundle"
+      },
+      "channel": "production",
+      "env": {
+        "EXPO_PUBLIC_ENV": "production"
+      }
     }
   },
   "submit": {
