@@ -1,5 +1,5 @@
 // app/(auth)/sign-up.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -23,17 +23,18 @@ import { useAuth } from '../../src/context/AuthContext';
 import { Link, useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { ErrorHandler } from '../../src/utils/errorHandling';
-import { checkApiConnection } from '../../src/services/api';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { signUpSchema, SignUpFormData } from '../../src/validation/authSchemas';
+import { clearAuthData } from '../../src/utils/storage';
 
 const SignUpScreen = () => {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [networkStatus, setNetworkStatus] = useState({ connected: true, checking: true });
+  const [loadingMessage, setLoadingMessage] = useState('Criando conta...');
+  const [localLoading, setLocalLoading] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
   
   // Estados de foco
   const [nameFocused, setNameFocused] = useState(false);
@@ -42,8 +43,11 @@ const SignUpScreen = () => {
   const [emailFocused, setEmailFocused] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
   const [confirmPasswordFocused, setConfirmPasswordFocused] = useState(false);
+  
+  // Referência para controlar o cancelamento do cadastro
+  const cancelSignupRef = useRef(false);
 
-  const { login } = useAuth();
+  const { signUp, loading, error, clearError } = useAuth();
   const router = useRouter();
   
   // Configuração do React Hook Form com Zod
@@ -59,126 +63,103 @@ const SignUpScreen = () => {
     }
   });
 
-  // Verificar conectividade ao montar
-  React.useEffect(() => {
-    // Em produção, não precisamos verificar a conectividade automaticamente
-    // checkNetworkConnectivity();
-  }, []);
-
-  const checkNetworkConnectivity = async () => {
-    try {
-      const isConnected = await checkApiConnection();
-      setNetworkStatus({ connected: isConnected, checking: false });
-    } catch (error: unknown) {
-      setNetworkStatus({ connected: false, checking: false });
-      // Removendo logs para produção
+  // Sincronizar os estados de loading e erro do AuthContext com os locais
+  useEffect(() => {
+    setLocalLoading(loading);
+    if (error) {
+      setLocalError(error);
     }
+  }, [loading, error]);
+
+  // Resetar o status de cancelamento quando o componente for desmontado ou quando 'loading' mudar para false
+  useEffect(() => {
+    if (!loading) {
+      cancelSignupRef.current = false;
+    }
+    
+    return () => {
+      cancelSignupRef.current = false;
+    };
+  }, [loading]);
+
+  // Limpa o erro quando o usuário interage com os campos
+  const handleFieldFocus = () => {
+    clearError();
+    setLocalError(null);
   };
 
   const handleSignUp = async (data: SignUpFormData) => {
     try {
       Keyboard.dismiss();
-      setLoading(true);
-      setError('');
-
-      // Verificar conexão com a API antes de tentar cadastro
-      const isConnected = await checkApiConnection();
-      if (!isConnected) {
-        throw new Error('Sem conexão com o servidor. Verifique sua internet.');
+      
+      // Se já estiver carregando, cancelar o cadastro atual
+      if (localLoading) {
+        cancelSignupRef.current = true;
+        clearError();
+        setLocalError(null);
+        setLoadingMessage('Cancelando...');
+        
+        setTimeout(() => {
+          setLocalLoading(false);
+          setLoadingMessage('Criando conta...');
+        }, 500);
+        return;
       }
       
-      // 1. Criar o usuário no Firebase Auth
-      const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
-      const firebaseUser = userCredential.user;
+      // Limpar erros locais
+      setLocalError(null);
       
-      const firebaseToken = await firebaseUser.getIdToken(true);
-
-      // 2. Criar o usuário no backend com timeout
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => {
-        controller.abort();
-      }, 15000);
+      // Indicar que estamos carregando localmente
+      setLocalLoading(true);
       
-      const userData = {
+      // Resetar o estado de cancelamento
+      cancelSignupRef.current = false;
+      
+      // Limpar armazenamento antes de fazer cadastro
+      await clearAuthData();
+      
+      // Atualizar mensagem de loading com progresso
+      setLoadingMessage('Criando conta...');
+      await new Promise(resolve => setTimeout(resolve, 300)); // Pequeno delay para UI
+      if (cancelSignupRef.current) {
+        setLocalLoading(false);
+        return;
+      }
+      
+      setLoadingMessage('Registrando no Firebase...');
+      await new Promise(resolve => setTimeout(resolve, 300)); // Pequeno delay para UI
+      if (cancelSignupRef.current) {
+        setLocalLoading(false);
+        return;
+      }
+      
+      setLoadingMessage('Enviando dados para o servidor...');
+      await new Promise(resolve => setTimeout(resolve, 300)); // Pequeno delay para UI
+      if (cancelSignupRef.current) {
+        setLocalLoading(false);
+        return;
+      }
+      
+      // Usar o método signUp do contexto de autenticação com referência para cancelamento
+      await signUp(
+        data.email, 
+        data.password, 
+        {
           name: data.name,
-          nickname: data.nickname,
-          phone: data.phone,
-          email: data.email,
-          firebaseUid: firebaseUser.uid,
-          provider: 'EMAIL',
-          isAdmin: true,
-          status: 'active'
-      };
-      
-      try {
-        // Removendo logs de dados sensíveis para produção
-        
-        const response = await api.post('api/v1/auth/signup', userData, {
-          headers: {
-            Authorization: `Bearer ${firebaseToken}`,
-            'Content-Type': 'application/json'
-          },
-          signal: controller.signal
-        });
-        
-        clearTimeout(timeoutId);
-        
-        // Removendo logs de depuração para produção
-        
-        // Verificar se os dados necessários existem
-        if (!response.data.token) {
-          throw new Error('Token de autenticação não encontrado na resposta');
-        }
-        
-        if (!response.data.user) {
-          throw new Error('Dados do usuário não encontrados na resposta');
-        }
-        
-        // 3. Login (armazenar o token e dados do usuário)
-        
-        // Converter token para string se não for
-        const tokenString = typeof response.data.token === 'string' 
-          ? response.data.token 
-          : String(response.data.token);
-        
-        // Converter refreshToken para string se existir e não for string
-        const refreshTokenString = response.data.refreshToken && typeof response.data.refreshToken !== 'string'
-          ? String(response.data.refreshToken)
-          : response.data.refreshToken;
-        
-        await login(
-          tokenString,
-          response.data.user,
-          refreshTokenString
-        );
-        
-        // 4. Navegar para a tela de escolha de república 
-        router.replace('/(republic)/choice');
-      } catch (apiError: unknown) {
-        const errorMessage = apiError instanceof Error ? apiError.message : 'Erro desconhecido';
-        // Removendo logs de depuração para produção
-        
-        // Se o usuário foi criado no Firebase, mas falhou no backend
-        // Podemos tentar excluir o usuário do Firebase
-        try {
-          if (firebaseUser) {
-            await firebaseUser.delete();
-          }
-        } catch (deleteError) {
-          // Removendo logs de erro para produção
-        }
-        
-        throw apiError;
-      }
-    } catch (error: unknown) {
-      const parsedError = await ErrorHandler.parseError(error);
-      setError(parsedError.message);
-      // Removendo logs de erro para produção
-    } finally {
-      setLoading(false);
+          nickname: data.nickname || null,
+          phoneNumber: data.phone || ''
+        },
+        cancelSignupRef
+      );
+      // O redirecionamento é tratado pelo AuthContext
+    } catch (error: any) {
+      // Capturar e exibir o erro localmente
+      setLocalError(error.message || 'Erro ao criar conta');
+      setLocalLoading(false);
     }
   };
 
+  // Função de toggle para mostrar/esconder senha
   const toggleShowPassword = () => {
     setShowPassword(!showPassword);
   };
@@ -234,11 +215,15 @@ const SignUpScreen = () => {
                       value={value}
                       onChangeText={onChange}
                       autoCapitalize="words"
-                      onFocus={() => setNameFocused(true)}
+                      onFocus={() => {
+                        setNameFocused(true);
+                        handleFieldFocus();
+                      }}
                       onBlur={() => {
                         setNameFocused(false);
                         onBlur();
                       }}
+                      editable={!localLoading}
                     />
                   </View>
                 )}
@@ -267,11 +252,15 @@ const SignUpScreen = () => {
                       value={value}
                       onChangeText={onChange}
                       autoCapitalize="words"
-                      onFocus={() => setNicknameFocused(true)}
+                      onFocus={() => {
+                        setNicknameFocused(true);
+                        handleFieldFocus();
+                      }}
                       onBlur={() => {
                         setNicknameFocused(false);
                         onBlur();
                       }}
+                      editable={!localLoading}
                     />
                   </View>
                 )}
@@ -300,11 +289,15 @@ const SignUpScreen = () => {
                       value={value}
                       onChangeText={onChange}
                       keyboardType="phone-pad"
-                      onFocus={() => setPhoneFocused(true)}
+                      onFocus={() => {
+                        setPhoneFocused(true);
+                        handleFieldFocus();
+                      }}
                       onBlur={() => {
                         setPhoneFocused(false);
                         onBlur();
                       }}
+                      editable={!localLoading}
                     />
                   </View>
                 )}
@@ -335,11 +328,15 @@ const SignUpScreen = () => {
                       keyboardType="email-address"
                       autoCapitalize="none"
                       autoCorrect={false}
-                      onFocus={() => setEmailFocused(true)}
+                      onFocus={() => {
+                        setEmailFocused(true);
+                        handleFieldFocus();
+                      }}
                       onBlur={() => {
                         setEmailFocused(false);
                         onBlur();
                       }}
+                      editable={!localLoading}
                     />
                   </View>
                 )}
@@ -370,15 +367,20 @@ const SignUpScreen = () => {
                       secureTextEntry={!showPassword}
                       autoCapitalize="none"
                       autoCorrect={false}
-                      onFocus={() => setPasswordFocused(true)}
+                      onFocus={() => {
+                        setPasswordFocused(true);
+                        handleFieldFocus();
+                      }}
                       onBlur={() => {
                         setPasswordFocused(false);
                         onBlur();
                       }}
+                      editable={!localLoading}
                     />
                     <TouchableOpacity 
                       style={styles.passwordToggle} 
                       onPress={toggleShowPassword}
+                      disabled={localLoading}
                     >
                       <Ionicons 
                         name={showPassword ? "eye-off-outline" : "eye-outline"} 
@@ -415,15 +417,20 @@ const SignUpScreen = () => {
                       secureTextEntry={!showConfirmPassword}
                       autoCapitalize="none"
                       autoCorrect={false}
-                      onFocus={() => setConfirmPasswordFocused(true)}
+                      onFocus={() => {
+                        setConfirmPasswordFocused(true);
+                        handleFieldFocus();
+                      }}
                       onBlur={() => {
                         setConfirmPasswordFocused(false);
                         onBlur();
                       }}
+                      editable={!localLoading}
                     />
                     <TouchableOpacity 
                       style={styles.passwordToggle} 
                       onPress={toggleShowConfirmPassword}
+                      disabled={localLoading}
                     >
                       <Ionicons 
                         name={showConfirmPassword ? "eye-off-outline" : "eye-outline"} 
@@ -441,21 +448,23 @@ const SignUpScreen = () => {
                 </View>
               )}
 
-              {error ? (
+              {localError && (
                 <View style={styles.errorContainer}>
                   <Ionicons name="alert-circle" size={18} color="#FF6347" />
-                  <Text style={styles.errorText}>{error}</Text>
+                  <Text style={styles.errorText}>{localError}</Text>
                 </View>
-              ) : null}
+              )}
 
               <TouchableOpacity 
-                style={[styles.button, loading && styles.buttonDisabled]} 
+                style={[styles.button, localLoading && styles.buttonDisabled]} 
                 onPress={handleSubmit(handleSignUp)}
-                disabled={loading}
                 activeOpacity={0.8}
               >
-                {loading ? (
-                  <ActivityIndicator size="small" color="#fff" />
+                {localLoading ? (
+                  <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="small" color="#fff" />
+                    <Text style={styles.loadingText}>{loadingMessage}</Text>
+                  </View>
                 ) : (
                   <>
                     <Ionicons name="person-add" size={20} color="#fff" style={styles.buttonIcon} />
@@ -628,6 +637,17 @@ const styles = StyleSheet.create({
     color: 'white',
     marginLeft: 8,
     fontWeight: '500',
+  },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginLeft: 10,
   },
 });
 

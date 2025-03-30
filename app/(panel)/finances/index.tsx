@@ -14,13 +14,16 @@ import {
   Animated,
   TouchableWithoutFeedback,
   Modal,
-  Platform
+  Platform,
+  Alert
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFinances } from '../../../src/hooks/useFinances';
 import { PendingAction, Transaction } from '../../../src/models/finances.model';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useAuth } from '../../../src/context/AuthContext';
+import * as financesService from '../../../src/services/financesService';
 
 // Components
 import FinancialSummary from '../../../components/Finances/FinancialSummary';
@@ -30,6 +33,7 @@ import ExpensesScreen from './expenses/index';
 import IncomesScreen from './incomes/index';
 import RecentTransactions from '@/components/Finances/RecentTransactions';
 import PendingActions from '@/components/Finances/PendingActions';
+import AdjustBalanceModal from '@/components/Finances/AdjustBalanceModal';
 
 // Types for tabs
 type TabType = 'dashboard' | 'expenses' | 'incomes';
@@ -42,7 +46,9 @@ const FinancesDashboardScreen = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
   const [showSubmenu, setShowSubmenu] = useState(false);
+  const [showAdjustBalanceModal, setShowAdjustBalanceModal] = useState(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const { user } = useAuth();
 
   // Set active tab from URL parameter
   useEffect(() => {
@@ -77,6 +83,16 @@ const FinancesDashboardScreen = () => {
 
   // Ensure pendingActions is always an array, even if the API returns undefined
   const safePendingActions = Array.isArray(pendingActions) ? pendingActions : [];
+
+  // Check if user is admin
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  // Fetch user role
+  useEffect(() => {
+    if (user?.isAdmin) {
+      setIsAdmin(true);
+    }
+  }, [user]);
 
   // Refresh handler
   const handleRefresh = useCallback(async () => {
@@ -160,6 +176,37 @@ const FinancesDashboardScreen = () => {
     }
   }, [showSubmenu, fadeAnim]);
 
+  // Handle balance adjustment
+  const handleAdjustBalance = useCallback(() => {
+    if (isAdmin) {
+      setShowAdjustBalanceModal(true);
+    } else {
+      Alert.alert(
+        'Permissão Necessária', 
+        'Apenas administradores podem ajustar o saldo da república.'
+      );
+    }
+  }, [isAdmin]);
+
+  // Handle balance adjustment submission
+  const handleAdjustBalanceSubmit = useCallback(async (newBalance: number, description: string) => {
+    if (!user?.currentRepublicId) {
+      Alert.alert('Erro', 'Não foi possível identificar sua república. Tente novamente mais tarde.');
+      return false;
+    }
+
+    try {
+      await financesService.adjustBalance(user.currentRepublicId, newBalance, description);
+      await refreshFinancialData();
+      Alert.alert('Sucesso', 'Saldo da república atualizado com sucesso!');
+      return true;
+    } catch (error) {
+      console.error('Erro ao ajustar saldo:', error);
+      Alert.alert('Erro', 'Não foi possível ajustar o saldo. Tente novamente mais tarde.');
+      return false;
+    }
+  }, [user?.currentRepublicId, refreshFinancialData]);
+
   const renderPendingActionsSection = () => {
     // Add debugging to help identify issues
     console.log("Rendering pending actions section with: ", {
@@ -217,9 +264,12 @@ const FinancesDashboardScreen = () => {
               totalIncomesCurrentMonth={dashboardSummary?.totalIncomesCurrentMonth}
               loading={loadingDashboard}
               error={dashboardError}
+              isAdmin={isAdmin}
               onRetry={handleRefresh}
+              onPressBalance={handleAdjustBalance}
               onPressExpenses={navigateToExpensesList}
               onPressIncomes={navigateToIncomesList}
+              onAdjustBalance={handleAdjustBalance}
             />
             
             {/* Recent Transactions */}
@@ -329,6 +379,14 @@ const FinancesDashboardScreen = () => {
           </View>
         </TouchableWithoutFeedback>
       </Modal>
+
+      {/* Adjust Balance Modal */}
+      <AdjustBalanceModal
+        visible={showAdjustBalanceModal}
+        currentBalance={dashboardSummary?.currentBalance ?? 0}
+        onClose={() => setShowAdjustBalanceModal(false)}
+        onSubmit={handleAdjustBalanceSubmit}
+      />
 
       {/* Navigation tabs */}
       <View style={styles.tabsContainer}>

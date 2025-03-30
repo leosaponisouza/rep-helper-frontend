@@ -41,6 +41,9 @@ const ForgotPasswordScreen = () => {
   });
 
   const handleResetPassword = async (data: ForgotPasswordFormData) => {
+    // Se já estiver carregando, não fazer nada
+    if (loading) return;
+    
     Keyboard.dismiss();
     setLoading(true);
     setError('');
@@ -137,7 +140,6 @@ const ForgotPasswordScreen = () => {
               <TouchableOpacity 
                 style={[styles.button, loading && styles.buttonDisabled]} 
                 onPress={handleSubmit(handleResetPassword)}
-                disabled={loading}
                 activeOpacity={0.8}
               >
                 {loading ? (

@@ -8,7 +8,9 @@ import {
   StatusBar,
   SafeAreaView,
   Animated,
-  Platform
+  Platform,
+  RefreshControl,
+  ToastAndroid
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -32,6 +34,7 @@ const EventsScreen: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [calendarLoading, setCalendarLoading] = useState<boolean>(true);
+  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   
   // Referencias para otimização
   const eventsLoaded = useRef(false);
@@ -101,6 +104,16 @@ const EventsScreen: React.FC = () => {
       // Marcar que os eventos foram carregados
       eventsLoaded.current = true;
       
+      // Registrar o horário da atualização
+      setLastRefresh(new Date());
+      
+      // Mostrar mensagem de sucesso apenas se for um pull-to-refresh
+      if (!calendarLoading) {
+        if (Platform.OS === 'android') {
+          ToastAndroid.show('Eventos atualizados com sucesso!', ToastAndroid.SHORT);
+        }
+      }
+      
       // Delay para o skeleton
       setTimeout(() => {
         setCalendarLoading(false);
@@ -112,7 +125,57 @@ const EventsScreen: React.FC = () => {
       setRefreshing(false);
       isRefreshing.current = false;
     }
+  }, [refreshEvents, calendarLoading]);
+  
+  // Callback para o "pull to refresh"
+  const handlePullToRefresh = useCallback(async () => {
+    if (isRefreshing.current) return;
+    
+    try {
+      setRefreshing(true);
+      await refreshEvents('all');
+      
+      // Registrar o horário da atualização
+      setLastRefresh(new Date());
+      
+      // Feedback visual
+      if (Platform.OS === 'android') {
+        ToastAndroid.show('Eventos atualizados com sucesso!', ToastAndroid.SHORT);
+      }
+    } catch (error) {
+      console.error('Erro ao atualizar eventos:', error);
+    } finally {
+      setRefreshing(false);
+    }
   }, [refreshEvents]);
+  
+  // Obter texto informativo sobre a última atualização
+  const lastUpdateText = useMemo(() => {
+    if (!lastRefresh) return '';
+    
+    try {
+      const now = new Date();
+      const diff = now.getTime() - lastRefresh.getTime();
+      const minutes = Math.floor(diff / 60000);
+      
+      if (minutes < 1) {
+        return 'Atualizado agora mesmo';
+      } else if (minutes === 1) {
+        return 'Atualizado há 1 minuto';
+      } else if (minutes < 60) {
+        return `Atualizado há ${minutes} minutos`;
+      } else {
+        const hours = Math.floor(minutes / 60);
+        if (hours === 1) {
+          return 'Atualizado há 1 hora';
+        } else {
+          return `Atualizado há ${hours} horas`;
+        }
+      }
+    } catch (error) {
+      return '';
+    }
+  }, [lastRefresh]);
   
   // Manipular seleção de data no calendário
   const handleDateSelect = useCallback((dateString: string) => {
@@ -169,7 +232,12 @@ const EventsScreen: React.FC = () => {
       {/* Header com título e botão de adicionar */}
       <View style={styles.headerContainer}>
         <View style={styles.headerContent}>
-          <Text style={styles.headerTitle}>Agenda</Text>
+          <View>
+            <Text style={styles.headerTitle}>Agenda</Text>
+            {lastUpdateText && (
+              <Text style={styles.lastUpdateText}>{lastUpdateText}</Text>
+            )}
+          </View>
           <TouchableOpacity 
             style={styles.addButtonContainer} 
             onPress={handleAddEvent}
@@ -198,6 +266,16 @@ const EventsScreen: React.FC = () => {
           onEventPress={handleEventPress}
           currentUserId={user?.uid || ''}
           loading={calendarLoading}
+          refreshControl={
+            <RefreshControl 
+              refreshing={refreshing}
+              onRefresh={handlePullToRefresh}
+              colors={['#7B68EE', '#9370DB']}
+              tintColor="#7B68EE"
+              title="Atualizando eventos..."
+              titleColor="#7B68EE"
+            />
+          }
         />
       )}
     </SafeAreaView>
@@ -226,6 +304,11 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#fff',
   },
+  lastUpdateText: {
+    fontSize: 12,
+    color: '#aaa',
+    marginTop: 2,
+  },
   addButtonContainer: {
     borderRadius: 12,
     overflow: 'hidden',
@@ -250,7 +333,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   buttonIcon: {
-    marginRight: 5,
+    marginRight: 4,
   },
   buttonText: {
     color: 'white',

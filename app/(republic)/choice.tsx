@@ -22,6 +22,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { auth } from '../../src/utils/firebaseClientConfig';
+import * as republicService from '../../src/services/republicService';
 
 const RepublicChoiceScreen = () => {
     const { user, login } = useAuth();
@@ -47,7 +48,7 @@ const RepublicChoiceScreen = () => {
     const checkNetworkConnectivity = async () => {
         try {
             // Simple health check to your API
-            await api.get('api/v1/health');
+            await api.get('/api/v1/health');
             setNetworkStatus({ connected: true, checking: false });
         } catch (error) {
             setNetworkStatus({ connected: false, checking: false });
@@ -67,28 +68,19 @@ const RepublicChoiceScreen = () => {
             if (!firebaseUser) {
                 throw new Error('Usuário não autenticado.');
             }
-            const firebaseToken = await firebaseUser.getIdToken();
-            const response = await api.post(
-                'api/v1/republics/join',
-                {code : joinCode},
-                { headers: { Authorization: `Bearer ${firebaseToken}` } }
-            );
-
-            login(response.data.token, response.data.user);
+            
+            // Usar o serviço de república para entrar
+            const response = await republicService.joinRepublic(joinCode);
+            
+            // A função de login aceita o token e os dados do usuário
+            login(response.token, response.user);
+            
             Alert.alert("Sucesso", "Você entrou na república com sucesso!")
             router.replace('/(panel)/home'); 
         } catch (err: any) {
-            if (err.response && err.response.status === 404) {
-                setError('República não encontrada.');
-                Alert.alert('Erro', 'República não encontrada.');
-            } else if (err.response && err.response.status === 400) {
-                setError('Você já faz parte desta república.');
-                Alert.alert('Erro', 'Você já faz parte desta república.');
-            } else {
-                setError('Falha ao entrar na república.');
-                Alert.alert('Erro', 'Falha ao entrar na república.');
-            }
-
+            // O serviço já trata os erros específicos
+            setError(err.message || 'Falha ao entrar na república.');
+            Alert.alert('Erro', err.message || 'Falha ao entrar na república.');
             console.error('Error joining republic:', err);
         } finally {
             setLoading(false);

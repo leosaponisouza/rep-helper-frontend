@@ -7,14 +7,17 @@ import { Platform } from 'react-native';
 
 // Obter a URL base da API do Expo Constants
 const extra = Constants.expoConfig?.extra || {};
-let API_BASE_URL = extra.apiBaseUrl || process.env.EXPO_PUBLIC_API_BASE_URL || 'http://192.168.100.6:3000/api/v1';
+let API_BASE_URL = extra.apiBaseUrl || process.env.EXPO_PUBLIC_API_BASE_URL ;
 
-// Garantir que a URL base termina com /api/v1
-if (!API_BASE_URL.endsWith('/api/v1')) {
-  API_BASE_URL = API_BASE_URL.endsWith('/') 
-    ? `${API_BASE_URL}api/v1` 
-    : `${API_BASE_URL}/api/v1`;
+// Garantir que a URL base NÃO termina com /api/v1
+if (API_BASE_URL.endsWith('/api/v1')) {
+  API_BASE_URL = API_BASE_URL.substring(0, API_BASE_URL.length - 7);
+} else if (API_BASE_URL.endsWith('/api/v1/')) {
+  API_BASE_URL = API_BASE_URL.substring(0, API_BASE_URL.length - 8);
 }
+
+// Log para debug - será removido depois
+console.log('API_BASE_URL configurada como:', API_BASE_URL);
 
 // Removendo logs de depuração para produção
 
@@ -31,6 +34,13 @@ const api = axios.create({
 if (__DEV__) {
   api.interceptors.request.use(request => {
     console.log('Request:', request.method?.toUpperCase(), request.url);
+    // Log do token para debug
+    if (request.headers.Authorization) {
+      const authHeader = String(request.headers.Authorization);
+      console.log('Token sendo enviado:', authHeader.substring(0, 25) + '...');
+    } else {
+      console.log('AVISO: Nenhum token de autorização presente nesta requisição');
+    }
     return request;
   });
 }
@@ -42,10 +52,18 @@ api.interceptors.request.use(
       const token = await getToken();
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
+        if (__DEV__) {
+          console.log('Interceptor: Token adicionado ao header', token.substring(0, 15) + '...');
+        }
+      } else if (__DEV__) {
+        console.log('Interceptor: Nenhum token encontrado no armazenamento');
       }
       return config;
     } catch (error) {
       // Removendo log de erro para produção
+      if (__DEV__) {
+        console.error('Erro ao obter token do armazenamento:', error);
+      }
       return config;
     }
   },
@@ -67,25 +85,20 @@ api.interceptors.response.use(
       originalRequest._retry = true;
       
       try {
-        // Verificar se temos um refresh token
-        const refreshToken = await getRefreshToken();
-        if (!refreshToken) {
-          throw new Error('Refresh token não disponível');
+        // Verificar se temos um token
+        const token = await getToken();
+        if (!token) {
+          throw new Error('Token não disponível');
         }
         
         // Tentar renovar o token
-        const response = await axios.post(`${API_BASE_URL}/auth/refresh`, { 
-          refreshToken 
+        const response = await axios.post(`${API_BASE_URL}/api/v1/auth/refresh`, { 
+          token 
         });
         
         if (response.data.token) {
           // Armazenar o novo token
           await storeToken(response.data.token);
-          
-          // Armazenar novo refresh token, se fornecido
-          if (response.data.refreshToken) {
-            await storeRefreshToken(response.data.refreshToken);
-          }
           
           // Atualizar cabeçalho e repetir requisição original
           api.defaults.headers.common['Authorization'] = `Bearer ${response.data.token}`;
@@ -109,7 +122,7 @@ api.interceptors.response.use(
 // Função para checar conectividade
 export const checkApiConnection = async (): Promise<boolean> => {
   try {
-    await api.get('api/v1/health', { timeout: 5000 });
+    await api.get('/api/v1/health', { timeout: 5000 });
     return true;
   } catch (error) {
     // Removendo log de erro para produção

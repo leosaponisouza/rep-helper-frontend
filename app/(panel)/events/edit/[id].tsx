@@ -29,11 +29,14 @@ import { sharedStyles, colors } from '../../../../src/styles/sharedStyles';
 import eventsStyles from '../../../../src/styles/eventStyles';
 import { formatToBackendDateTime } from '@/src/utils/dateUtils';
 
+// Importar componente de convite de usuários
+import InviteUsersSection from '@/components/Event/InviteUsersSection';
+
 const EditEventScreen: React.FC = () => {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
-  const { updateEvent, isCurrentUserCreator } = useEvents();
+  const { updateEvent, isCurrentUserCreator, inviteUsers } = useEvents();
   
   // Animações
   const fadeAnim = useState(new Animated.Value(0))[0];
@@ -58,6 +61,9 @@ const EditEventScreen: React.FC = () => {
   const [titleFocused, setTitleFocused] = useState(false);
   const [descriptionFocused, setDescriptionFocused] = useState(false);
   const [locationFocused, setLocationFocused] = useState(false);
+  
+  // Estado para participantes selecionados
+  const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]);
   
   // Efeito de entrada com animação
   useEffect(() => {
@@ -97,6 +103,12 @@ const EditEventScreen: React.FC = () => {
         setLocation(eventData.location || '');
         setStartDate(parseISO(eventData.startDate));
         setEndDate(parseISO(eventData.endDate));
+
+        // Carregar participantes existentes, se disponíveis
+        if (eventData.invitations) {
+          const participantIds = eventData.invitations.map((invitation) => invitation.userId);
+          setSelectedParticipants(participantIds);
+        }
       } catch (error: any) {
         console.error("Error fetching event:", error);
         
@@ -281,6 +293,13 @@ const EditEventScreen: React.FC = () => {
       
       await updateEvent(parseInt(id), eventData);
       
+      // Atualizar participantes se necessário
+      // O criador do evento já é automaticamente um participante confirmado
+      // e não precisa ser incluído na lista de convites
+      if (selectedParticipants.length > 0) {
+        await inviteUsers(parseInt(id), selectedParticipants);
+      }
+      
       // Animação de saída
       Animated.timing(fadeAnim, {
         toValue: 0,
@@ -310,7 +329,7 @@ const EditEventScreen: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [title, description, startDate, endDate, location, validateForm, id, updateEvent, fadeAnim, router]);
+  }, [title, description, startDate, endDate, location, validateForm, id, updateEvent, fadeAnim, router, selectedParticipants, inviteUsers]);
 
   
   if (initialLoading) {
@@ -468,8 +487,18 @@ const EditEventScreen: React.FC = () => {
               />
             </View>
           </View>
-           {/* Botão para gerenciar convites */}
-           <TouchableOpacity 
+
+          {/* Seção de Convite de Participantes */}
+          {user?.currentRepublicId && (
+            <InviteUsersSection
+              republicId={user.currentRepublicId}
+              selectedIds={selectedParticipants}
+              onSelectionChange={setSelectedParticipants}
+            />
+          )}
+          
+          {/* Botão para gerenciar convites */}
+          <TouchableOpacity 
             style={[
               sharedStyles.button,
               sharedStyles.buttonSecondary,

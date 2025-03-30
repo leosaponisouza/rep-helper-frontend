@@ -40,6 +40,7 @@ interface CalendarProps {
   onEventPress: (event: any) => void;
   currentUserId: string;
   loading?: boolean;
+  refreshControl?: React.ReactElement;
 }
 
 interface EventsByDate {
@@ -53,6 +54,7 @@ const Calendar: React.FC<CalendarProps> = ({
   onEventPress,
   currentUserId,
   loading = false,
+  refreshControl,
 }) => {
   const [selectedDay, setSelectedDay] = useState(selectedDate || format(new Date(), 'yyyy-MM-dd'));
   const [currentMonth, setCurrentMonth] = useState('');
@@ -61,6 +63,28 @@ const Calendar: React.FC<CalendarProps> = ({
   const slideAnim = useRef(new Animated.Value(20)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
   const calendarRef = useRef<any>(null);
+  const isRefreshing = useRef(false);
+  
+  // Função para animar a entrada dos eventos com efeito de fade in/slide up
+  const animateEventsIn = useCallback(() => {
+    // Reset dos valores de animação
+    slideAnim.setValue(20);
+    opacityAnim.setValue(0);
+    
+    // Animação paralela de deslize para cima e fade in
+    Animated.parallel([
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacityAnim, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [slideAnim, opacityAnim]);
   
   // Organiza os eventos por data
   useEffect(() => {
@@ -84,7 +108,13 @@ const Calendar: React.FC<CalendarProps> = ({
     }
     
     setEventsByDate(grouped);
-  }, [events]);
+    
+    // Animar a entrada dos eventos quando forem carregados
+    if (!isRefreshing.current) {
+      animateEventsIn();
+    }
+    isRefreshing.current = false;
+  }, [events, animateEventsIn]);
 
   // Atualiza os eventos do dia quando a data selecionada muda
   useEffect(() => {
@@ -93,23 +123,9 @@ const Calendar: React.FC<CalendarProps> = ({
       setDayEvents(eventsByDate[dateStr] || []);
       
       // Animar a entrada dos eventos
-      slideAnim.setValue(20);
-      opacityAnim.setValue(0);
-      
-      Animated.parallel([
-        Animated.timing(slideAnim, {
-          toValue: 0,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-        Animated.timing(opacityAnim, {
-          toValue: 1,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-      ]).start();
+      animateEventsIn();
     }
-  }, [selectedDay, eventsByDate]);
+  }, [selectedDay, eventsByDate, animateEventsIn]);
 
   // Formata o mês atual para exibição
   useEffect(() => {
@@ -251,76 +267,67 @@ const Calendar: React.FC<CalendarProps> = ({
         horizontal={true}
         pagingEnabled={true}
         calendarWidth={screenWidth}
-        firstDay={0} // Semana começa no domingo
+        hideExtraDays={true}
+        hideDayNames={false}
+        hideArrows={true}
+        displayLoadingIndicator={false}
+        renderHeader={() => null}
         theme={{
-          backgroundColor: 'transparent',
           calendarBackground: 'transparent',
-          textSectionTitleColor: '#aaa',
+          textSectionTitleColor: '#b6c1cd',
           selectedDayBackgroundColor: '#7B68EE',
-          selectedDayTextColor: '#fff',
+          selectedDayTextColor: '#ffffff',
           todayTextColor: '#7B68EE',
-          dayTextColor: '#fff',
-          textDisabledColor: '#555',
+          dayTextColor: '#d9e1e8',
+          textDisabledColor: '#444',
           dotColor: '#7B68EE',
-          selectedDotColor: '#fff',
+          selectedDotColor: '#ffffff',
           arrowColor: '#7B68EE',
-          monthTextColor: '#fff',
+          monthTextColor: '#d9e1e8',
           indicatorColor: '#7B68EE',
+          textDayFontFamily: 'System',
+          textMonthFontFamily: 'System',
+          textDayHeaderFontFamily: 'System',
           textDayFontWeight: '300',
           textMonthFontWeight: 'bold',
-          textDayHeaderFontWeight: '300',
-          textDayFontSize: 14,
+          textDayHeaderFontWeight: '500',
+          textDayFontSize: 16,
           textMonthFontSize: 16,
           textDayHeaderFontSize: 13
         }}
-        // Esconder o cabeçalho padrão do mês
-        renderHeader={(date) => null}
       />
       
-      {/* Eventos */}
-      <View style={styles.eventsContainer}>
-        <View style={styles.eventsHeader}>
-          <Text style={styles.eventsHeaderText}>
-            {selectedDay 
-              ? (() => {
-                  try {
-                    return format(parseISO(selectedDay), "EEEE, dd 'de' MMMM", { locale: ptBR });
-                  } catch (error) {
-                    return '';
-                  }
-                })()
-              : ''}
-          </Text>
-        </View>
+      {/* Lista de eventos do dia selecionado */}
+      <Animated.View 
+        style={[
+          styles.eventsContainer,
+          {
+            transform: [{ translateY: slideAnim }],
+            opacity: opacityAnim
+          }
+        ]}
+      >
+        <Text style={styles.eventsHeader}>
+          {dayEvents.length === 0 ? 'Nenhum evento neste dia' : `${dayEvents.length} ${dayEvents.length === 1 ? 'evento' : 'eventos'} neste dia`}
+        </Text>
         
-        {loading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#7B68EE" />
-          </View>
-        ) : (
-          <>
-            {dayEvents.length === 0 ? (
-              <View style={styles.noEventsContainer}>
-                <Text style={styles.noEventsText}>Nenhum compromisso para este dia</Text>
-              </View>
-            ) : (
-              <Animated.FlatList
-                data={dayEvents}
-                renderItem={renderEventItem}
-                keyExtractor={(item) => item?.id?.toString() || Math.random().toString()}
-                contentContainerStyle={styles.eventsList}
-                style={[
-                  styles.eventsFlat,
-                  {
-                    transform: [{ translateY: slideAnim }],
-                    opacity: opacityAnim,
-                  },
-                ]}
-              />
-            )}
-          </>
-        )}
-      </View>
+        {/* Lista de eventos */}
+        <FlatList
+          data={dayEvents}
+          renderItem={renderEventItem}
+          keyExtractor={(item) => item?.id?.toString() || Math.random().toString()}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.eventsList}
+          refreshControl={refreshControl}
+          ListEmptyComponent={() => (
+            <View style={styles.emptyContainer}>
+              <Ionicons name="calendar-outline" size={48} color="#444" />
+              <Text style={styles.emptyText}>Nenhum evento agendado</Text>
+              <Text style={styles.emptySubtext}>Selecione outro dia ou crie um novo evento</Text>
+            </View>
+          )}
+        />
+      </Animated.View>
     </View>
   );
 };
@@ -375,32 +382,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#333',
-  },
-  eventsHeaderText: {
-    fontSize: 16,
+    color: '#d9e1e8',
+    fontSize: 15,
     fontWeight: '500',
-    color: '#fff',
-    textTransform: 'capitalize',
   },
   eventsList: {
+    paddingHorizontal: 16,
     paddingBottom: 20,
   },
-  eventsFlat: {
-    flex: 1,
-  },
-  loadingContainer: {
+  emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  noEventsContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  noEventsText: {
+  emptyText: {
     color: '#aaa',
     fontSize: 16,
+  },
+  emptySubtext: {
+    color: '#aaa',
+    fontSize: 14,
   },
 });
 

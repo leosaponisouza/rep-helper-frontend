@@ -411,27 +411,39 @@ export const eventsStyles = StyleSheet.create({
     fontSize: 16,
   },
 
-  // Formulário de criação/edição de evento
+  // Data e hora nos formulários
   dateTimeContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    width: '100%',
   },
   dateButton: {
-    flex: 0.65,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.background.secondary,
+    backgroundColor: colors.background.tertiary,
     borderRadius: 12,
     paddingHorizontal: 16,
-    paddingVertical: 16,
-    borderWidth: 1,
-    borderColor: colors.background.tertiary,
+    paddingVertical: 14,
+    flex: 1,
     marginRight: 8,
-    ...createShadow(1)
+    borderWidth: 1,
+    borderColor: colors.background.paper,
+  },
+  timeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.background.tertiary,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    width: '30%',
+    borderWidth: 1,
+    borderColor: colors.background.paper,
   },
   dateTimeText: {
     color: colors.text.primary,
-    fontSize: 16,
+    fontSize: 14,
+    marginLeft: 8,
   },
   
   // Dicas
@@ -623,18 +635,6 @@ export const eventsStyles = StyleSheet.create({
   clearButton: {
     padding: 4,
   },
-  timeButton: {
-    flex: 0.32,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.background.secondary,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    borderWidth: 1,
-    borderColor: colors.background.tertiary,
-    ...createShadow(1)
-  }
 });
 
 export default eventsStyles;

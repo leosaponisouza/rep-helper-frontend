@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { useSegments, Redirect } from 'expo-router';
 import { useAuth } from '../context/AuthContext';
-import { View, ActivityIndicator, Text } from 'react-native';
+import { View, ActivityIndicator } from 'react-native';
 
 /**
  * Hook que verifica se o usuário está autenticado e determina a rota de redirecionamento
@@ -31,20 +31,20 @@ export function useProtectedRoute() {
       // Usuário está autenticado
       
       // Se estiver nas telas de autenticação, redirecionar
-      if (inAuthGroup && segments[1] !== 'sign-out') {
+      if (inAuthGroup) {
         // Decidir para onde redirecionar com base no estado do usuário
-        if (user?.current_republic_id) {
+        if (user?.currentRepublicId) {
           setRedirectTo('/(panel)/home');
         } else {
           setRedirectTo('/(republic)/choice');
         }
       }
       // Se o usuário estiver no grupo panel, mas não tiver república associada
-      else if (inPanelGroup && !user?.current_republic_id) {
+      else if (inPanelGroup && !user?.currentRepublicId) {
         setRedirectTo('/(republic)/choice');
       }
       // Se o usuário estiver no grupo republic, mas já tiver república associada
-      else if (inRepublicGroup && user?.current_republic_id && segments[1] !== 'new') {
+      else if (inRepublicGroup && user?.currentRepublicId && segments[1] !== 'new') {
         setRedirectTo('/(panel)/home');
       }
       else {
@@ -60,10 +60,16 @@ export function useProtectedRoute() {
  * Componente de proteção de autenticação para ser usado em layouts
  */
 export function AuthProtection({ children }: { children: React.ReactNode }) {
-  const { loading, error } = useAuth();
+  const { loading } = useAuth();
   const { redirectTo } = useProtectedRoute();
   
-  if (loading) {
+  // Verificamos apenas se é necessário inicializar a autenticação
+  // em vez de mostrar tela de loading/erro
+  const inAuthGroup = useSegments()[0] === '(auth)';
+
+  // Em telas de autenticação, não mostramos o loading global
+  // o loading e erros serão tratados por cada tela específica
+  if (loading && !inAuthGroup) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#222' }}>
         <ActivityIndicator size="large" color="#7B68EE" />
@@ -71,20 +77,9 @@ export function AuthProtection({ children }: { children: React.ReactNode }) {
     );
   }
   
-  if (error) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#222', padding: 20 }}>
-        <Text style={{ color: '#FF6347', fontSize: 16, marginBottom: 16, textAlign: 'center' }}>
-          {error}
-        </Text>
-        <ActivityIndicator size="small" color="#7B68EE" />
-      </View>
-    );
-  }
-  
   // Se tiver um redirecionamento, faça-o
   if (redirectTo) {
-    return <Redirect href={redirectTo} />;
+    return <Redirect href={redirectTo as any} />;
   }
   
   // Caso contrário, renderize os filhos

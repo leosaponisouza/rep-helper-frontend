@@ -1,4 +1,3 @@
-// app/(panel)/events/create.tsx - Versão atualizada com novos estilos e correção para o botão
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
@@ -12,7 +11,8 @@ import {
   Alert,
   ActivityIndicator,
   Keyboard,
-  Animated
+  Animated,
+  ScrollView
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -28,11 +28,14 @@ import { sharedStyles, colors } from '../../../src/styles/sharedStyles';
 import eventsStyles from '@/src/styles/eventStyles';
 import { formatLocalDate } from '@/src/utils/dateUtils';
 
+// Importar componente de convite de usuários
+import InviteUsersSection from '@/components/Event/InviteUsersSection';
+
 const CreateEventScreen: React.FC = () => {
   const router = useRouter();
   const params = useLocalSearchParams<{ date?: string }>();
   const { user } = useAuth();
-  const { createEvent } = useEvents();
+  const { createEvent, inviteUsers } = useEvents();
   
   // Animações
   const fadeAnim = useState(new Animated.Value(0))[0];
@@ -76,6 +79,9 @@ const CreateEventScreen: React.FC = () => {
   const [titleFocused, setTitleFocused] = useState(false);
   const [descriptionFocused, setDescriptionFocused] = useState(false);
   const [locationFocused, setLocationFocused] = useState(false);
+  
+  // Estado para participantes selecionados
+  const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]);
   
   // Efeito de entrada com animação
   useEffect(() => {
@@ -220,6 +226,7 @@ const CreateEventScreen: React.FC = () => {
     
     return true;
   }, [title, startDate, endDate]);
+  
   const handleCreateEvent = useCallback(async () => {
     Keyboard.dismiss();
     
@@ -240,6 +247,23 @@ const CreateEventScreen: React.FC = () => {
       
       const createdEvent = await createEvent(eventData);
       
+      // Quando o evento é criado, o criador já é automaticamente adicionado como confirmado
+      // no backend, então não precisamos adicionar o criador aos convidados manualmente
+      
+      // Se há participantes selecionados, enviamos convites
+      if (selectedParticipants.length > 0 && createdEvent && createdEvent.id) {
+        try {
+          await inviteUsers(createdEvent.id, selectedParticipants);
+        } catch (error) {
+          console.error('Erro ao convidar participantes:', error);
+          // Não interrompemos o fluxo se falhar ao convidar, apenas notificamos
+          Alert.alert(
+            'Atenção',
+            'O evento foi criado, mas ocorreu um erro ao enviar alguns convites. Você pode convidar participantes mais tarde.'
+          );
+        }
+      }
+      
       // Animação de saída
       Animated.timing(fadeAnim, {
         toValue: 0,
@@ -250,41 +274,37 @@ const CreateEventScreen: React.FC = () => {
           'Sucesso',
           'Evento criado com sucesso!',
           [
-            {
-              text: 'OK',
-              onPress: () => {
-                // Ir para a tela de detalhes do evento
-                if (createdEvent && createdEvent.id) {
-                  router.push(`/(panel)/events/${createdEvent.id}`);
-                } else {
-                  router.push('/(panel)/events/index');
-                }
-              }
+            { 
+              text: 'OK', 
+              onPress: () => router.push('/(panel)/events')
             }
           ]
         );
       });
+      
     } catch (error: any) {
       console.error('Erro ao criar evento:', error);
-      // Extrair a mensagem de erro mais específica se disponível
-      const errorMessage = error?.message || 
-                          error?.originalError?.message || 
-                          'Não foi possível criar o evento. Tente novamente.';
-                          
-      Alert.alert('Erro', errorMessage);
+      Alert.alert(
+        'Erro',
+        error.message || 'Não foi possível criar o evento. Tente novamente.'
+      );
     } finally {
       setLoading(false);
     }
-  }, [title, description, startDate, endDate, location, user, createEvent, validateForm, fadeAnim, router]);
-  
-  // Também substitua as funções formatDate e formatTime:
-  const formatDate = useCallback((date: Date) => {
-    return formatLocalDate(date);
-  }, []);
-  
-  const formatTimeDisplay = useCallback((date: Date) => {
-    return formatTime(date);
-  }, []);
+  }, [
+    title, 
+    description, 
+    startDate, 
+    endDate, 
+    location, 
+    user?.currentRepublicId,
+    selectedParticipants,
+    validateForm, 
+    createEvent,
+    inviteUsers,
+    fadeAnim, 
+    router
+  ]);
   
   return (
     <SafeAreaView style={sharedStyles.safeArea}>
@@ -303,198 +323,182 @@ const CreateEventScreen: React.FC = () => {
           >
             <Ionicons name="arrow-back" size={24} color={colors.primary.main} />
           </TouchableOpacity>
-          <Text style={sharedStyles.headerTitle}>Criar Compromisso</Text>
+          <Text style={sharedStyles.headerTitle}>Criar Evento</Text>
         </View>
         
-        <Animated.ScrollView 
-          style={[sharedStyles.scrollContainer, { opacity: fadeAnim }]}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 100 }} // Adiciona padding extra no final para evitar que conteúdo seja cortado
-        >
-          {/* Título */}
-          <View style={sharedStyles.inputGroup}>
-            <Text style={sharedStyles.inputLabel}>Título do Evento *</Text>
-            <View style={[
-              sharedStyles.inputContainer, 
-              titleFocused && sharedStyles.inputFocused
-            ]}>
-              <Ionicons name="calendar" size={20} color={colors.primary.main} style={sharedStyles.buttonIcon} />
-              <TextInput
-                style={sharedStyles.input}
-                placeholder="Digite o título do evento"
-                placeholderTextColor={colors.text.tertiary}
-                value={title}
-                onChangeText={setTitle}
-                maxLength={100}
-                onFocus={() => setTitleFocused(true)}
-                onBlur={() => setTitleFocused(false)}
-                returnKeyType="next"
-                autoFocus={true}
-              />
-            </View>
-          </View>
-          
-          {/* Descrição */}
-          <View style={sharedStyles.inputGroup}>
-            <Text style={sharedStyles.inputLabel}>Descrição (opcional)</Text>
-            <View style={[
-              sharedStyles.inputContainer, 
-              sharedStyles.textAreaContainer,
-              descriptionFocused && sharedStyles.inputFocused
-            ]}>
-              <TextInput
-                style={[sharedStyles.input, sharedStyles.textArea]}
-                placeholder="Descreva mais sobre o evento"
-                placeholderTextColor={colors.text.tertiary}
-                value={description}
-                onChangeText={setDescription}
-                multiline
-                numberOfLines={4}
-                textAlignVertical="top"
-                onFocus={() => setDescriptionFocused(true)}
-                onBlur={() => setDescriptionFocused(false)}
-              />
-            </View>
-          </View>
-          
-          {/* Data de Início */}
-          <View style={sharedStyles.inputGroup}>
-            <Text style={sharedStyles.inputLabel}>Data e Hora de Início *</Text>
-            <View style={eventsStyles.dateTimeContainer}>
-              <TouchableOpacity 
-                style={eventsStyles.dateButton}
-                onPress={() => showDatePicker('start', 'date')}
-                accessibilityRole="button"
-                accessibilityLabel="Selecionar data de início"
-              >
+        <View style={{flex: 1}}>
+          <ScrollView
+            style={sharedStyles.scrollContainer}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: 100 }}
+            nestedScrollEnabled={true}
+          >
+            {/* Título */}
+            <View style={sharedStyles.inputGroup}>
+              <Text style={sharedStyles.inputLabel}>Título do Evento *</Text>
+              <View style={[
+                sharedStyles.inputContainer, 
+                titleFocused && sharedStyles.inputFocused
+              ]}>
                 <Ionicons name="calendar" size={20} color={colors.primary.main} style={sharedStyles.buttonIcon} />
-                <Text style={eventsStyles.dateTimeText}>{formatDate(startDate)}</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={eventsStyles.timeButton}
-                onPress={() => showDatePicker('start', 'time')}
-                accessibilityRole="button"
-                accessibilityLabel="Selecionar hora de início"
-              >
-                <Ionicons name="time" size={20} color={colors.primary.main} style={sharedStyles.buttonIcon} />
-                <Text style={eventsStyles.dateTimeText}>{formatTime(startDate)}</Text>
-              </TouchableOpacity>
+                <TextInput
+                  style={sharedStyles.input}
+                  placeholder="Digite o título do evento"
+                  placeholderTextColor={colors.text.tertiary}
+                  value={title}
+                  onChangeText={setTitle}
+                  maxLength={100}
+                  onFocus={() => setTitleFocused(true)}
+                  onBlur={() => setTitleFocused(false)}
+                  returnKeyType="next"
+                />
+              </View>
             </View>
-          </View>
-          
-          {/* Data de Término */}
-          <View style={sharedStyles.inputGroup}>
-            <Text style={sharedStyles.inputLabel}>Data e Hora de Término *</Text>
-            <View style={eventsStyles.dateTimeContainer}>
-              <TouchableOpacity 
-                style={eventsStyles.dateButton}
-                onPress={() => showDatePicker('end', 'date')}
-                accessibilityRole="button"
-                accessibilityLabel="Selecionar data de término"
-              >
-                <Ionicons name="calendar" size={20} color={colors.primary.main} style={sharedStyles.buttonIcon} />
-                <Text style={eventsStyles.dateTimeText}>{formatDate(endDate)}</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={eventsStyles.timeButton}
-                onPress={() => showDatePicker('end', 'time')}
-                accessibilityRole="button"
-                accessibilityLabel="Selecionar hora de término"
-              >
-                <Ionicons name="time" size={20} color={colors.primary.main} style={sharedStyles.buttonIcon} />
-                <Text style={eventsStyles.dateTimeText}>{formatTime(endDate)}</Text>
-              </TouchableOpacity>
+            
+            {/* Descrição */}
+            <View style={sharedStyles.inputGroup}>
+              <Text style={sharedStyles.inputLabel}>Descrição (opcional)</Text>
+              <View style={[
+                sharedStyles.inputContainer, 
+                sharedStyles.textAreaContainer,
+                descriptionFocused && sharedStyles.inputFocused
+              ]}>
+                <TextInput
+                  style={[sharedStyles.input, sharedStyles.textArea]}
+                  placeholder="Descreva mais sobre o evento"
+                  placeholderTextColor={colors.text.tertiary}
+                  value={description}
+                  onChangeText={setDescription}
+                  multiline
+                  numberOfLines={4}
+                  textAlignVertical="top"
+                  onFocus={() => setDescriptionFocused(true)}
+                  onBlur={() => setDescriptionFocused(false)}
+                />
+              </View>
             </View>
-          </View>
-          
-          {/* Local do Evento */}
-          <View style={sharedStyles.inputGroup}>
-            <Text style={sharedStyles.inputLabel}>Local (opcional)</Text>
-            <View style={[
-              sharedStyles.inputContainer, 
-              locationFocused && sharedStyles.inputFocused
-            ]}>
-              <Ionicons name="location" size={20} color={colors.primary.main} style={sharedStyles.buttonIcon} />
-              <TextInput
-                style={sharedStyles.input}
-                placeholder="Local do evento"
-                placeholderTextColor={colors.text.tertiary}
-                value={location}
-                onChangeText={setLocation}
-                onFocus={() => setLocationFocused(true)}
-                onBlur={() => setLocationFocused(false)}
-                returnKeyType="done"
+            
+            {/* Data de Início */}
+            <View style={sharedStyles.inputGroup}>
+              <Text style={sharedStyles.inputLabel}>Data e Hora de Início *</Text>
+              <View style={eventsStyles.dateTimeContainer}>
+                <TouchableOpacity 
+                  style={eventsStyles.dateButton}
+                  onPress={() => showDatePicker('start', 'date')}
+                  accessibilityRole="button"
+                  accessibilityLabel="Selecionar data de início"
+                >
+                  <Ionicons name="calendar" size={20} color={colors.primary.main} style={sharedStyles.buttonIcon} />
+                  <Text style={eventsStyles.dateTimeText}>
+                    {format(startDate, "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
+                  </Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  style={eventsStyles.timeButton}
+                  onPress={() => showDatePicker('start', 'time')}
+                  accessibilityRole="button"
+                  accessibilityLabel="Selecionar hora de início"
+                >
+                  <Ionicons name="time" size={20} color={colors.primary.main} style={sharedStyles.buttonIcon} />
+                  <Text style={eventsStyles.dateTimeText}>{formatTime(startDate)}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+            
+            {/* Data de Término */}
+            <View style={sharedStyles.inputGroup}>
+              <Text style={sharedStyles.inputLabel}>Data e Hora de Término *</Text>
+              <View style={eventsStyles.dateTimeContainer}>
+                <TouchableOpacity 
+                  style={eventsStyles.dateButton}
+                  onPress={() => showDatePicker('end', 'date')}
+                  accessibilityRole="button"
+                  accessibilityLabel="Selecionar data de término"
+                >
+                  <Ionicons name="calendar" size={20} color={colors.primary.main} style={sharedStyles.buttonIcon} />
+                  <Text style={eventsStyles.dateTimeText}>
+                    {format(endDate, "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
+                  </Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  style={eventsStyles.timeButton}
+                  onPress={() => showDatePicker('end', 'time')}
+                  accessibilityRole="button"
+                  accessibilityLabel="Selecionar hora de término"
+                >
+                  <Ionicons name="time" size={20} color={colors.primary.main} style={sharedStyles.buttonIcon} />
+                  <Text style={eventsStyles.dateTimeText}>{formatTime(endDate)}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+            
+            {/* Local do Evento */}
+            <View style={sharedStyles.inputGroup}>
+              <Text style={sharedStyles.inputLabel}>Local (opcional)</Text>
+              <View style={[
+                sharedStyles.inputContainer, 
+                locationFocused && sharedStyles.inputFocused
+              ]}>
+                <Ionicons name="location" size={20} color={colors.primary.main} style={sharedStyles.buttonIcon} />
+                <TextInput
+                  style={sharedStyles.input}
+                  placeholder="Local do evento"
+                  placeholderTextColor={colors.text.tertiary}
+                  value={location}
+                  onChangeText={setLocation}
+                  onFocus={() => setLocationFocused(true)}
+                  onBlur={() => setLocationFocused(false)}
+                  returnKeyType="done"
+                />
+              </View>
+            </View>
+            
+            {/* Seção de Convite de Participantes */}
+            {user?.currentRepublicId && (
+              <InviteUsersSection
+                republicId={user.currentRepublicId}
+                selectedIds={selectedParticipants}
+                onSelectionChange={setSelectedParticipants}
               />
-            </View>
-          </View>
-          
-          {/* Dicas */}
-          <View style={eventsStyles.tipsContainer}>
-            <View style={eventsStyles.tipHeader}>
-              <Ionicons name="information-circle" size={20} color={colors.primary.main} />
-              <Text style={eventsStyles.tipTitle}>Dicas</Text>
-            </View>
-            <Text style={eventsStyles.tipText}>
-              • Eventos criados são automaticamente compartilhados com todos os membros da república
-            </Text>
-            <Text style={eventsStyles.tipText}>
-              • Você poderá convidar pessoas específicas após criar o evento
-            </Text>
-            <Text style={eventsStyles.tipText}>
-              • Defina um local para facilitar a localização do evento
-            </Text>
-          </View>
-          
-          {/* Mapa (implementar depois) */}
-          
-          {/* Botão de criar */}
-          <View style={{ marginTop: 20, marginBottom: 60 }}>
-            <TouchableOpacity
+            )}
+            
+            {/* Botão de Criar */}
+            <TouchableOpacity 
               style={[
-                sharedStyles.button, 
+                sharedStyles.button,
+                { backgroundColor: colors.primary.main },
                 loading && sharedStyles.buttonDisabled
               ]}
               onPress={handleCreateEvent}
               disabled={loading}
               accessibilityRole="button"
               accessibilityLabel="Criar evento"
-              accessibilityHint="Cria um novo evento com as informações fornecidas"
             >
               {loading ? (
-                <ActivityIndicator color={colors.text.primary} size="small" />
+                <ActivityIndicator size="small" color="#fff" />
               ) : (
                 <>
-                  <Ionicons name="add-circle" size={20} color={colors.text.primary} style={sharedStyles.buttonIcon} />
-                  <Text style={sharedStyles.buttonText}>Criar Evento</Text>
+                  <Ionicons name="checkmark" size={20} color="#fff" style={sharedStyles.buttonIcon} />
+                  <Text style={[sharedStyles.buttonText, { color: '#fff' }]}>Criar Evento</Text>
                 </>
               )}
             </TouchableOpacity>
-          </View>
-        </Animated.ScrollView>
+          </ScrollView>
+        </View>
         
         {/* Date Pickers */}
-        {showStartDatePicker && (
+        {(showStartDatePicker || showEndDatePicker) && (
           <DateTimePicker
-            value={startDate}
+            value={datePickerFor === 'start' ? startDate : endDate}
             mode={datePickerMode}
-            display="default"
+            is24Hour={true}
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
             onChange={handleDateChange}
+            maximumDate={new Date(2030, 11, 31)}
             minimumDate={new Date()}
-            textColor={Platform.OS === 'ios' ? '#fff' : undefined}
-          />
-        )}
-        
-        {showEndDatePicker && (
-          <DateTimePicker
-            value={endDate}
-            mode={datePickerMode}
-            display="default"
-            onChange={handleDateChange}
-            minimumDate={datePickerMode === 'date' ? startDate : undefined}
-            textColor={Platform.OS === 'ios' ? '#fff' : undefined}
           />
         )}
       </KeyboardAvoidingView>

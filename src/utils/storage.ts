@@ -107,19 +107,19 @@ export const storeRefreshToken = async (
   token: string,
   options?: SecureStore.SecureStoreOptions
 ): Promise<void> => {
-  await storeData('refreshToken', token, options);
+  await storeData(REFRESH_TOKEN_KEY, token, options);
 };
 
 export const getRefreshToken = async (
   options?: SecureStore.SecureStoreOptions
 ): Promise<string | null> => {
-  return await getData('refreshToken', options);
+  return await getData(REFRESH_TOKEN_KEY, options);
 };
 
 export const removeRefreshToken = async (
   options?: SecureStore.SecureStoreOptions
 ): Promise<void> => {
-  await removeData('refreshToken', options);
+  await removeData(REFRESH_TOKEN_KEY, options);
 };
 
 export const clearAuthData = async (): Promise<void> => {

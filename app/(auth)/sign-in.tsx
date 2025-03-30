@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     View,
     Text,
@@ -11,30 +11,34 @@ import {
     SafeAreaView,
     StatusBar,
     KeyboardAvoidingView,
-    Platform
+    Platform,
+    Alert
 } from 'react-native';
 import { Link, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { auth, getFreshFirebaseToken } from '../../src/utils/firebaseClientConfig';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { auth } from '../../src/utils/firebaseClientConfig';
 import { useAuth } from '../../src/context/AuthContext';
-import api from '../../src/services/api';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { ErrorHandler } from '../../src/utils/errorHandling';
-import { checkApiConnection } from '../../src/services/api';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { loginSchema, LoginFormData } from '../../src/validation/authSchemas';
+import { clearAuthData } from '../../src/utils/storage';
+import api from '../../src/services/api';
 
 const LoginScreen = () => {
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [networkStatus, setNetworkStatus] = useState({ connected: true, checking: true });
     const [emailFocused, setEmailFocused] = useState(false);
     const [passwordFocused, setPasswordFocused] = useState(false);
+    const [loadingMessage, setLoadingMessage] = useState('Autenticando...');
+    const [localLoading, setLocalLoading] = useState(false);
+    const [localError, setLocalError] = useState<string | null>(null);
+    
+    // Referência para controlar o cancelamento do login
+    const cancelLoginRef = useRef(false);
 
-    const { login } = useAuth();
+    const { loginWithCredentials, loading, error, clearError } = useAuth();
     const router = useRouter();
     
     // Configuração do React Hook Form com Zod
@@ -46,121 +50,91 @@ const LoginScreen = () => {
         }
     });
 
-    // Verificar conectividade na montagem do componente
+    // Sincronizar os estados de loading e erro do AuthContext com os locais
     useEffect(() => {
-        // Em produção, não precisamos verificar a conectividade automaticamente
-        // checkNetworkConnectivity();
-    }, []);
-
-    const checkNetworkConnectivity = async () => {
-        try {
-            const isConnected = await checkApiConnection();
-            setNetworkStatus({ connected: isConnected, checking: false });
-        } catch (error) {
-            setNetworkStatus({ connected: false, checking: false });
-            // Removendo log para produção
+        setLocalLoading(loading);
+        if (error) {
+            setLocalError(error);
         }
-    };
+    }, [loading, error]);
+
+    // Resetar o status de cancelamento quando o componente for desmontado ou quando 'loading' mudar para false
+    useEffect(() => {
+        if (!loading) {
+            cancelLoginRef.current = false;
+        }
+        
+        return () => {
+            cancelLoginRef.current = false;
+        };
+    }, [loading]);
 
     const handleLogin = async (data: LoginFormData) => {
         Keyboard.dismiss();
-        setLoading(true);
-        setError('');
-
+        
+        // Se já estiver carregando, cancelar o login atual
+        if (localLoading) {
+            cancelLoginRef.current = true;
+            clearError();
+            setLocalError(null);
+            setLoadingMessage('Cancelando...');
+            
+            setTimeout(() => {
+                setLocalLoading(false);
+                setLoadingMessage('Autenticando...');
+            }, 500);
+            return;
+        }
+        
+        // Limpar erros locais
+        setLocalError(null);
+        
+        // Indicar que estamos carregando localmente
+        setLocalLoading(true);
+        
+        // Resetar o estado de cancelamento
+        cancelLoginRef.current = false;
+        
         try {
-            // Verificar conexão com a API antes de tentar login
-            const isConnected = await checkApiConnection();
-            if (!isConnected) {
-                throw new Error('Sem conexão com o servidor. Verifique sua internet.');
-            }
-
-            try {
-                // Autenticação Firebase
-                await signInWithEmailAndPassword(auth, data.email, data.password);
-            } catch (firebaseError: any) {
-                // Tratar erros do Firebase Authentication
-                // Para erros de senha/email incorretos, usar mensagem genérica de segurança
-                if (firebaseError.code === 'auth/wrong-password' || 
-                    firebaseError.code === 'auth/user-not-found' || 
-                    firebaseError.code === 'auth/invalid-email' ||
-                    firebaseError.code === 'auth/invalid-credential') {
-                    throw new Error('Email ou senha incorretos.');
-                } else if (firebaseError.code === 'auth/too-many-requests') {
-                    throw new Error('Muitas tentativas. Tente novamente mais tarde ou recupere sua senha.');
-                } else if (firebaseError.code === 'auth/network-request-failed') {
-                    throw new Error('Falha na conexão. Verifique sua internet e tente novamente.');
-                } else if (firebaseError.code === 'auth/user-disabled') {
-                    throw new Error('Esta conta foi desativada. Entre em contato com o suporte.');
-                }
-                // Para outros erros, repassar para tratamento geral
-                throw firebaseError;
+            // Limpar armazenamento antes de fazer login
+            await clearAuthData();
+            
+            // Atualizar mensagem de loading com progresso
+            setLoadingMessage('Autenticando...');
+            
+            // Verificar se o login foi cancelado a cada etapa
+            await new Promise(resolve => setTimeout(resolve, 300)); // Pequeno delay para UI
+            if (cancelLoginRef.current) {
+                setLocalLoading(false);
+                return;
             }
             
-            // Obter token Firebase
-            const firebaseToken = await getFreshFirebaseToken(true);
-            
-            // Configurar controlador para timeout
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 15000);
-            
-            try {
-                // Autenticação na API backend
-                const response = await api.post('/api/v1/auth/login',
-                    {
-                        // Enviar o firebaseToken também no corpo da requisição
-                        firebaseToken: firebaseToken
-                    },
-                    {
-                        headers: {
-                            'Authorization': `Bearer ${firebaseToken}`,
-                            'Content-Type': 'application/json'
-                        },
-                        signal: controller.signal
-                    }
-                );
-                
-                clearTimeout(timeoutId);
-        
-                // Verificar a resposta da API
-                if (response.data.token && response.data.user) {
-                    // Armazenar dados de autenticação e atualizar contexto
-                    await login(
-                        response.data.token,
-                        response.data.user,
-                    );
-        
-                    // Navegar para tela apropriada
-                    if (response.data.user.currentRepublicId) {
-                        router.replace('/(panel)/home');
-                    } else {
-                        router.replace('/(republic)/choice');
-                    }
-                } else {
-                    throw new Error('Resposta inválida do servidor. Tente novamente mais tarde.');
-                }
-            } catch (apiError: any) {
-                clearTimeout(timeoutId);
-                
-                // Se for erro de timeout
-                if (apiError.name === 'AbortError') {
-                    throw new Error('O servidor demorou para responder. Tente novamente mais tarde.');
-                }
-                
-                // Repassar erro para tratamento geral
-                throw apiError;
+            setLoadingMessage('Conectando ao servidor...');
+            await new Promise(resolve => setTimeout(resolve, 300)); // Pequeno delay para UI
+            if (cancelLoginRef.current) {
+                setLocalLoading(false);
+                return;
             }
-        } catch (error) {
-            // Usar o utilitário de tratamento de erros
-            const parsedError = await ErrorHandler.parseError(error);
-            setError(parsedError.message);
-            // Removendo log de erro para produção
-        } finally {
-            setLoading(false);
+            
+            // Usar o método loginWithCredentials do contexto de autenticação com referência para cancelamento
+            await loginWithCredentials(data.email, data.password, cancelLoginRef);
+            
+            // O redirecionamento é tratado pelo AuthContext
+        } catch (error: any) {
+            // Capturar e exibir o erro localmente
+            setLocalError(error.message || 'Erro ao fazer login');
+            setLocalLoading(false);
         }
     };
 
     const toggleShowPassword = () => {
         setShowPassword(!showPassword);
+    };
+
+    // Limpa o erro quando o usuário interage com os campos
+    const handleFieldFocus = () => {
+        clearError();
+        setLocalError(null);
     };
 
     return (
@@ -206,11 +180,15 @@ const LoginScreen = () => {
                                             keyboardType="email-address"
                                             autoCapitalize="none"
                                             autoCorrect={false}
-                                            onFocus={() => setEmailFocused(true)}
+                                            onFocus={() => {
+                                                setEmailFocused(true);
+                                                handleFieldFocus();
+                                            }}
                                             onBlur={() => {
                                                 setEmailFocused(false);
                                                 onBlur();
                                             }}
+                                            editable={!localLoading}
                                         />
                                     </View>
                                 )}
@@ -241,15 +219,20 @@ const LoginScreen = () => {
                                             secureTextEntry={!showPassword}
                                             autoCapitalize="none"
                                             autoCorrect={false}
-                                            onFocus={() => setPasswordFocused(true)}
+                                            onFocus={() => {
+                                                setPasswordFocused(true);
+                                                handleFieldFocus();
+                                            }}
                                             onBlur={() => {
                                                 setPasswordFocused(false);
                                                 onBlur();
                                             }}
+                                            editable={!localLoading}
                                         />
                                         <TouchableOpacity 
                                             style={styles.passwordToggle} 
                                             onPress={toggleShowPassword}
+                                            disabled={localLoading}
                                         >
                                             <Ionicons 
                                                 name={showPassword ? "eye-off-outline" : "eye-outline"} 
@@ -267,21 +250,23 @@ const LoginScreen = () => {
                                 </View>
                             )}
 
-                            {error ? (
+                            {localError && (
                                 <View style={styles.errorContainer}>
                                     <Ionicons name="alert-circle" size={18} color="#FF6347" />
-                                    <Text style={styles.errorText}>{error}</Text>
+                                    <Text style={styles.errorText}>{localError}</Text>
                                 </View>
-                            ) : null}
+                            )}
 
                             <TouchableOpacity 
-                                style={[styles.button, loading && styles.buttonDisabled]} 
+                                style={[styles.button, localLoading && styles.buttonDisabled]} 
                                 onPress={handleSubmit(handleLogin)}
-                                disabled={loading}
                                 activeOpacity={0.8}
                             >
-                                {loading ? (
-                                    <ActivityIndicator size="small" color="#fff" />
+                                {localLoading ? (
+                                    <View style={styles.loadingContainer}>
+                                        <ActivityIndicator size="small" color="#fff" />
+                                        <Text style={styles.loadingText}>{loadingMessage}</Text>
+                                    </View>
                                 ) : (
                                     <Text style={styles.buttonText}>Entrar</Text>
                                 )}
@@ -460,6 +445,17 @@ const styles = StyleSheet.create({
         color: 'white',
         marginLeft: 8,
         fontWeight: '500',
+    },
+    loadingContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    loadingText: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: 'bold',
+        marginLeft: 10,
     },
 });
 

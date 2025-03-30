@@ -35,6 +35,13 @@ export default function RepublicLayout() {
           headerShown: false 
         }} 
       />
+      <Stack.Screen 
+        name="join" 
+        options={{ 
+          title: 'Entrar em República',
+          headerShown: false 
+        }} 
+      />
     </Stack>
   );
 }

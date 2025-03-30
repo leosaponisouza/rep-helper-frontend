@@ -18,16 +18,23 @@ module.exports = {
     resizeMode: "contain",
     backgroundColor: "#ffffff"
   },
-  ios: {
-    supportsTablet: true,
-    bundleIdentifier: IS_DEV ? "com.anonymous.rephelperfrontend.dev" : "com.anonymous.rephelperfrontend"
+  updates: {
+    url: "https://u.expo.dev/883082f7-0fde-4821-b970-bb262f455554"
   },
   android: {
     adaptiveIcon: {
       foregroundImage: "./assets/images/adaptive-icon.png",
       backgroundColor: "#ffffff"
     },
-    package: IS_DEV ? "com.anonymous.rephelperfrontend.dev" : "com.anonymous.rephelperfrontend"
+    package: IS_DEV ? "com.anonymous.rephelperfrontend.dev" : "com.anonymous.rephelperfrontend",
+    runtimeVersion: "1.0.0"
+  },
+  ios: {
+    supportsTablet: true,
+    bundleIdentifier: IS_DEV ? "com.anonymous.rephelperfrontend.dev" : "com.anonymous.rephelperfrontend",
+    runtimeVersion: {
+      policy: "appVersion"
+    }
   },
   web: {
     bundler: "metro",
@@ -52,10 +59,15 @@ module.exports = {
     firebaseAppId: env.FIREBASE_APP_ID,
     
     // API config
-    apiBaseUrl: env.API_BASE_URL || "http://192.168.100.6:3000/api/v1",
+    apiBaseUrl: env.API_BASE_URL,
     
     // Supabase config
     supabaseUrl: env.EXPO_PUBLIC_SUPABASE_URL,
     supabaseAnonKey: env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
+    
+    // EAS config
+    eas: {
+      projectId: "883082f7-0fde-4821-b970-bb262f455554"
+    }
   }
 };

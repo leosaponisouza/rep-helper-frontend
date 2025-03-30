@@ -24,6 +24,8 @@ import api from '../../src/services/api';
 import { useAuth } from '../../src/context/AuthContext';
 import { router, useNavigation } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as republicService from '../../src/services/republicService';
+import { CreateRepublicRequest } from '../../src/models/republic.model';
 
 // Função auxiliar para formatar CEP
 const formatCEP = (value: string) => {
@@ -86,15 +88,19 @@ const CreateRepublicScreen: React.FC = () => {
                 throw new Error('Usuário não autenticado');
             }
 
-            const republicData = {
+            const republicData: CreateRepublicRequest = {
                 ...data,
                 owner_id: user.uid,
+                zipCode: data.zip_code,
             };
 
             console.log('Enviando dados para criar república:', republicData);
-            const response = await api.post('/republics', republicData);
-            console.log('Resposta da API:', response.data);
-            const republicCode = response.data.republic?.code;
+            
+            // Usar o serviço de república para criar uma nova república
+            const response = await republicService.createRepublic(republicData);
+            
+            console.log('Resposta da API:', response);
+            const republicCode = response.republic?.code;
 
             if (republicCode) {
                 showRepublicCodeDialog(republicCode);
@@ -104,9 +110,7 @@ const CreateRepublicScreen: React.FC = () => {
         } catch (error: any) {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
             
-            const errorMessage = error.response?.data?.message 
-                || error.message 
-                || 'Erro ao criar república';
+            const errorMessage = error.message || 'Erro ao criar república';
 
             Alert.alert('Erro', errorMessage);
         } finally {
