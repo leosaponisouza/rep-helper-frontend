@@ -180,8 +180,9 @@ const EventsScreen: React.FC = () => {
   // Manipular seleção de data no calendário
   const handleDateSelect = useCallback((dateString: string) => {
     try {
-      const date = new Date(dateString);
-      // Verificar se a data é válida
+      // Criar a data usando os componentes individuais para evitar problemas de fuso horário
+      const [year, month, day] = dateString.split('-').map(Number);
+      const date = new Date(year, month - 1, day);
       if (!isNaN(date.getTime())) {
         setSelectedDate(date);
       } else {
@@ -201,8 +202,17 @@ const EventsScreen: React.FC = () => {
   
   // Navegar para a tela de criação de evento
   const handleAddEvent = useCallback(() => {
-    router.push('/(panel)/events/create');
-  }, [router]);
+    // Usar a data selecionada diretamente, sem conversão de fuso horário
+    const year = selectedDate.getFullYear();
+    const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
+    const day = String(selectedDate.getDate()).padStart(2, '0');
+    const dateString = `${year}-${month}-${day}`;
+    
+    router.push({
+      pathname: '/(panel)/events/create',
+      params: { date: dateString }
+    });
+  }, [router, selectedDate]);
   
   // Eventos memorizados e limpos
   const eventsData = useMemo(() => {
@@ -259,24 +269,28 @@ const EventsScreen: React.FC = () => {
       {calendarLoading ? (
         <CalendarSkeleton />
       ) : (
-        <Calendar
-          events={preparedEvents}
-          selectedDate={formattedDate}
-          onDateSelect={handleDateSelect}
-          onEventPress={handleEventPress}
-          currentUserId={user?.uid || ''}
-          loading={calendarLoading}
-          refreshControl={
-            <RefreshControl 
-              refreshing={refreshing}
-              onRefresh={handlePullToRefresh}
-              colors={['#7B68EE', '#9370DB']}
-              tintColor="#7B68EE"
-              title="Atualizando eventos..."
-              titleColor="#7B68EE"
+        <View style={styles.calendarContainer}>
+          <View style={styles.calendarSection}>
+            <Calendar
+              events={preparedEvents}
+              selectedDate={formattedDate}
+              onDateSelect={handleDateSelect}
+              onEventPress={handleEventPress}
+              currentUserId={user?.uid || ''}
+              loading={calendarLoading}
+              refreshControl={
+                <RefreshControl 
+                  refreshing={refreshing}
+                  onRefresh={handlePullToRefresh}
+                  colors={['#7B68EE', '#9370DB']}
+                  tintColor="#7B68EE"
+                  title="Atualizando eventos..."
+                  titleColor="#7B68EE"
+                />
+              }
             />
-          }
-        />
+          </View>
+        </View>
       )}
     </SafeAreaView>
   );
@@ -308,6 +322,16 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#aaa',
     marginTop: 2,
+  },
+  calendarContainer: {
+    flex: 1,
+    backgroundColor: '#222',
+  },
+  calendarSection: {
+    flex: 1,
+    backgroundColor: '#333',
+    borderTopWidth: 1,
+    borderTopColor: '#444',
   },
   addButtonContainer: {
     borderRadius: 12,

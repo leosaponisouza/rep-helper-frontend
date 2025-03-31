@@ -8,13 +8,13 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  FlatList,
-  Animated,
+  TouchableWithoutFeedback,
   Dimensions,
   Modal,
   StatusBar,
   Platform,
-  ActivityIndicator
+  ActivityIndicator,
+  ScrollView
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -22,6 +22,7 @@ import { colors, createShadow } from '@/src/styles/sharedStyles';
 import { formatLocalDate } from '@/src/utils/dateUtils';
 import { useNotifications, Notification, NotificationType } from '@/src/hooks/useNotifications';
 import { LinearGradient } from 'expo-linear-gradient';
+import { AnimatedView, Animated } from '@/src/utils/animationCompat';
 
 // Para compatibilidade com tipos adicionais vindos da API
 type NotificationWithRawType = Omit<Notification, 'type'> & {
@@ -122,7 +123,7 @@ const NotificationItem = ({
   const destinationText = getDestinationText();
   
   return (
-    <Animated.View
+    <AnimatedView
       style={[
         styles.notificationItem,
         !notification.read && styles.unreadNotification
@@ -224,7 +225,7 @@ const NotificationItem = ({
           </View>
         </LinearGradient>
       </TouchableOpacity>
-    </Animated.View>
+    </AnimatedView>
   );
 };
 
@@ -263,18 +264,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
       // Carregar notificações quando o centro é aberto
       fetchNotifications(activeTab);
     } else {
-      Animated.parallel([
-        Animated.timing(slideAnim, {
-          toValue: Dimensions.get('window').width,
-          duration: 250,
-          useNativeDriver: true,
-        }),
-        Animated.timing(opacityAnim, {
-          toValue: 0,
-          duration: 250,
-          useNativeDriver: true,
-        })
-      ]).start();
+      // A animação de saída será feita no onClose
     }
   }, [visible, slideAnim, opacityAnim, activeTab, fetchNotifications]);
   
@@ -342,6 +332,24 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
     onClose();
   };
   
+  // Função para fechar com animação
+  const handleClose = () => {
+    Animated.parallel([
+      Animated.timing(slideAnim, {
+        toValue: Dimensions.get('window').width,
+        duration: 300,
+        useNativeDriver: true
+      }),
+      Animated.timing(opacityAnim, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true
+      })
+    ]).start(() => {
+      onClose();
+    });
+  };
+  
   // Renderizar conteúdo vazio
   const renderEmptyContent = () => {
     if (loading) {
@@ -373,7 +381,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
       visible={visible}
       transparent={true}
       animationType="none"
-      onRequestClose={onClose}
+      onRequestClose={handleClose}
     >
       <StatusBar 
         barStyle="light-content" 
@@ -389,7 +397,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
         <TouchableOpacity 
           style={styles.dismissArea}
           activeOpacity={1}
-          onPress={onClose}
+          onPress={handleClose}
         />
         
         <Animated.View 
@@ -405,7 +413,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
           >
             <View style={styles.headerContent}>
               <Text style={styles.headerTitle}>Notificações</Text>
-              <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+              <TouchableOpacity style={styles.closeButton} onPress={handleClose}>
                 <MaterialCommunityIcons name="close-circle" size={28} color="#fff" />
               </TouchableOpacity>
             </View>
@@ -474,19 +482,19 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
           {notifications.length === 0 ? (
             renderEmptyContent()
           ) : (
-            <FlatList
-              data={notifications as NotificationWithRawType[]}
-              keyExtractor={(item) => item.id}
-              renderItem={({ item }) => (
+            <ScrollView
+              contentContainerStyle={styles.listContent}
+              showsVerticalScrollIndicator={false}
+            >
+              {(notifications as NotificationWithRawType[]).map(item => (
                 <NotificationItem
+                  key={item.id}
                   notification={item}
                   onPress={handleNotificationPress}
                   onMarkAsRead={handleMarkAsRead}
                 />
-              )}
-              contentContainerStyle={styles.listContent}
-              showsVerticalScrollIndicator={false}
-            />
+              ))}
+            </ScrollView>
           )}
         </Animated.View>
       </Animated.View>

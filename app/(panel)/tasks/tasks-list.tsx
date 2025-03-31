@@ -73,15 +73,19 @@ const TaskFilter = React.memo(({
     completed: number;
     overdue: number;
     recurring: number;
+    createdByMe: number;
+    otherUsers: number;
   } | null;
 }) => {
   const filters = [
-    { key: 'my-tasks', label: 'Minhas Tarefas', icon: 'account-check', count: stats?.total || 0 },
-    { key: 'PENDING', label: 'Pendentes', icon: 'clock-outline', count: stats?.pending || 0 },
-    { key: 'IN_PROGRESS', label: 'Em Andamento', icon: 'progress-clock', count: stats?.inProgress || 0 },
-    { key: 'COMPLETED', label: 'Concluídas', icon: 'check-circle', count: stats?.completed || 0 },
-    { key: 'OVERDUE', label: 'Atrasadas', icon: 'alert-circle', count: stats?.overdue || 0 },
-    { key: 'recurring', label: 'Recorrentes', icon: 'repeat', count: stats?.recurring || 0 }
+    { key: 'my-tasks', label: 'Minhas Tarefas', icon: 'account-check' },
+    { key: 'created-by-me', label: 'Criadas por Mim', icon: 'account-plus' },
+    { key: 'other-users', label: 'Outros Usuários', icon: 'account-group' },
+    { key: 'PENDING', label: 'Pendentes', icon: 'clock-outline' },
+    { key: 'IN_PROGRESS', label: 'Em Andamento', icon: 'progress-clock' },
+    { key: 'COMPLETED', label: 'Concluídas', icon: 'check-circle' },
+    { key: 'OVERDUE', label: 'Atrasadas', icon: 'alert-circle' },
+    { key: 'recurring', label: 'Recorrentes', icon: 'repeat' }
   ];
 
   return (
@@ -115,17 +119,6 @@ const TaskFilter = React.memo(({
             >
               {f.label}
             </Text>
-            <View style={[
-              styles.filterCount,
-              filter === f.key && styles.filterCountActive
-            ]}>
-              <Text style={[
-                styles.filterCountText,
-                filter === f.key && styles.filterCountTextActive
-              ]}>
-                {f.count}
-              </Text>
-            </View>
           </TouchableOpacity>
         ))}
       </ScrollView>
@@ -210,9 +203,11 @@ const TasksListScreen = () => {
       inProgress: tasksToCount.filter(t => t.status === 'IN_PROGRESS').length,
       completed: tasksToCount.filter(t => t.status === 'COMPLETED').length,
       overdue: tasksToCount.filter(t => t.status === 'OVERDUE').length,
-      recurring: tasksToCount.filter(t => t.recurring).length
+      recurring: tasksToCount.filter(t => t.recurring).length,
+      createdByMe: allTasks.filter(t => t.createdBy?.uid === user?.uid).length,
+      otherUsers: allTasks.filter(t => t.createdBy?.uid !== user?.uid).length
     };
-  }, [filter, myTasks, allTasks]);
+  }, [filter, myTasks, allTasks, user?.uid]);
 
   useEffect(() => {
     if (filter) {
@@ -228,62 +223,31 @@ const TasksListScreen = () => {
     applyFilter(newFilter);
   }, [applyFilter, filter]);
 
-  const handleToggleTaskStatus = useCallback(async (task: Task) => {
-    if (pendingTaskIds.includes(task.id)) return;
-    
+  const handleToggleStatus = async (task: Task) => {
     try {
-      setPendingTaskIds(prev => [...prev, task.id]);
-      
-      if (task.status === 'COMPLETED') {
-        await updateTask(task.id, { status: 'PENDING' });
-      } else {
+      if (task.status === 'IN_PROGRESS') {
         await completeTask(task.id);
+      } else if (task.status === 'PENDING' || task.status === 'OVERDUE') {
+        await updateTask(task.id, { status: 'IN_PROGRESS' });
       }
+      await fetchTasks();
+      await fetchMyTasks();
     } catch (error) {
-      console.error('Erro ao alterar status da tarefa:', error);
-    } finally {
-      setTimeout(() => {
-        setPendingTaskIds(prev => prev.filter(id => id !== task.id));
-      }, 300);
+      console.error('Error toggling task status:', error);
+      Alert.alert('Erro', 'Não foi possível alterar o status da tarefa');
     }
-  }, [pendingTaskIds, updateTask, completeTask]);
+  };
 
-  const handleStopRecurrence = useCallback((taskId: number) => {
-    Alert.alert(
-      "Interromper recorrência",
-      "Deseja interromper a recorrência desta tarefa?",
-      [
-        {
-          text: "Cancelar",
-          style: "cancel"
-        },
-        {
-          text: "Interromper",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              setPendingTaskIds(prev => [...prev, taskId]);
-              await updateTask(taskId, { recurring: false });
-              
-              Alert.alert(
-                "Sucesso",
-                "A recorrência da tarefa foi interrompida com sucesso."
-              );
-            } catch (error) {
-              Alert.alert(
-                "Erro",
-                "Não foi possível interromper a recorrência da tarefa."
-              );
-            } finally {
-              setTimeout(() => {
-                setPendingTaskIds(prev => prev.filter(id => id !== taskId));
-              }, 300);
-            }
-          }
-        }
-      ]
-    );
-  }, [updateTask]);
+  const handleStopRecurrence = async (taskId: number) => {
+    try {
+      await updateTask(taskId, { recurring: false });
+      await fetchTasks();
+      await fetchMyTasks();
+    } catch (error) {
+      console.error('Error stopping task recurrence:', error);
+      Alert.alert('Erro', 'Não foi possível parar a recorrência da tarefa');
+    }
+  };
 
   const navigateToTaskDetails = useCallback((taskId: number) => {
     router.push(`/(panel)/tasks/${taskId}`);
@@ -345,59 +309,15 @@ const TasksListScreen = () => {
     );
   }, [deleteTask]);
 
-  const renderTaskItem = useCallback(({ item, index }: { item: Task; index: number }) => {
-    const inputRange = [
-      -1,
-      0,
-      (CARD_HEIGHT + 20) * index,
-      (CARD_HEIGHT + 20) * (index + 1),
-    ];
-
-    const opacity = scrollY.interpolate({
-      inputRange,
-      outputRange: [1, 1, 1, 0],
-    });
-
-    const scale = scrollY.interpolate({
-      inputRange,
-      outputRange: [1, 1, 1, 0.8],
-    });
-
-    const isPending = pendingTaskIds.includes(item.id);
-    const isCompleted = item.status === 'COMPLETED';
-
-    return (
-      <Animated.View style={[
-        styles.taskCardContainer,
-        {
-          opacity,
-          transform: [{ scale }],
-        },
-      ]}>
-        <View style={styles.taskItemWithCheckbox}>
-          {/* Checkbox moderno */}
-          <ModernCheckbox 
-            isCompleted={isCompleted}
-            isPending={isPending}
-            onPress={() => handleToggleTaskStatus(item)}
-          />
-          
-          {/* TaskItem */}
-          <View style={styles.taskItemContainer}>
-            <TaskItem
-              item={item}
-              onPress={navigateToTaskDetails}
-              onToggleStatus={handleToggleTaskStatus}
-              pendingTaskIds={pendingTaskIds}
-              currentUserId={user?.uid}
-              onStopRecurrence={item.recurring ? handleStopRecurrence : undefined}
-              variant="detailed"
-            />
-          </View>
-        </View>
-      </Animated.View>
-    );
-  }, [scrollY, handleToggleTaskStatus, user?.uid, pendingTaskIds, navigateToTaskDetails, handleStopRecurrence]);
+  const renderTaskItem = ({ item }: { item: Task }) => (
+    <TaskItem
+      item={item}
+      onToggleStatus={handleToggleStatus}
+      currentUserId={user?.uid}
+      pendingTaskIds={pendingTaskIds}
+      onPress={(taskId) => router.push(`/(panel)/tasks/${taskId}`)}
+    />
+  );
   
   const keyExtractor = useCallback((item: Task) => item.id?.toString() || '', []);
   
@@ -536,27 +456,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   filterButtonTextActive: {
-    color: '#fff',
-  },
-  filterCount: {
-    backgroundColor: '#444',
-    minWidth: 24,
-    height: 24,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 4,
-  },
-  filterCountActive: {
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-  },
-  filterCountText: {
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: 'bold',
-    textAlign: 'center',
-  },
-  filterCountTextActive: {
     color: '#fff',
   },
   // Lista

@@ -9,7 +9,7 @@
  * 4. Inicial do email (userEmail)
  * 5. Inicial do ID (userId)
  */
-import React, { memo, useState, useMemo, useEffect } from 'react';
+import React, { memo, useState, useMemo, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -22,7 +22,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Event } from '@/src/services/events/eventsTypes';
+import { Event, EventInvitation } from '@/src/services/events/eventsTypes';
 import { colors, createShadow } from '@/src/styles/sharedStyles';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -110,6 +110,19 @@ const EventItem: React.FC<EventItemProps> = ({ event, onPress, currentUserId }) 
   const confirmedCount = Array.isArray(event.invitations) ? 
     event.invitations.filter((inv: any) => inv && inv.status === 'CONFIRMED').length : 0;
 
+  // Verificar status do usuário atual
+  const getUserStatus = useMemo(() => {
+    if (!event.invitations || !Array.isArray(event.invitations)) return null;
+    
+    const userInvitation = event.invitations.find(
+      (inv: EventInvitation) => inv.userId === currentUserId
+    );
+    
+    if (!userInvitation) return null;
+    
+    return userInvitation.status;
+  }, [event.invitations, currentUserId]);
+
   // Efeito para animação pulsante quando o evento estiver acontecendo
   useEffect(() => {
     if (isHappening) {
@@ -134,31 +147,60 @@ const EventItem: React.FC<EventItemProps> = ({ event, onPress, currentUserId }) 
   const getStatusInfo = () => {
     if (isHappening) {
       return {
-        color: '#4CAF50',
+        color: '#2196F3', // Azul
         text: 'Acontecendo agora',
-        icon: 'radio-outline' as const
+        icon: 'radio-outline' as const,
+        backgroundColor: 'rgba(33, 150, 243, 0.1)'
       };
     }
     if (isFinished) {
       return {
-        color: '#9E9E9E',
+        color: '#4CAF50', // Verde
         text: 'Concluído',
-        icon: 'checkmark-circle-outline' as const
+        icon: 'checkmark-circle-outline' as const,
+        backgroundColor: 'rgba(76, 175, 80, 0.1)'
       };
     }
     return {
       color: '#FF9800',
       text: 'Agendado',
-      icon: 'calendar-outline' as const
+      icon: 'calendar-outline' as const,
+      backgroundColor: 'rgba(255, 152, 0, 0.1)'
     };
   };
 
   const statusInfo = getStatusInfo();
 
+  // Determinar cor do status ativo
+  const getActiveStatusStyle = useCallback((status: string | null) => {
+    switch (status) {
+      case 'CONFIRMED':
+        return {
+          backgroundColor: 'rgba(76, 175, 80, 0.15)',
+          borderColor: 'rgba(76, 175, 80, 0.3)'
+        };
+      case 'INVITED':
+        return {
+          backgroundColor: 'rgba(255, 193, 7, 0.15)',
+          borderColor: 'rgba(255, 193, 7, 0.3)'
+        };
+      case 'DECLINED':
+        return {
+          backgroundColor: 'rgba(255, 99, 71, 0.15)',
+          borderColor: 'rgba(255, 99, 71, 0.3)'
+        };
+      default:
+        return {
+          backgroundColor: 'transparent',
+          borderColor: 'transparent'
+        };
+    }
+  }, []);
+
   return (
     <TouchableOpacity 
       style={styles.container}
-      activeOpacity={0.8}
+      activeOpacity={0.7}
       onPress={onPress}
     >
       <LinearGradient
@@ -167,30 +209,45 @@ const EventItem: React.FC<EventItemProps> = ({ event, onPress, currentUserId }) 
         start={{x: 0, y: 0}}
         end={{x: 1, y: 0}}
       >
-        <View style={styles.header}>
-          <View style={styles.titleContainer}>
-            <Text style={styles.title} numberOfLines={1}>
-              {event.title || "Evento sem título"}
-            </Text>
-            <View style={styles.dateContainer}>
-              <Ionicons name="calendar-outline" size={14} color="#bbb" />
-              <Text style={styles.dateText}>
-                {formatEventDate(event.startDate)}
+        <View style={styles.mainContent}>
+          <View style={styles.leftContent}>
+            <View style={[
+              styles.iconContainer,
+              { borderColor: statusInfo.color }
+            ]}>
+              <Ionicons 
+                name="calendar-outline" 
+                size={16} 
+                color={statusInfo.color} 
+              />
+            </View>
+            <View style={styles.titleSection}>
+              <Text style={styles.title} numberOfLines={1}>
+                {event.title || "Evento sem título"}
               </Text>
+              {event.description ? (
+                <Text style={styles.description} numberOfLines={1}>
+                  {event.description}
+                </Text>
+              ) : (
+                <Text style={[styles.description, styles.emptyText]}>
+                  Sem descrição
+                </Text>
+              )}
             </View>
           </View>
           
-          <View style={styles.statusContainer}>
+          <View style={styles.rightContent}>
             {isHappening ? (
               <Animated.View style={[
                 styles.statusBadge, 
-                styles.liveStatusBadge,
                 { 
-                  backgroundColor: `${statusInfo.color}20`,
+                  backgroundColor: statusInfo.backgroundColor,
+                  borderColor: `${statusInfo.color}80`,
                   transform: [{ scale: pulseAnim }]
                 }
               ]}>
-                <View style={styles.liveDot} />
+                <View style={[styles.liveDot, { backgroundColor: statusInfo.color }]} />
                 <Ionicons 
                   name={statusInfo.icon} 
                   size={12} 
@@ -206,7 +263,10 @@ const EventItem: React.FC<EventItemProps> = ({ event, onPress, currentUserId }) 
             ) : (
               <View style={[
                 styles.statusBadge, 
-                { backgroundColor: `${statusInfo.color}20` }
+                { 
+                  backgroundColor: statusInfo.backgroundColor,
+                  borderColor: `${statusInfo.color}80`
+                }
               ]}>
                 <Ionicons 
                   name={statusInfo.icon} 
@@ -223,42 +283,75 @@ const EventItem: React.FC<EventItemProps> = ({ event, onPress, currentUserId }) 
             )}
           </View>
         </View>
-        
-        {event.description && (
-          <Text style={styles.description} numberOfLines={1}>
-            {event.description}
-          </Text>
-        )}
-        
-        <View style={styles.footer}>
-          <View style={styles.infoContainer}>
-            <View style={styles.infoItem}>
-              <Ionicons name="time-outline" size={14} color="#aaa" />
-              <Text style={styles.infoText}>
-                {formatEventTime(event.startDate)} - {formatEventTime(event.endDate)}
+
+        <View style={styles.midContent}>
+          {event.location && (
+            <View style={styles.locationInfo}>
+              <Ionicons name="location-outline" size={14} color="#9C27B0" />
+              <Text style={styles.locationInfoText} numberOfLines={1}>
+                {event.location}
               </Text>
             </View>
-            
-            {event.location && (
-              <View style={styles.infoItem}>
-                <Ionicons name="location-outline" size={14} color="#aaa" />
-                <Text style={styles.infoText} numberOfLines={1} ellipsizeMode="tail">
-                  {event.location}
-                </Text>
-              </View>
-            )}
+          )}
+        </View>
+        
+        <View style={styles.footer}>
+          <View style={styles.timeContainer}>
+            <Ionicons name="time-outline" size={14} color="#aaa" />
+            <Text style={styles.timeText}>
+              {formatEventTime(event.startDate)} - {formatEventTime(event.endDate)}
+            </Text>
           </View>
 
-          <View style={styles.participantsContainer}>
-            {Array.isArray(event.invitations) && event.invitations.length > 0 && (
-              <View style={styles.participantsInfo}>
-                <Ionicons name="people-outline" size={14} color="#aaa" />
-                <Text style={styles.participantsText}>
-                  {confirmedCount}
+          {Array.isArray(event.invitations) && event.invitations.length > 0 && (
+            <View style={styles.participantsInfo}>
+              <View style={[
+                styles.participantsCount,
+                getUserStatus === 'CONFIRMED' && {
+                  ...styles.activeStatus,
+                  ...getActiveStatusStyle('CONFIRMED')
+                }
+              ]}>
+                <View style={[styles.statusDot, { backgroundColor: '#4CAF50' }]} />
+                <Text style={[
+                  styles.participantsText,
+                  getUserStatus === 'CONFIRMED' && styles.activeStatusText
+                ]}>
+                  {event.invitations.filter((inv: EventInvitation) => inv.status === 'CONFIRMED').length}
                 </Text>
               </View>
-            )}
-          </View>
+              <View style={[
+                styles.participantsCount,
+                getUserStatus === 'INVITED' && {
+                  ...styles.activeStatus,
+                  ...getActiveStatusStyle('INVITED')
+                }
+              ]}>
+                <View style={[styles.statusDot, { backgroundColor: '#FFC107' }]} />
+                <Text style={[
+                  styles.participantsText,
+                  getUserStatus === 'INVITED' && styles.activeStatusText
+                ]}>
+                  {event.invitations.filter((inv: EventInvitation) => inv.status === 'INVITED').length}
+                </Text>
+              </View>
+              <View style={[
+                styles.participantsCount,
+                getUserStatus === 'DECLINED' && {
+                  ...styles.activeStatus,
+                  ...getActiveStatusStyle('DECLINED')
+                }
+              ]}>
+                <View style={[styles.statusDot, { backgroundColor: '#FF6347' }]} />
+                <Text style={[
+                  styles.participantsText,
+                  getUserStatus === 'DECLINED' && styles.activeStatusText
+                ]}>
+                  {event.invitations.filter((inv: EventInvitation) => inv.status === 'DECLINED').length}
+                </Text>
+              </View>
+            </View>
+          )}
         </View>
       </LinearGradient>
     </TouchableOpacity>
@@ -268,120 +361,189 @@ const EventItem: React.FC<EventItemProps> = ({ event, onPress, currentUserId }) 
 const styles = StyleSheet.create({
   container: {
     width: '100%',
-    borderRadius: 12,
+    borderRadius: 20,
     overflow: 'hidden',
-    marginVertical: 6,
+    marginBottom: 16,
     ...Platform.select({
       ios: {
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 3 },
-        shadowOpacity: 0.2,
-        shadowRadius: 5,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
       },
       android: {
-        elevation: 4,
+        elevation: 6,
       },
     }),
   },
   gradient: {
-    padding: 12,
+    padding: 16,
+    minHeight: 150,
   },
-  header: {
+  mainContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 6,
   },
-  titleContainer: {
+  leftContent: {
     flex: 1,
-    marginRight: 10,
+    flexDirection: 'row',
+    marginRight: 12,
+  },
+  rightContent: {
+    alignItems: 'flex-end',
+    gap: 4,
+  },
+  titleSection: {
+    flex: 1,
   },
   title: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: 'bold',
     color: '#fff',
-    marginBottom: 3,
+    marginBottom: 4,
   },
-  dateContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  dateText: {
-    fontSize: 11,
-    color: '#bbb',
-    marginLeft: 4,
-    textTransform: 'capitalize',
-  },
-  statusContainer: {
-    alignItems: 'flex-end',
+  description: {
+    fontSize: 13,
+    color: '#aaa',
+    lineHeight: 18,
   },
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginBottom: 4,
+    borderWidth: 1,
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: '500',
+    marginLeft: 4,
+  },
+  locationBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    backgroundColor: 'rgba(156, 39, 176, 0.1)',
+    borderColor: 'rgba(156, $9, 176, 0.3)',
+    borderWidth: 1,
+  },
+  locationText: {
+    fontSize: 12,
+    color: '#9C27B0',
+    marginLeft: 4,
+  },
+  midContent: {
+    marginTop: 12,
+    alignItems: 'flex-start',
+  },
+  locationInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(156, 39, 176, 0.1)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    maxWidth: '90%',
+  },
+  locationInfoText: {
+    fontSize: 12,
+    color: '#9C27B0',
+    marginLeft: 4,
+    fontWeight: '500',
+  },
+  footer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  timeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  timeText: {
+    fontSize: 12,
+    color: '#bbb',
+    marginLeft: 4,
+    fontWeight: '500',
+  },
+  participantsInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(120, 120, 120, 0.1)',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+  },
+  participantsCount: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     paddingVertical: 2,
+    paddingHorizontal: 4,
     borderRadius: 8,
   },
-  liveStatusBadge: {
+  activeStatus: {
     borderWidth: 1,
-    borderColor: '#4CAF5080',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  participantsText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#bbb',
+  },
+  activeStatusText: {
+    color: '#fff',
+    fontWeight: 'bold',
   },
   liveDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#4CAF50',
     marginRight: 4,
   },
-  statusText: {
-    fontSize: 10,
-    fontWeight: '500',
-    marginLeft: 3,
+  emptyText: {
+    color: '#666',
+    fontStyle: 'italic',
   },
-  description: {
-    fontSize: 12,
-    color: '#ccc',
-    marginBottom: 8,
-    lineHeight: 16,
-  },
-  footer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  iconContainer: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 2,
+    backgroundColor: 'transparent',
+    justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 4,
+    marginRight: 12,
+    marginTop: 2,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
   },
-  infoContainer: {
-    flex: 1,
-  },
-  infoItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 2,
-  },
-  infoText: {
-    fontSize: 11,
-    color: '#bbb',
-    marginLeft: 4,
-  },
-  participantsContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  participantsInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(120, 120, 120, 0.2)',
-    paddingVertical: 2,
-    paddingHorizontal: 6,
-    borderRadius: 8,
-  },
-  participantsText: {
-    fontSize: 10,
-    color: '#aaa',
-    marginLeft: 3,
-  }
 });
 
 export default memo(EventItem);

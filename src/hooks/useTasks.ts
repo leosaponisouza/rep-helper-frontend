@@ -10,7 +10,7 @@ import * as taskService from '../services/taskService';
 
 interface UseTasksOptions {
   republicId?: string;
-  initialFilterStatus?: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'OVERDUE' | 'CANCELLED' | 'all' | 'my-tasks' | 'recurring';
+  initialFilterStatus?: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'OVERDUE' | 'CANCELLED' | 'all' | 'my-tasks' | 'recurring' | 'created-by-me' | 'other-users';
   pageSize?: number;
   initialSortBy?: string;
   initialSortDirection?: 'ASC' | 'DESC';
@@ -73,13 +73,23 @@ export const useTasks = (options: UseTasksOptions = {}) => {
       return allTasks.filter(task => task.recurring);
     }
 
+    // Se o filtro for "created-by-me", retorna apenas tarefas criadas pelo usuário
+    if (filterStatus === 'created-by-me' && user?.uid) {
+      return allTasks.filter(task => task.createdBy?.uid === user.uid);
+    }
+
+    // Se o filtro for "other-users", retorna apenas tarefas criadas por outros usuários
+    if (filterStatus === 'other-users' && user?.uid) {
+      return allTasks.filter(task => task.createdBy?.uid !== user.uid);
+    }
+
     // Para outros filtros, filtra o array de todas as tarefas
     if (!filterStatus || filterStatus === 'all') {
       return allTasks;
     }
     
     return allTasks.filter(task => task.status === filterStatus);
-  }, [allTasks, myTasks, filterStatus, options.initialFilterStatus]);
+  }, [allTasks, myTasks, filterStatus, options.initialFilterStatus, user?.uid]);
 
   // ⚠️ FIXED: Removed currentPage from dependency array and use ref instead
   const fetchTasks = useCallback(async (force = false, page?: number, filter?: TaskFilterRequest) => {
@@ -212,12 +222,16 @@ export const useTasks = (options: UseTasksOptions = {}) => {
       let initialFilter: TaskFilterRequest = {};
       
       if (options.initialFilterStatus && 
-          !['all', 'my-tasks', 'recurring'].includes(options.initialFilterStatus)) {
+          !['all', 'my-tasks', 'recurring', 'created-by-me', 'other-users'].includes(options.initialFilterStatus)) {
         initialFilter.status = options.initialFilterStatus;
       }
       
       if (options.initialFilterStatus === 'recurring') {
         initialFilter.isRecurring = true;
+      }
+      
+      if (options.initialFilterStatus === 'created-by-me' && user?.uid) {
+        initialFilter.createdBy = user.uid;
       }
       
       // Atualizar o filtro ativo
@@ -252,7 +266,7 @@ export const useTasks = (options: UseTasksOptions = {}) => {
     let newFilter: TaskFilterRequest = { ...additionalFilters };
     
     // Adicionar status ao filtro, se não for especial
-    if (status && !['all', 'my-tasks', 'recurring'].includes(status)) {
+    if (status && !['all', 'my-tasks', 'recurring', 'created-by-me', 'other-users'].includes(status)) {
       newFilter.status = status;
     }
     
@@ -325,6 +339,18 @@ export const useTasks = (options: UseTasksOptions = {}) => {
     }
   }, [fetchTasks, fetchMyTasks, filterStatus]);
 
+  // Função para atualizar todas as listas
+  const refreshLists = useCallback(async () => {
+    try {
+      await Promise.all([
+        fetchTasks(true),
+        fetchMyTasks(true)
+      ]);
+    } catch (error) {
+      console.error('Erro ao atualizar listas:', error);
+    }
+  }, [fetchTasks, fetchMyTasks]);
+
   // Função otimizada para criar tarefa
   const createTask = async (taskData: {
     title: string;
@@ -339,24 +365,11 @@ export const useTasks = (options: UseTasksOptions = {}) => {
   }) => {
     try {
       const newTask = await taskService.createTask(taskData);
-      
-      // Atualiza o cache e as listas localmente (otimista)
-      tasksCache.current.set(newTask.id, newTask);
-      setAllTasks(prev => [newTask, ...prev]);
-      
-      // Recarrega as listas para garantir consistência
-      setTimeout(() => {
-        fetchTasks(true, 0);
-        if (filterStatus === 'my-tasks') {
-          fetchMyTasks(true, 0);
-        }
-      }, 500);
-      
+      await refreshLists();
       return newTask;
-    } catch (err) {
-      const parsedError = ErrorHandler.parseError(err);
-      ErrorHandler.handle(err);
-      throw parsedError;
+    } catch (error) {
+      ErrorHandler.handle(error);
+      throw error;
     }
   };
 
@@ -373,49 +386,12 @@ export const useTasks = (options: UseTasksOptions = {}) => {
     recurrenceEndDate?: string;
   }) => {
     try {
-      // Atualização otimista
-      const currentTask = tasksCache.current.get(taskId) || 
-                         allTasks.find(t => t.id === taskId) || 
-                         myTasks.find(t => t.id === taskId);
-      
-      if (currentTask) {
-        const updatedTask = { ...currentTask, ...updateData };
-        
-        // Atualiza o cache
-        tasksCache.current.set(taskId, updatedTask);
-        
-        // Atualiza as listas localmente
-        setAllTasks(prev => prev.map(task => 
-          task.id === taskId ? updatedTask : task
-        ));
-        
-        setMyTasks(prev => prev.map(task => 
-          task.id === taskId ? updatedTask : task
-        ));
-      }
-      
-      // Faz a requisição para o backend
       const updatedTask = await taskService.updateTask(taskId, updateData);
-      
-      // Recarrega as listas para garantir consistência
-      setTimeout(() => {
-        fetchTasks(true, currentPage);
-        if (filterStatus === 'my-tasks') {
-          fetchMyTasks(true, currentPage);
-        }
-      }, 500);
-      
+      await refreshLists();
       return updatedTask;
-    } catch (err) {
-      // Se falhar, recarrega os dados para garantir consistência
-      fetchTasks(true, currentPage);
-      if (filterStatus === 'my-tasks') {
-        fetchMyTasks(true, currentPage);
-      }
-      
-      const parsedError = ErrorHandler.parseError(err);
-      ErrorHandler.handle(err);
-      throw parsedError;
+    } catch (error) {
+      ErrorHandler.handle(error);
+      throw error;
     }
   };
   
@@ -482,285 +458,66 @@ export const useTasks = (options: UseTasksOptions = {}) => {
   // Função otimizada para excluir tarefa
   const deleteTask = async (taskId: number) => {
     try {
-      // Atualização otimista
-      tasksCache.current.delete(taskId);
-      setAllTasks(prev => prev.filter(task => task.id !== taskId));
-      setMyTasks(prev => prev.filter(task => task.id !== taskId));
-      
-      // Faz a requisição para o backend
       await taskService.deleteTask(taskId);
-      
-      return true;
-    } catch (err) {
-      // Se falhar, recarrega os dados para garantir consistência
-      fetchTasks(true, currentPage);
-      if (filterStatus === 'my-tasks') {
-        fetchMyTasks(true, currentPage);
-      }
-      
-      const parsedError = ErrorHandler.parseError(err);
-      ErrorHandler.handle(err);
-      throw parsedError;
+      await refreshLists();
+    } catch (error) {
+      ErrorHandler.handle(error);
+      throw error;
     }
   };
 
   // Função otimizada para completar tarefa
   const completeTask = async (taskId: number) => {
     try {
-      // Primeiro, obtenha a tarefa atual para verificar se é recorrente
-      const taskToComplete = tasksCache.current.get(taskId) || 
-                            allTasks.find(task => task.id === taskId) || 
-                            myTasks.find(task => task.id === taskId);
-      
-      if (!taskToComplete) {
-        throw new Error('Tarefa não encontrada');
-      }
-      
-      // Atualização otimista
-      const updatedTask: Task = { ...taskToComplete, status: 'COMPLETED' };
-      tasksCache.current.set(taskId, updatedTask);
-      
-      setAllTasks(prev => prev.map(task => 
-        task.id === taskId ? updatedTask : task
-      ));
-      
-      setMyTasks(prev => prev.map(task => 
-        task.id === taskId ? updatedTask : task
-      ));
-      
-      // Completa a tarefa no backend
-      const completedTask = await taskService.completeTask(taskId);
-      
-      // Recarrega as listas para garantir consistência
-      setTimeout(() => {
-        fetchTasks(true, currentPage);
-        if (filterStatus === 'my-tasks') {
-          fetchMyTasks(true, currentPage);
-        }
-      }, 500);
-      
-      return completedTask;
-    } catch (err) {
-      // Se falhar, recarrega os dados para garantir consistência
-      fetchTasks(true, currentPage);
-      if (filterStatus === 'my-tasks') {
-        fetchMyTasks(true, currentPage);
-      }
-      
-      const parsedError = ErrorHandler.parseError(err);
-      ErrorHandler.handle(err);
-      throw parsedError;
+      await taskService.completeTask(taskId);
+      await refreshLists();
+    } catch (error) {
+      ErrorHandler.handle(error);
+      throw error;
     }
   };
 
   // Função otimizada para cancelar tarefa
   const cancelTask = async (taskId: number) => {
     try {
-      // Atualização otimista
-      const currentTask = tasksCache.current.get(taskId) || 
-                         allTasks.find(t => t.id === taskId) || 
-                         myTasks.find(t => t.id === taskId);
-      
-      if (currentTask) {
-        const updatedTask: Task = { ...currentTask, status: 'CANCELLED' };
-        
-        // Atualiza o cache
-        tasksCache.current.set(taskId, updatedTask);
-        
-        // Atualiza as listas localmente
-        setAllTasks(prev => prev.map(task => 
-          task.id === taskId ? updatedTask : task
-        ));
-        
-        setMyTasks(prev => prev.map(task => 
-          task.id === taskId ? updatedTask : task
-        ));
-      }
-      
-      // Faz a requisição para o backend
-      const canceledTask = await taskService.cancelTask(taskId);
-      
-      // Recarrega as listas para garantir consistência
-      setTimeout(() => {
-        fetchTasks(true, currentPage);
-        if (filterStatus === 'my-tasks') {
-          fetchMyTasks(true, currentPage);
-        }
-      }, 500);
-      
-      return canceledTask;
-    } catch (err) {
-      // Se falhar, recarrega os dados para garantir consistência
-      fetchTasks(true, currentPage);
-      if (filterStatus === 'my-tasks') {
-        fetchMyTasks(true, currentPage);
-      }
-      
-      const parsedError = ErrorHandler.parseError(err);
-      ErrorHandler.handle(err);
-      throw parsedError;
+      await taskService.cancelTask(taskId);
+      await refreshLists();
+    } catch (error) {
+      ErrorHandler.handle(error);
+      throw error;
     }
   };
 
   // Função otimizada para atribuir tarefa
   const assignTask = async (taskId: number, userId: string) => {
     try {
-      // Atualização otimista
-      const currentTask = tasksCache.current.get(taskId) || 
-                         allTasks.find(t => t.id === taskId) || 
-                         myTasks.find(t => t.id === taskId);
-      
-      if (currentTask) {
-        const updatedTask = { 
-          ...currentTask, 
-          assigned_users: [...(currentTask.assigned_users || []), userId]
-        };
-        
-        // Atualiza o cache
-        tasksCache.current.set(taskId, updatedTask);
-        
-        // Atualiza as listas localmente
-        setAllTasks(prev => prev.map(task => 
-          task.id === taskId ? updatedTask : task
-        ));
-        
-        // Se o usuário atual está sendo atribuído, adiciona à lista de myTasks
-        if (userId === user?.uid) {
-          const taskInMyTasks = myTasks.some(t => t.id === taskId);
-          if (!taskInMyTasks) {
-            setMyTasks(prev => [...prev, updatedTask]);
-          } else {
-            setMyTasks(prev => prev.map(task => 
-              task.id === taskId ? updatedTask : task
-            ));
-          }
-        }
-      }
-      
-      // Faz a requisição para o backend
-      const assignedTask = await taskService.assignTask(taskId, userId);
-      
-      // Recarrega as listas para garantir consistência
-      setTimeout(() => {
-        fetchTasks(true, currentPage);
-        if (filterStatus === 'my-tasks') {
-          fetchMyTasks(true, currentPage);
-        }
-      }, 500);
-      
-      return assignedTask;
-    } catch (err) {
-      // Se falhar, recarrega os dados para garantir consistência
-      fetchTasks(true, currentPage);
-      if (filterStatus === 'my-tasks') {
-        fetchMyTasks(true, currentPage);
-      }
-      
-      const parsedError = ErrorHandler.parseError(err);
-      ErrorHandler.handle(err);
-      throw parsedError;
+      await taskService.assignTask(taskId, userId);
+      await refreshLists();
+    } catch (error) {
+      ErrorHandler.handle(error);
+      throw error;
     }
   };
 
   // Função otimizada para desatribuir tarefa
   const unassignTask = async (taskId: number, userId: string) => {
     try {
-      // Atualização otimista
-      const currentTask = tasksCache.current.get(taskId) || 
-                         allTasks.find(t => t.id === taskId) || 
-                         myTasks.find(t => t.id === taskId);
-      
-      if (currentTask) {
-        const updatedTask = { 
-          ...currentTask, 
-          assigned_users: (currentTask.assigned_users || []).filter((id: string) => id !== userId)
-        };
-        
-        // Atualiza o cache
-        tasksCache.current.set(taskId, updatedTask);
-        
-        // Atualiza as listas localmente
-        setAllTasks(prev => prev.map(task => 
-          task.id === taskId ? updatedTask : task
-        ));
-        
-        // Se o usuário atual está sendo desatribuído, remove da lista de myTasks
-        if (userId === user?.uid) {
-          setMyTasks(prev => prev.filter(task => task.id !== taskId));
-        }
-      }
-      
-      // Faz a requisição para o backend
-      const unassignedTask = await taskService.unassignTask(taskId, userId);
-      
-      // Recarrega as listas para garantir consistência
-      setTimeout(() => {
-        fetchTasks(true, currentPage);
-        if (filterStatus === 'my-tasks') {
-          fetchMyTasks(true, currentPage);
-        }
-      }, 500);
-      
-      return unassignedTask;
-    } catch (err) {
-      // Se falhar, recarrega os dados para garantir consistência
-      fetchTasks(true, currentPage);
-      if (filterStatus === 'my-tasks') {
-        fetchMyTasks(true, currentPage);
-      }
-      
-      const parsedError = ErrorHandler.parseError(err);
-      ErrorHandler.handle(err);
-      throw parsedError;
+      await taskService.unassignTask(taskId, userId);
+      await refreshLists();
+    } catch (error) {
+      ErrorHandler.handle(error);
+      throw error;
     }
   };
 
   // Função otimizada para parar recorrência
   const stopRecurrence = async (taskId: number) => {
     try {
-      // Atualização otimista
-      const currentTask = tasksCache.current.get(taskId) || 
-                         allTasks.find(t => t.id === taskId) || 
-                         myTasks.find(t => t.id === taskId);
-      
-      if (currentTask) {
-        const updatedTask = { ...currentTask, recurring: false };
-        
-        // Atualiza o cache
-        tasksCache.current.set(taskId, updatedTask);
-        
-        // Atualiza as listas localmente
-        setAllTasks(prev => prev.map(task => 
-          task.id === taskId ? updatedTask : task
-        ));
-        
-        setMyTasks(prev => prev.map(task => 
-          task.id === taskId ? updatedTask : task
-        ));
-      }
-      
-      // Faz a requisição para o backend
-      const updatedTask = await taskService.stopRecurrence(taskId);
-      
-      // Recarrega as listas para garantir consistência
-      setTimeout(() => {
-        fetchTasks(true, currentPage);
-        if (filterStatus === 'my-tasks') {
-          fetchMyTasks(true, currentPage);
-        }
-      }, 500);
-      
-      return updatedTask;
-    } catch (err) {
-      // Se falhar, recarrega os dados para garantir consistência
-      fetchTasks(true, currentPage);
-      if (filterStatus === 'my-tasks') {
-        fetchMyTasks(true, currentPage);
-      }
-      
-      const parsedError = ErrorHandler.parseError(err);
-      ErrorHandler.handle(err);
-      throw parsedError;
+      await taskService.stopRecurrence(taskId);
+      await refreshLists();
+    } catch (error) {
+      ErrorHandler.handle(error);
+      throw error;
     }
   };
 

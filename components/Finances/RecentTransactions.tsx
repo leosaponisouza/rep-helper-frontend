@@ -5,8 +5,7 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  ActivityIndicator,
-  FlatList
+  ActivityIndicator
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { format, parseISO } from 'date-fns';
@@ -20,6 +19,7 @@ interface RecentTransactionsProps {
   onRetry?: () => void;
   onPressTransaction?: (transaction: Transaction) => void;
   onPressViewAll?: () => void;
+  maxItems?: number;
 }
 
 const TransactionItem: React.FC<{
@@ -106,14 +106,15 @@ const RecentTransactions: React.FC<RecentTransactionsProps> = ({
   error = null,
   onRetry,
   onPressTransaction,
-  onPressViewAll
+  onPressViewAll,
+  maxItems = 5 // Limitando a 5 itens por padrão
 }) => {
   const [filter, setFilter] = useState<'ALL' | 'EXPENSE' | 'INCOME'>('ALL');
 
   // Aplicar filtro às transações
   const filteredTransactions = transactions.filter(t =>
     filter === 'ALL' || t.type === filter
-  );
+  ).slice(0, maxItems); // Limitar o número de itens renderizados
 
   if (loading) {
     return (
@@ -212,19 +213,27 @@ const RecentTransactions: React.FC<RecentTransactionsProps> = ({
           </Text>
         </View>
       ) : (
-        <FlatList
-          data={filteredTransactions}
-          keyExtractor={(item, index) => `transaction-${item.type}-${item.id}-${index}`}
-          renderItem={({ item }) => (
+        <View style={styles.transactionsList}>
+          {filteredTransactions.map((item, index) => (
             <TransactionItem
+              key={`transaction-${item.type}-${item.id}-${index}`}
               item={item}
               onPress={onPressTransaction}
             />
+          ))}
+          
+          {transactions.length > maxItems && onPressViewAll && (
+            <TouchableOpacity 
+              style={styles.viewMoreButton}
+              onPress={onPressViewAll}
+            >
+              <Text style={styles.viewMoreText}>
+                Ver mais {transactions.length - maxItems} transações
+              </Text>
+              <Ionicons name="chevron-down" size={16} color="#7B68EE" />
+            </TouchableOpacity>
           )}
-          style={styles.transactionsList}
-          showsVerticalScrollIndicator={true}
-          nestedScrollEnabled={true}
-        />
+        </View>
       )}
     </View>
   );
@@ -322,7 +331,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   transactionsList: {
-    maxHeight: 300,
+    // Removendo a propriedade maxHeight, pois não estamos mais usando FlatList
   },
   transactionItem: {
     flexDirection: 'row',
@@ -370,9 +379,19 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: 'bold',
   },
-  transactionsListContent: {
-    paddingBottom: 8,
-  }
+  viewMoreButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#444',
+  },
+  viewMoreText: {
+    color: '#7B68EE',
+    fontSize: 14,
+    marginRight: 4,
+  },
 });
 
 export default RecentTransactions;

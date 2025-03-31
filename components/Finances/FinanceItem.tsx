@@ -12,6 +12,7 @@ import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
 
 type FinanceItemType = Income | Expense | PendingAction;
 
@@ -23,6 +24,7 @@ interface FinanceItemProps {
 }
 
 const FinanceItem: React.FC<FinanceItemProps> = ({ item, type, onPress, currentUserId }) => {
+  const router = useRouter();
   const isIncome = type === 'income';
   const isExpense = type === 'expense';
   const isPendingAction = 'status' in item && !('type' in item);
@@ -186,12 +188,14 @@ const FinanceItem: React.FC<FinanceItemProps> = ({ item, type, onPress, currentU
     
   // Verifica se o criador é o usuário atual
   const isCurrentUserCreator = currentUserId && creatorId === currentUserId;
+  const formattedDate = formatDate(dateValue);
+  const userName = isCurrentUserCreator ? 'Você' : creatorName || 'Usuário';
 
   return (
     <TouchableOpacity 
       style={styles.container}
       onPress={() => onPress(item)}
-      activeOpacity={0.9}
+      activeOpacity={0.7}
     >
       <LinearGradient
         colors={['#2A2A2A', '#333']}
@@ -199,82 +203,114 @@ const FinanceItem: React.FC<FinanceItemProps> = ({ item, type, onPress, currentU
         start={{x: 0, y: 0}}
         end={{x: 1, y: 0}}
       >
-        <View style={styles.header}>
-          <View style={styles.titleContainer}>
-            <Text style={styles.title} numberOfLines={1}>
-              {item.description}
-            </Text>
+        <View style={styles.mainContent}>
+          <View style={styles.leftContent}>
             <View style={[
-              styles.categoryBadge,
-              { backgroundColor: `${primaryColor}20` }
+              styles.iconContainer,
+              { borderColor: primaryColor }
             ]}>
               <MaterialCommunityIcons 
-                name={getCategoryIcon(categoryValue) as any} 
-                size={12} 
+                name={isIncome ? "plus" : "minus"} 
+                size={16} 
                 color={primaryColor} 
               />
-              <Text style={[styles.categoryText, { color: primaryColor }]}>
-                {categoryValue || categoryLabel}
+            </View>
+            <View style={styles.titleSection}>
+              <Text style={styles.title} numberOfLines={1}>
+                {item.description || (isIncome ? 'Receita' : 'Despesa')}
               </Text>
+              {typeof notes === 'string' && notes.trim() !== '' ? (
+                <Text style={styles.description} numberOfLines={2}>
+                  {notes}
+                </Text>
+              ) : (
+                <Text style={[styles.description, styles.emptyText]}>
+                  Sem descrição
+                </Text>
+              )}
             </View>
           </View>
-          
-          <View style={styles.amountContainer}>
+
+          <View style={styles.rightContent}>
             <Text style={[styles.amount, { color: primaryColor }]}>
               {formatCurrency(item.amount)}
             </Text>
-            <View style={[
-              styles.statusBadge, 
-              { backgroundColor: `${statusInfo.color}20` }
-            ]}>
-              <MaterialCommunityIcons 
-                name={statusInfo.icon as any} 
-                size={12} 
-                color={statusInfo.color} 
-              />
-              <Text style={[
-                styles.statusText, 
-                { color: statusInfo.color }
+            <View style={styles.badgesContainer}>
+              <View style={[
+                styles.statusBadge, 
+                { backgroundColor: `${statusInfo.color}20` }
               ]}>
-                {statusInfo.text}
-              </Text>
+                <MaterialCommunityIcons 
+                  name={statusInfo.icon as any} 
+                  size={12} 
+                  color={statusInfo.color} 
+                />
+                <Text style={[
+                  styles.statusText, 
+                  { color: statusInfo.color }
+                ]}>
+                  {statusInfo.text}
+                </Text>
+              </View>
+
+              <View style={[
+                styles.categoryBadge,
+                { backgroundColor: '#7B68EE20' }
+              ]}>
+                <MaterialCommunityIcons 
+                  name={getCategoryIcon(categoryValue) as any} 
+                  size={12} 
+                  color="#7B68EE" 
+                />
+                <Text style={[styles.categoryText, { color: '#7B68EE' }]}>
+                  {categoryValue || categoryLabel}
+                </Text>
+              </View>
             </View>
           </View>
         </View>
-        
-        {typeof notes === 'string' && notes.trim() !== '' && (
-          <Text style={styles.notes} numberOfLines={2}>
-            {notes}
-          </Text>
-        )}
-        
-        <View style={styles.footer}>
-          <View style={styles.infoContainer}>
-            {dateValue && (
-              <View style={styles.infoItem}>
-                <MaterialCommunityIcons name="calendar" size={16} color="#aaa" />
-                <Text style={styles.infoText}>{formatDate(dateValue)}</Text>
-              </View>
-            )}
-          </View>
 
-          <View style={styles.creatorContainer}>
-            {creatorProfilePictureUrl ? (
-              <Image 
-                source={{ uri: creatorProfilePictureUrl }} 
-                style={styles.creatorAvatar}
-              />
-            ) : (
-              <View style={styles.creatorAvatarPlaceholder}>
-                <Text style={styles.creatorInitials}>
-                  {creatorName?.charAt(0).toUpperCase() || '?'}
-                </Text>
-              </View>
-            )}
-            <Text style={styles.creatorName} numberOfLines={1}>
-              {isCurrentUserCreator ? 'Você' : creatorName}
-            </Text>
-          </View>
+        <View style={styles.footer}>
+          {formattedDate ? (
+            <View style={styles.dateContainer}>
+              <MaterialCommunityIcons name="calendar" size={14} color="#aaa" />
+              <Text style={styles.dateText}>
+                {isIncome ? 'Recebido em: ' : 'Pago em: '}{formattedDate}
+              </Text>
+            </View>
+          ) : (
+            <View style={[styles.dateContainer, styles.emptyContainer]}>
+              <MaterialCommunityIcons name="calendar-outline" size={14} color="#666" />
+              <Text style={[styles.dateText, styles.emptyText]}>
+                {isIncome ? 'Sem data de recebimento' : 'Sem data de pagamento'}
+              </Text>
+            </View>
+          )}
+
+          {creatorName ? (
+            <View style={styles.userContainer}>
+              {creatorProfilePictureUrl ? (
+                <Image 
+                  source={{ uri: creatorProfilePictureUrl }} 
+                  style={styles.userAvatar}
+                />
+              ) : (
+                <View style={styles.userAvatarPlaceholder}>
+                  <Text style={styles.userInitials}>
+                    {userName.charAt(0).toUpperCase()}
+                  </Text>
+                </View>
+              )}
+              <Text style={styles.userName} numberOfLines={1}>
+                {userName}
+              </Text>
+            </View>
+          ) : (
+            <View style={[styles.userContainer, styles.emptyContainer]}>
+              <MaterialCommunityIcons name="account-outline" size={14} color="#666" />
+              <Text style={[styles.userName, styles.emptyText]}>Sem responsável</Text>
+            </View>
+          )}
         </View>
       </LinearGradient>
     </TouchableOpacity>
@@ -304,20 +340,48 @@ const styles = StyleSheet.create({
     paddingLeft: 16,
     minHeight: 150,
   },
-  header: {
+  mainContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 12,
   },
-  titleContainer: {
+  leftContent: {
     flex: 1,
+    flexDirection: 'row',
     marginRight: 12,
   },
+  rightContent: {
+    alignItems: 'flex-end',
+  },
+  titleSection: {
+    flex: 1,
+  },
   title: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
     color: '#fff',
+    marginBottom: 4,
+  },
+  description: {
+    fontSize: 13,
+    color: '#aaa',
+    lineHeight: 18,
+  },
+  amount: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  badgesContainer: {
+    alignItems: 'flex-end',
+    marginBottom: 12,
+    gap: 4,
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
     marginBottom: 4,
   },
   categoryBadge: {
@@ -326,58 +390,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
-    alignSelf: 'flex-start',
-  },
-  categoryText: {
-    fontSize: 12,
-    marginLeft: 4,
-  },
-  amountContainer: {
-    alignItems: 'flex-end',
-  },
-  amount: {
-    fontSize: 18,
-    fontWeight: 'bold',
     marginBottom: 4,
-  },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    marginLeft: 4,
-  },
-  notes: {
-    fontSize: 14,
-    color: '#aaa',
-    marginBottom: 16,
-    lineHeight: 20,
   },
   footer: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 'auto',
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.1)',
   },
-  infoContainer: {
-    flex: 1,
-  },
-  infoItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  infoText: {
-    fontSize: 12,
-    color: '#aaa',
-    marginLeft: 8,
-  },
-  creatorContainer: {
+  dateContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
@@ -385,29 +409,80 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 12,
   },
-  creatorAvatar: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+  dateText: {
+    fontSize: 12,
+    color: '#aaa',
+    marginLeft: 4,
+  },
+  userContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  userAvatar: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
     marginRight: 6,
   },
-  creatorAvatarPlaceholder: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+  userAvatarPlaceholder: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
     backgroundColor: '#555',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 6,
   },
-  creatorInitials: {
+  userInitials: {
     color: '#fff',
     fontSize: 10,
     fontWeight: 'bold',
   },
-  creatorName: {
+  userName: {
     fontSize: 12,
     color: '#ddd',
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    marginLeft: 4,
+  },
+  categoryText: {
+    fontSize: 12,
+    marginLeft: 4,
+  },
+  emptyText: {
+    color: '#666',
+    fontStyle: 'italic',
+  },
+  emptyContainer: {
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  iconContainer: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 2,
+    backgroundColor: 'transparent',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+    marginTop: 2,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
   },
 });
 

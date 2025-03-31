@@ -1,28 +1,32 @@
-// app/(panel)/finances/expenses/[id].tsx
-import React, { useState, useEffect, useCallback } from 'react';
+// app/(panel)/finances/expenses/[id].tsx - Visualização e gerenciamento de despesas
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
-  StatusBar,
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
   Alert,
+  SafeAreaView,
+  StatusBar,
   Image,
+  Dimensions,
+  Platform,
+  Animated,
   Share,
-  Linking,
-  Platform
+  Modal
 } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
-import { format, parseISO } from 'date-fns';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { Ionicons, MaterialCommunityIcons, FontAwesome5, Feather } from '@expo/vector-icons';
+import { format, parseISO, isToday, isTomorrow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useFinances } from '../../../../src/hooks/useFinances';
 import { useAuth } from '../../../../src/context/AuthContext';
 import { ErrorHandler } from '../../../../src/utils/errorHandling';
 import { Expense } from '../../../../src/models/finances.model';
+
+const { width, height } = Dimensions.get('window');
 
 // Timeline status item component
 const TimelineItem = ({ 
@@ -30,13 +34,17 @@ const TimelineItem = ({
   date, 
   isCompleted, 
   isRejected, 
-  rejectionReason 
+  rejectionReason,
+  isLast = false,
+  isFuture = false
 }: { 
   title: string; 
   date?: string | null; 
   isCompleted: boolean; 
   isRejected?: boolean;
   rejectionReason?: string;
+  isLast?: boolean;
+  isFuture?: boolean;
 }) => {
   const formatDate = (dateString?: string | null) => {
     if (!dateString) return null;
@@ -49,33 +57,64 @@ const TimelineItem = ({
     }
   };
 
+  // Determine a classe de estilo com base no status
+  const isPending = !isCompleted && !isRejected;
+  const itemStyle = [
+    styles.timelineItem,
+    isRejected && styles.rejectedTimelineItem,
+    isPending && styles.pendingTimelineItem,
+    isFuture && styles.futureTimelineItem
+  ];
+
   return (
-    <View style={[
-      styles.timelineItem,
-      isRejected && styles.rejectedTimelineItem,
-      !isCompleted && !isRejected && styles.pendingTimelineItem
-    ]}>
-      <View style={[
-        styles.timelineDot,
-        isCompleted && styles.completedTimelineDot,
-        isRejected && styles.rejectedTimelineDot,
-        !isCompleted && !isRejected && styles.pendingTimelineDot
-      ]} />
+    <View style={itemStyle}>
+      <View style={styles.timelineDotContainer}>
+        <View style={[
+          styles.timelineDot,
+          isCompleted && styles.completedTimelineDot,
+          isRejected && styles.rejectedTimelineDot,
+          isPending && styles.pendingTimelineDot,
+          isFuture && styles.futureTimelineDot
+        ]}>
+          {isCompleted && (
+            <Ionicons name="checkmark" size={10} color="#fff" />
+          )}
+          {isRejected && (
+            <Ionicons name="close" size={10} color="#fff" />
+          )}
+        </View>
+        {!isLast && (
+          <View style={[
+            styles.timelineConnector,
+            isCompleted && styles.completedTimelineConnector,
+            isRejected && styles.rejectedTimelineConnector,
+            isPending && styles.pendingTimelineConnector,
+            isFuture && styles.futureTimelineConnector
+          ]} />
+        )}
+      </View>
       <View style={styles.timelineContent}>
         <Text style={[
           styles.timelineTitle,
-          !isCompleted && !isRejected && styles.pendingTimelineText,
-          isRejected && styles.rejectedTimelineText
+          isPending && styles.pendingTimelineText,
+          isRejected && styles.rejectedTimelineText,
+          isFuture && styles.futureTimelineText
         ]}>{title}</Text>
         
-        {date && (
+        {date ? (
           <Text style={styles.timelineDate}>{formatDate(date)}</Text>
+        ) : isFuture ? (
+          <Text style={styles.futureDateText}>Aguardando status anterior</Text>
+        ) : (
+          <Text style={styles.pendingDateText}>Pendente</Text>
         )}
         
         {isRejected && rejectionReason && (
-          <Text style={styles.rejectionReason}>
-            Motivo: {rejectionReason}
-          </Text>
+          <View style={styles.rejectionReasonContainer}>
+            <Text style={styles.rejectionReason}>
+              Motivo: {rejectionReason}
+            </Text>
+          </View>
         )}
       </View>
     </View>
@@ -89,7 +128,8 @@ const ActionButton = ({
   color, 
   onPress, 
   isLoading, 
-  disabled 
+  disabled,
+  small = false
 }: { 
   title: string; 
   iconName: string; 
@@ -97,12 +137,14 @@ const ActionButton = ({
   onPress: () => void; 
   isLoading?: boolean;
   disabled?: boolean;
+  small?: boolean;
 }) => (
   <TouchableOpacity 
     style={[
-      styles.actionButton, 
+      styles.mainActionButton, 
       { backgroundColor: color }, 
-      (isLoading || disabled) && styles.disabledButton
+      (isLoading || disabled) && styles.disabledButton,
+      small && styles.smallActionButton
     ]}
     onPress={onPress}
     disabled={isLoading || disabled}
@@ -111,22 +153,18 @@ const ActionButton = ({
       <ActivityIndicator size="small" color="#fff" />
     ) : (
       <>
-        <Ionicons name={iconName as any} size={20} color="#fff" style={styles.actionButtonIcon} />
-        <Text style={styles.actionButtonText}>{title}</Text>
+        <Ionicons name={iconName as any} size={small ? 16 : 20} color="#fff" style={styles.actionButtonIcon} />
+        <Text style={[styles.actionButtonText, small && styles.smallActionButtonText]}>{title}</Text>
       </>
     )}
   </TouchableOpacity>
 );
 
 // Main Component
-const ExpenseDetailsScreen = () => {
+const ExpenseDetailsScreen: React.FC = () => {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
-  const [expense, setExpense] = useState<Expense | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState(false);
-  
   const { 
     getExpenseById, 
     approveExpense, 
@@ -135,6 +173,58 @@ const ExpenseDetailsScreen = () => {
     resetExpenseStatus,
     deleteExpense
   } = useFinances();
+
+  // Estados
+  const [expense, setExpense] = useState<Expense | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [actionLoading, setActionLoading] = useState<boolean>(false);
+  const [imageModalVisible, setImageModalVisible] = useState<boolean>(false);
+  const [showConfirmDelete, setShowConfirmDelete] = useState<boolean>(false);
+  const [isDeleting, setIsDeleting] = useState<boolean>(false);
+  
+  // Verificar permissões
+  const isCreator = expense?.creatorId === user?.uid;
+  const isUserAdmin = user?.isAdmin === true;
+  const canApprove = expense?.status === 'PENDING' && isUserAdmin;
+  const canReimburse = expense?.status === 'APPROVED' && isUserAdmin;
+  const canReset = (expense?.status === 'REJECTED' || expense?.status === 'APPROVED') && isUserAdmin;
+  const canEdit = isCreator && (expense?.status === 'PENDING' || expense?.status === 'REJECTED');
+  const canDelete = (isCreator || isUserAdmin) && expense?.status !== 'REIMBURSED';
+  const canModifyExpense = canEdit || isUserAdmin;
+
+  // Animações
+  const fadeAnim = useState(new Animated.Value(0))[0];
+  const scaleAnim = useState(new Animated.Value(0.95))[0];
+  const scrollY = useState(new Animated.Value(0))[0];
+
+  // Efeito de entrada com animação
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+      Animated.timing(scaleAnim, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      })
+    ]).start();
+  }, []);
+
+  // Animação do header com base no scroll
+  const headerOpacity = scrollY.interpolate({
+    inputRange: [0, 100],
+    outputRange: [0, 1],
+    extrapolate: 'clamp'
+  });
+
+  const headerHeight = scrollY.interpolate({
+    inputRange: [0, 100],
+    outputRange: [0, 60],
+    extrapolate: 'clamp'
+  });
 
   // Fetch expense details
   const fetchExpenseDetails = useCallback(async () => {
@@ -175,6 +265,43 @@ const ExpenseDetailsScreen = () => {
       return format(date, "dd 'de' MMMM 'de' yyyy", { locale: ptBR });
     } catch (error) {
       return dateString;
+    }
+  };
+
+  // Format date with time
+  const formatDateWithTime = (dateString?: string) => {
+    if (!dateString) return 'Data não disponível';
+    
+    try {
+      const date = parseISO(dateString);
+      return format(date, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
+    } catch (error) {
+      return dateString;
+    }
+  };
+
+  // Get time ago
+  const getTimeAgo = (dateString?: string) => {
+    if (!dateString) return 'recentemente';
+    
+    try {
+      const date = parseISO(dateString);
+      const now = new Date();
+      const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60));
+      
+      if (diffInMinutes < 1) return 'agora mesmo';
+      if (diffInMinutes < 60) return `há ${diffInMinutes} min`;
+      
+      const diffInHours = Math.floor(diffInMinutes / 60);
+      if (diffInHours < 24) return `há ${diffInHours}h`;
+      
+      const diffInDays = Math.floor(diffInHours / 24);
+      if (diffInDays < 30) return `há ${diffInDays} dias`;
+      
+      const diffInMonths = Math.floor(diffInDays / 30);
+      return `há ${diffInMonths} meses`;
+    } catch (error) {
+      return 'recentemente';
     }
   };
 
@@ -283,32 +410,28 @@ const ExpenseDetailsScreen = () => {
   const handleDeleteExpense = async () => {
     if (!expense) return;
     
-    Alert.alert(
-      'Excluir Despesa',
-      'Tem certeza que deseja excluir esta despesa? Esta ação não pode ser desfeita.',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        { 
-          text: 'Excluir', 
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setActionLoading(true);
-              await deleteExpense(expense.id);
-              Alert.alert('Sucesso', 'Despesa excluída com sucesso!');
-              router.back();
-            } catch (error) {
-              ErrorHandler.handle(error);
-              setActionLoading(false);
-            }
-          }
-        }
-      ]
-    );
+    if (!showConfirmDelete) {
+      setShowConfirmDelete(true);
+      return;
+    }
+    
+    try {
+      setIsDeleting(true);
+      await deleteExpense(expense.id);
+      Alert.alert('Sucesso', 'Despesa excluída com sucesso!');
+      router.back();
+    } catch (error) {
+      ErrorHandler.handle(error);
+      setIsDeleting(false);
+    }
+  };
+  
+  const handleCancelDelete = () => {
+    setShowConfirmDelete(false);
   };
 
   // Share expense details
-  const shareExpense = async () => {
+  const handleShareExpense = async () => {
     if (!expense) return;
     
     try {
@@ -324,23 +447,11 @@ const ExpenseDetailsScreen = () => {
   // View receipt in full screen
   const viewReceipt = () => {
     if (!expense?.receiptUrl) return;
-    
-    // Try to open the image in the device's default image viewer
-    Linking.openURL(expense.receiptUrl).catch(() => {
-      Alert.alert('Erro', 'Não foi possível abrir o comprovante.');
-    });
+    setImageModalVisible(true);
   };
 
-  // Check permissions for different actions
-  const canApprove = expense?.status === 'PENDING' && user?.isAdmin === true;
-  const canReimburse = expense?.status === 'APPROVED' && user?.isAdmin === true;
-  const canReset = (expense?.status === 'REJECTED' || expense?.status === 'APPROVED') && user?.isAdmin === true;
-  const isCreator = expense?.creatorId === user?.uid;
-  const canEdit = isCreator && (expense?.status === 'PENDING' || expense?.status === 'REJECTED');
-  const canDelete = (isCreator || user?.isAdmin === true) && expense?.status !== 'REIMBURSED';
-
   // Loading state
-  if (loading) {
+  if (loading && !expense) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <StatusBar barStyle="light-content" backgroundColor="#222" />
@@ -355,18 +466,16 @@ const ExpenseDetailsScreen = () => {
   // Error state
   if (!expense) {
     return (
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={styles.errorContainer}>
         <StatusBar barStyle="light-content" backgroundColor="#222" />
-        <View style={styles.errorContainer}>
-          <MaterialCommunityIcons name="alert-circle" size={80} color="#FF6347" />
-          <Text style={styles.errorTitle}>Despesa não encontrada</Text>
-          <TouchableOpacity 
-            style={styles.errorButton}
-            onPress={() => router.back()}
-          >
-            <Text style={styles.errorButtonText}>Voltar</Text>
-          </TouchableOpacity>
-        </View>
+        <Ionicons name="alert-circle" size={64} color="#FF6347" />
+        <Text style={styles.errorTitle}>Despesa não encontrada</Text>
+        <TouchableOpacity 
+          style={styles.retryButton}
+          onPress={() => router.back()}
+        >
+          <Text style={styles.retryButtonText}>Voltar</Text>
+        </TouchableOpacity>
       </SafeAreaView>
     );
   }
@@ -375,226 +484,428 @@ const ExpenseDetailsScreen = () => {
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" backgroundColor="#222" />
       
-      {/* Header */}
-      <View style={styles.headerContainer}>
+      {/* Header animado */}
+      <Animated.View
+        style={[
+          styles.animatedHeader,
+          {
+            opacity: headerOpacity,
+            height: headerHeight
+          }
+        ]}
+      >
         <TouchableOpacity
+          style={styles.headerBackButton}
           onPress={() => router.back()}
-          style={styles.backButton}
         >
-          <Ionicons name="arrow-back" size={24} color="#7B68EE" />
+          <Ionicons name="arrow-back" size={24} color="#FF6347" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Detalhes da Despesa</Text>
-        <TouchableOpacity
-          style={styles.shareButton}
-          onPress={shareExpense}
+        <Text style={styles.headerTitle} numberOfLines={1}>
+          {expense.description}
+        </Text>
+        <View style={styles.headerRight}>
+          {canModifyExpense && (
+            <TouchableOpacity
+              style={styles.headerActionButton}
+              onPress={() => router.push(`/(panel)/finances/expenses/edit?id=${expense.id}`)}
+            >
+              <Ionicons name="create-outline" size={24} color="#FF6347" />
+            </TouchableOpacity>
+          )}
+        </View>
+      </Animated.View>
+
+      {/* Banner de criador */}
+      {isCreator && (
+        <View style={styles.userAssignmentBanner}>
+          <Ionicons name="person" size={18} color="#fff" />
+          <Text style={styles.userAssignmentText}>Você criou esta despesa</Text>
+        </View>
+      )}
+
+      <Animated.ScrollView
+        style={[styles.scrollView, { opacity: fadeAnim }]}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: false }
+        )}
+        scrollEventThrottle={16}
+      >
+        {/* Cabeçalho */}
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.back()}
+          >
+            <Ionicons name="arrow-back" size={24} color="#FF6347" />
+          </TouchableOpacity>
+
+          <View style={styles.headerActions}>
+            <TouchableOpacity
+              style={styles.headerActionIcon}
+              onPress={handleShareExpense}
+            >
+              <Ionicons name="share-outline" size={24} color="#FF6347" />
+            </TouchableOpacity>
+
+            {canModifyExpense && (
+              <TouchableOpacity
+                style={styles.headerActionIcon}
+                onPress={() => router.push(`/(panel)/finances/expenses/edit?id=${expense.id}`)}
+              >
+                <Ionicons name="create-outline" size={24} color="#FF6347" />
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+
+        {/* Conteúdo principal */}
+        <Animated.View
+          style={[
+            styles.expenseContainer,
+            {
+              opacity: fadeAnim,
+              transform: [{ scale: scaleAnim }]
+            }
+          ]}
         >
-          <Ionicons name="share-outline" size={24} color="#7B68EE" />
-        </TouchableOpacity>
-      </View>
-      
-      <ScrollView style={styles.container}>
-        {/* Expense Header Section */}
-        <View style={styles.expenseHeaderSection}>
-          <View style={styles.statusContainer}>
+          {/* Status da despesa */}
+          <View style={styles.taskStatusRow}>
             <View style={[
-              styles.statusBadge, 
+              styles.statusBadge,
               { backgroundColor: `${getStatusColor(expense.status)}20` }
             ]}>
               <Text style={[styles.statusText, { color: getStatusColor(expense.status) }]}>
                 {getStatusText(expense.status)}
               </Text>
             </View>
-            
-            {isCreator && (
-              <View style={styles.creatorBadge}>
-                <Text style={styles.creatorText}>Você criou esta despesa</Text>
-              </View>
-            )}
-
-            {expense.category && (
-              <View style={styles.categoryChip}>
-                <FontAwesome5 name="tag" size={14} color="#7B68EE" />
-                <Text style={styles.categoryText}>{expense.category}</Text>
-              </View>
-            )}
+            <Text style={styles.taskUpdatedTime}>
+              Atualizada {getTimeAgo(expense.updatedAt)}
+            </Text>
           </View>
           
+          {/* Título e valor */}
           <Text style={styles.expenseTitle}>{expense.description}</Text>
           <Text style={styles.expenseAmount}>{formatCurrency(expense.amount)}</Text>
           
-          <View style={styles.expenseMetaContainer}>
-            <View style={styles.expenseMetaItem}>
-              <Ionicons name="calendar-outline" size={16} color="#7B68EE" />
-              <Text style={styles.expenseMetaText}>
-                {formatDate(expense.expenseDate)}
-              </Text>
+          {/* Ações rápidas para administradores */}
+          {(canApprove || canReimburse || canReset) && (
+            <View style={styles.quickActionsContainer}>
+              {canApprove && (
+                <View style={styles.quickActionsRow}>
+                  <ActionButton 
+                    title="Aprovar" 
+                    iconName="checkmark-circle" 
+                    color="#4CAF50" 
+                    onPress={handleApproveExpense} 
+                    isLoading={actionLoading} 
+                    small={true}
+                  />
+                  
+                  <View style={styles.actionSpacer} />
+                  
+                  <ActionButton 
+                    title="Rejeitar" 
+                    iconName="close-circle" 
+                    color="#FF6347" 
+                    onPress={handleRejectExpense} 
+                    isLoading={actionLoading} 
+                    small={true}
+                  />
+                </View>
+              )}
+              
+              {canReimburse && (
+                <ActionButton 
+                  title="Reembolsar" 
+                  iconName="cash-outline" 
+                  color="#2196F3" 
+                  onPress={handleReimburseExpense} 
+                  isLoading={actionLoading} 
+                  small={true}
+                />
+              )}
+              
+              {canReset && (
+                <ActionButton 
+                  title="Redefinir" 
+                  iconName="refresh" 
+                  color="#FFC107" 
+                  onPress={handleResetExpenseStatus} 
+                  isLoading={actionLoading} 
+                  small={true}
+                />
+              )}
             </View>
-          </View>
-        </View>
-        
-        {/* Creator Info Section */}
-        <View style={styles.sectionContainer}>
-          <Text style={styles.sectionTitle}>Criado por</Text>
-          <View style={styles.creatorContainer}>
-            {expense.creatorProfilePictureUrl ? (
-              <Image 
-                source={{ uri: expense.creatorProfilePictureUrl }} 
-                style={styles.creatorAvatar}
-              />
-            ) : (
-              <View style={styles.creatorAvatarPlaceholder}>
-                <Text style={styles.creatorInitials}>
-                  {expense.creatorName.charAt(0).toUpperCase()}
+          )}
+          
+          {/* Detalhes da Despesa */}
+          <View style={styles.sectionContainer}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Detalhes</Text>
+            </View>
+
+            {expense.category && (
+              <View style={styles.detailRow}>
+                <View style={styles.detailIcon}>
+                  <FontAwesome5 name="tag" size={20} color="#FF6347" />
+                </View>
+                <View style={styles.detailContent}>
+                  <Text style={styles.detailLabel}>Categoria</Text>
+                  <Text style={styles.detailValue}>
+                    {expense.category}
+                  </Text>
+                </View>
+              </View>
+            )}
+            
+            <View style={styles.detailRow}>
+              <View style={styles.detailIcon}>
+                <Ionicons name="calendar-outline" size={20} color="#FF6347" />
+              </View>
+              <View style={styles.detailContent}>
+                <Text style={styles.detailLabel}>Data da Despesa</Text>
+                <Text style={styles.detailValue}>
+                  {formatDateWithTime(expense.expenseDate)}
                 </Text>
               </View>
-            )}
-            
-            <View style={styles.creatorInfo}>
-              <Text style={styles.creatorName}>
-                {expense.creatorName}
-                {isCreator ? ' (Você)' : ''}
-              </Text>
-              <Text style={styles.createdAt}>
-                Em {formatDate(expense.createdAt)}
-              </Text>
             </View>
-          </View>
-        </View>
-        
-        {/* Status History Section */}
-        <View style={styles.sectionContainer}>
-          <Text style={styles.sectionTitle}>Status da Despesa</Text>
-          
-          <View style={styles.timelineContainer}>
-            {/* Created */}
-            <TimelineItem 
-              title="Criada" 
-              date={expense.createdAt} 
-              isCompleted={true} 
-            />
             
-            {/* Approved */}
-            <TimelineItem 
-              title="Aprovada" 
-              date={expense.approvalDate} 
-              isCompleted={['APPROVED', 'REIMBURSED'].includes(expense.status)} 
-            />
+            <View style={styles.detailRow}>
+              <View style={styles.detailIcon}>
+                <Ionicons name="calendar-outline" size={20} color="#FF6347" />
+              </View>
+              <View style={styles.detailContent}>
+                <Text style={styles.detailLabel}>Data de Criação</Text>
+                <Text style={styles.detailValue}>
+                  {formatDateWithTime(expense.createdAt)}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.detailRow}>
+              <View style={styles.detailIcon}>
+                <Ionicons name="person-outline" size={20} color="#FF6347" />
+              </View>
+              <View style={styles.detailContent}>
+                <Text style={styles.detailLabel}>Criado por</Text>
+                <Text style={styles.detailValue}>
+                  {expense.creatorName || 'Desconhecido'}
+                  {isCreator ? ' (Você)' : ''}
+                </Text>
+              </View>
+            </View>
             
-            {/* Reimbursed */}
-            <TimelineItem 
-              title="Reembolsada" 
-              date={expense.reimbursementDate} 
-              isCompleted={expense.status === 'REIMBURSED'} 
-            />
+            {expense.approvalDate && (
+              <View style={styles.detailRow}>
+                <View style={styles.detailIcon}>
+                  <Ionicons name="checkmark-circle-outline" size={20} color="#4CAF50" />
+                </View>
+                <View style={styles.detailContent}>
+                  <Text style={styles.detailLabel}>Aprovada em</Text>
+                  <Text style={styles.detailValue}>
+                    {formatDateWithTime(expense.approvalDate)}
+                  </Text>
+                </View>
+              </View>
+            )}
             
-            {/* Rejected (only show if rejected) */}
-            {expense.status === 'REJECTED' && (
-              <TimelineItem 
-                title="Rejeitada" 
-                date={expense.updatedAt} 
-                isCompleted={true} 
-                isRejected={true}
-                rejectionReason={expense.rejectionReason}
-              />
+            {expense.reimbursementDate && (
+              <View style={styles.detailRow}>
+                <View style={styles.detailIcon}>
+                  <Ionicons name="cash-outline" size={20} color="#2196F3" />
+                </View>
+                <View style={styles.detailContent}>
+                  <Text style={styles.detailLabel}>Reembolsada em</Text>
+                  <Text style={styles.detailValue}>
+                    {formatDateWithTime(expense.reimbursementDate)}
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            {expense.notes && (
+              <View style={styles.detailRow}>
+                <View style={styles.detailIcon}>
+                  <Ionicons name="document-text-outline" size={20} color="#FF6347" />
+                </View>
+                <View style={styles.detailContent}>
+                  <Text style={styles.detailLabel}>Observações</Text>
+                  <Text style={styles.detailValue}>
+                    {expense.notes}
+                  </Text>
+                </View>
+              </View>
             )}
           </View>
-        </View>
-        
-        {/* Notes Section (if available) */}
-        {expense.notes && (
-          <View style={styles.sectionContainer}>
-            <Text style={styles.sectionTitle}>Observações</Text>
-            <Text style={styles.notesText}>{expense.notes}</Text>
-          </View>
-        )}
-        
-        {/* Receipt Section (if available) */}
-        {expense.receiptUrl && (
-          <View style={styles.sectionContainer}>
-            <Text style={styles.sectionTitle}>Comprovante</Text>
-            <TouchableOpacity 
-              style={styles.receiptContainer}
-              onPress={viewReceipt}
-              activeOpacity={0.9}
-            >
-              <Image 
-                source={{ uri: expense.receiptUrl }} 
-                style={styles.receiptImage}
-                resizeMode="contain"
-              />
-              <View style={styles.viewReceiptOverlay}>
-                <Ionicons name="eye" size={24} color="#fff" />
-                <Text style={styles.viewReceiptText}>Visualizar</Text>
+          
+          {/* Receipt Section (if available) */}
+          {expense.receiptUrl && (
+            <View style={styles.sectionContainer}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Comprovante</Text>
               </View>
-            </TouchableOpacity>
-          </View>
-        )}
-        
-        {/* Action Buttons (based on permissions) */}
-        <View style={styles.actionsContainer}>
-          {/* Admin Actions */}
-          {canApprove && (
-            <View style={styles.actionGroup}>
-              <ActionButton 
-                title="Aprovar" 
-                iconName="checkmark-circle" 
-                color="#4CAF50" 
-                onPress={handleApproveExpense} 
-                isLoading={actionLoading} 
+              <TouchableOpacity 
+                style={styles.receiptContainer}
+                onPress={viewReceipt}
+                activeOpacity={0.9}
+              >
+                <Image 
+                  source={{ uri: expense.receiptUrl }} 
+                  style={styles.receiptImage}
+                  resizeMode="contain"
+                />
+                <View style={styles.viewReceiptOverlay}>
+                  <Ionicons name="eye" size={24} color="#fff" />
+                  <Text style={styles.viewReceiptText}>Visualizar</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+          )}
+          
+          {/* Status Timeline */}
+          <View style={styles.sectionContainer}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Timeline de Status</Text>
+            </View>
+            
+            <View style={styles.timelineContainer}>
+              {/* Created */}
+              <TimelineItem 
+                title="Criada" 
+                date={expense.createdAt} 
+                isCompleted={true}
+                isLast={false}
+                isFuture={false}
               />
               
-              <ActionButton 
-                title="Rejeitar" 
-                iconName="close-circle" 
-                color="#FF6347" 
-                onPress={handleRejectExpense} 
-                isLoading={actionLoading} 
+              {/* Approved */}
+              <TimelineItem 
+                title="Aprovada" 
+                date={expense.approvalDate} 
+                isCompleted={['APPROVED', 'REIMBURSED'].includes(expense.status)}
+                isLast={false}
+                isRejected={expense.status === 'REJECTED'}
+                isFuture={expense.status === 'PENDING' && !expense.approvalDate ? true : false}
               />
+              
+              {/* Rejected (show if is rejected) */}
+              {expense.status === 'REJECTED' && (
+                <TimelineItem 
+                  title="Rejeitada" 
+                  date={expense.updatedAt} 
+                  isCompleted={true} 
+                  isRejected={true}
+                  rejectionReason={expense.rejectionReason}
+                  isLast={true}
+                  isFuture={false}
+                />
+              )}
+              
+              {/* Reimbursed (show if not rejected) */}
+              {expense.status !== 'REJECTED' && (
+                <TimelineItem 
+                  title="Reembolsada" 
+                  date={expense.reimbursementDate} 
+                  isCompleted={expense.status === 'REIMBURSED'}
+                  isLast={true}
+                  isRejected={false}
+                  isFuture={!expense.reimbursementDate && !['REIMBURSED'].includes(expense.status) ? true : false}
+                />
+              )}
+            </View>
+          </View>
+          
+          {/* Creator Actions (Delete) */}
+          {canDelete && (
+            <View style={styles.creatorActionsContainer}>
+              <Text style={styles.creatorActionsTitle}>Ações do Criador</Text>
+              <View style={styles.creatorButtonsContainer}>
+                <TouchableOpacity
+                  style={[styles.creatorButton, styles.deleteButton]}
+                  onPress={handleDeleteExpense}
+                >
+                  {isDeleting ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <>
+                      <Ionicons
+                        name={showConfirmDelete ? "alert-circle" : "trash"}
+                        size={20}
+                        color="#fff"
+                        style={styles.buttonIcon}
+                      />
+                      <Text style={styles.deleteButtonText}>
+                        {showConfirmDelete ? "Confirmar exclusão" : "Excluir despesa"}
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+
+                {showConfirmDelete && (
+                  <TouchableOpacity
+                    style={styles.cancelButton}
+                    onPress={handleCancelDelete}
+                  >
+                    <Ionicons name="close-circle" size={20} color="#aaa" style={styles.buttonIcon} />
+                    <Text style={styles.cancelButtonText}>Cancelar</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
           )}
+        </Animated.View>
+      </Animated.ScrollView>
+
+      {/* Botão flutuante de edição */}
+      {canEdit && !actionLoading && !isDeleting && !showConfirmDelete && (
+        <TouchableOpacity
+          style={styles.editButton}
+          onPress={() => router.push(`/(panel)/finances/expenses/edit?id=${expense.id}`)}
+        >
+          <Feather name="edit-2" size={20} color="#fff" />
+        </TouchableOpacity>
+      )}
+      
+      {/* Modal para visualização em tela cheia */}
+      <Modal
+        visible={imageModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setImageModalVisible(false)}
+      >
+        <View style={styles.imageModalContainer}>
+          <TouchableOpacity 
+            style={styles.closeModalButton}
+            onPress={() => setImageModalVisible(false)}
+          >
+            <Ionicons name="close-circle" size={32} color="#fff" />
+          </TouchableOpacity>
           
-          {canReimburse && (
-            <ActionButton 
-              title="Marcar como Reembolsada" 
-              iconName="cash-outline" 
-              color="#2196F3" 
-              onPress={handleReimburseExpense} 
-              isLoading={actionLoading} 
-            />
-          )}
+          <Image
+            source={{ uri: expense?.receiptUrl }}
+            style={styles.fullScreenImage}
+            resizeMode="contain"
+          />
           
-          {canReset && (
-            <ActionButton 
-              title="Redefinir Status" 
-              iconName="refresh" 
-              color="#FFC107" 
-              onPress={handleResetExpenseStatus} 
-              isLoading={actionLoading} 
-            />
-          )}
-          
-          {/* Creator/User Actions */}
-          {canEdit && (
-            <ActionButton 
-              title="Editar" 
-              iconName="create-outline" 
-              color="#7B68EE" 
-              onPress={() => router.push(`/(panel)/finances/expenses/edit?id=${expense.id}`)} 
-              disabled={actionLoading} 
-            />
-          )}
-          
-          {canDelete && (
-            <ActionButton 
-              title="Excluir" 
-              iconName="trash-outline" 
-              color="#FF6347" 
-              onPress={handleDeleteExpense} 
-              isLoading={actionLoading} 
-            />
-          )}
+          <TouchableOpacity 
+            style={styles.saveImageButton}
+            onPress={() => {
+              // Opção para usuários compartilharem a imagem
+              if (expense?.receiptUrl) {
+                Share.share({
+                  url: expense.receiptUrl,
+                  message: `Comprovante da despesa: ${expense.description}`
+                });
+              }
+            }}
+          >
+            <Ionicons name="share-outline" size={24} color="#fff" />
+          </TouchableOpacity>
         </View>
-      </ScrollView>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -608,6 +919,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#222',
   },
   loadingText: {
     color: '#fff',
@@ -618,61 +930,125 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#222',
     padding: 20,
   },
   errorTitle: {
-    fontSize: 20,
+    color: '#fff',
+    fontSize: 24,
     fontWeight: 'bold',
-    color: '#fff',
-    marginVertical: 16,
-  },
-  errorButton: {
-    backgroundColor: '#7B68EE',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 8,
     marginTop: 16,
+    marginBottom: 8,
   },
-  errorButtonText: {
-    color: '#fff',
+  retryButton: {
+    backgroundColor: 'rgba(255, 99, 71, 0.2)',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    marginBottom: 16,
+  },
+  retryButtonText: {
+    color: '#FF6347',
     fontWeight: 'bold',
     fontSize: 16,
   },
-  headerContainer: {
+  animatedHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(34, 34, 34, 0.95)',
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#333',
-    paddingVertical: 15,
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
+    zIndex: 1000,
     borderBottomWidth: 1,
     borderBottomColor: '#444',
   },
-  backButton: {
-    marginRight: 15,
+  headerBackButton: {
+    padding: 8,
   },
   headerTitle: {
     flex: 1,
-    fontSize: 20,
-    fontWeight: 'bold',
     color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginLeft: 8,
   },
-  shareButton: {
+  headerRight: {
+    flexDirection: 'row',
+  },
+  headerActionButton: {
     padding: 8,
   },
-  container: {
+  scrollView: {
     flex: 1,
+    backgroundColor: '#222',
   },
-  expenseHeaderSection: {
-    backgroundColor: '#333',
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#444',
+  scrollContent: {
+    paddingBottom: 40,
   },
-  statusContainer: {
+  header: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginBottom: 16,
-    gap: 8,
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+  },
+  headerActions: {
+    flexDirection: 'row',
+  },
+  actionButton: {
+    padding: 8,
+    marginLeft: 8,
+  },
+  headerActionIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 99, 71, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 99, 71, 0.3)',
+    marginLeft: 8,
+  },
+  userAssignmentBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FF6347',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    justifyContent: 'center',
+  },
+  userAssignmentText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginLeft: 8,
+  },
+  expenseContainer: {
+    backgroundColor: '#333',
+    borderRadius: 16,
+    margin: 16,
+    padding: 20,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 8,
+      },
+    }),
+  },
+  taskStatusRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
   },
   statusBadge: {
     paddingHorizontal: 12,
@@ -685,29 +1061,9 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     textTransform: 'uppercase',
   },
-  creatorBadge: {
-    backgroundColor: 'rgba(123, 104, 238, 0.15)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  creatorText: {
-    color: '#7B68EE',
+  taskUpdatedTime: {
+    color: '#aaa',
     fontSize: 12,
-    fontWeight: 'bold',
-  },
-  categoryChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(123, 104, 238, 0.15)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 12,
-  },
-  categoryText: {
-    color: '#7B68EE',
-    fontSize: 12,
-    marginLeft: 6,
   },
   expenseTitle: {
     fontSize: 22,
@@ -718,110 +1074,129 @@ const styles = StyleSheet.create({
   expenseAmount: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#4CAF50',
+    color: '#FF6347',
     marginBottom: 16,
   },
-  expenseMetaContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    gap: 12,
-  },
-  expenseMetaItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  expenseMetaText: {
-    color: '#ccc',
-    fontSize: 14,
-    marginLeft: 6,
-  },
   sectionContainer: {
-    backgroundColor: '#333',
-    margin: 16,
+    marginTop: 20,
+    backgroundColor: '#444',
     borderRadius: 12,
+    overflow: 'hidden',
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#555',
   },
   sectionTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#7B68EE',
-    marginBottom: 16,
+    color: '#FF6347',
   },
-  notesText: {
-    color: '#ddd',
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  creatorContainer: {
+  detailRow: {
     flexDirection: 'row',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#555',
+  },
+  detailIcon: {
+    width: 35,
     alignItems: 'center',
+    justifyContent: 'flex-start',
+    marginRight: 12,
   },
-  creatorAvatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    marginRight: 16,
-  },
-  creatorAvatarPlaceholder: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#555',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  creatorInitials: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  creatorInfo: {
+  detailContent: {
     flex: 1,
   },
-  creatorName: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#fff',
+  detailLabel: {
+    color: '#aaa',
+    fontSize: 14,
     marginBottom: 4,
   },
-  createdAt: {
-    fontSize: 14,
-    color: '#aaa',
+  detailValue: {
+    color: '#fff',
+    fontSize: 16,
   },
   timelineContainer: {
-    marginTop: 8,
+    marginTop: 0,
+    padding: 16,
   },
   timelineItem: {
     flexDirection: 'row',
     marginBottom: 24,
     position: 'relative',
   },
-  timelineDot: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: '#4CAF50',
-    marginRight: 16,
-    marginTop: 2,
-  },
   completedTimelineItem: {},
   pendingTimelineItem: {
     opacity: 0.5,
+  },
+  rejectedTimelineItem: {},
+  futureTimelineItem: {
+    opacity: 0.3,
+  },
+  timelineDotContainer: {
+    position: 'relative',
+    alignItems: 'center',
+    width: 30,
+    height: 50,
+  },
+  timelineDot: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#4CAF50',
+    marginRight: 16,
+    zIndex: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  timelineConnector: {
+    position: 'absolute',
+    top: 16,
+    left: 7,
+    width: 2,
+    height: 40,
+    backgroundColor: '#444',
+    zIndex: 1,
   },
   completedTimelineDot: {
     backgroundColor: '#4CAF50',
   },
   pendingTimelineDot: {
     backgroundColor: '#aaa',
+    borderWidth: 1,
+    borderColor: '#555',
   },
-  rejectedTimelineItem: {},
   rejectedTimelineDot: {
     backgroundColor: '#FF6347',
   },
+  futureTimelineDot: {
+    backgroundColor: '#333',
+    borderWidth: 1,
+    borderColor: '#444',
+  },
+  completedTimelineConnector: {
+    backgroundColor: '#4CAF50',
+  },
+  rejectedTimelineConnector: {
+    backgroundColor: '#FF6347',
+  },
+  pendingTimelineConnector: {
+    backgroundColor: '#555',
+    opacity: 0.5,
+  },
+  futureTimelineConnector: {
+    backgroundColor: '#333',
+    opacity: 0.3,
+    borderStyle: 'dashed',
+  },
   timelineContent: {
     flex: 1,
+    paddingTop: 0,
+    marginLeft: 8,
   },
   timelineTitle: {
     fontSize: 16,
@@ -831,32 +1206,49 @@ const styles = StyleSheet.create({
   },
   pendingTimelineText: {
     color: '#aaa',
+    opacity: 0.8,
   },
   rejectedTimelineText: {
     color: '#FF6347',
+  },
+  futureTimelineText: {
+    color: '#777',
   },
   timelineDate: {
     fontSize: 14,
     color: '#aaa',
   },
+  pendingDateText: {
+    fontSize: 14,
+    color: '#aaa',
+    fontStyle: 'italic',
+  },
+  futureDateText: {
+    fontSize: 14,
+    color: '#777',
+    fontStyle: 'italic',
+  },
   rejectionReason: {
     fontSize: 14,
     color: '#FF6347',
-    marginTop: 4,
     fontStyle: 'italic',
+    backgroundColor: 'rgba(255, 99, 71, 0.1)',
+    borderRadius: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    marginTop: 8,
   },
   receiptContainer: {
-    position: 'relative',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#444',
+    backgroundColor: '#333',
     borderRadius: 8,
     overflow: 'hidden',
-    minHeight: 200,
+    height: 240,
+    position: 'relative',
   },
   receiptImage: {
     width: '100%',
-    height: 300,
+    height: '100%',
+    backgroundColor: '#222',
   },
   viewReceiptOverlay: {
     position: 'absolute',
@@ -864,10 +1256,9 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
     alignItems: 'center',
-    opacity: 0,
   },
   viewReceiptText: {
     color: '#fff',
@@ -875,23 +1266,31 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
-  actionsContainer: {
+  actionGroupContainer: {
+    marginTop: 24,
     padding: 16,
-    gap: 12,
-    marginBottom: 20,
+    backgroundColor: '#444',
+    borderRadius: 12,
+  },
+  actionGroupTitle: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 16,
   },
   actionGroup: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: 8,
   },
-  actionButton: {
+  mainActionButton: {
     paddingVertical: 14,
     paddingHorizontal: 20,
     borderRadius: 8,
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'center',
+    flex: 1,
   },
   disabledButton: {
     opacity: 0.6,
@@ -903,6 +1302,156 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: 'bold',
     fontSize: 16,
+  },
+  creatorActionsContainer: {
+    marginTop: 24,
+    padding: 16,
+    backgroundColor: '#444',
+    borderRadius: 12,
+  },
+  creatorActionsTitle: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 16,
+  },
+  creatorButtonsContainer: {
+    marginTop: 8,
+  },
+  creatorButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginBottom: 12,
+    backgroundColor: 'rgba(123, 104, 238, 0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(123, 104, 238, 0.3)',
+  },
+  deleteButton: {
+    backgroundColor: '#FF6347',
+    borderWidth: 0,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#FF6347',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 3,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
+  },
+  deleteButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  cancelButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginBottom: 12,
+    backgroundColor: '#333',
+    borderWidth: 1,
+    borderColor: '#444',
+  },
+  cancelButtonText: {
+    color: '#aaa',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  buttonIcon: {
+    marginRight: 8,
+  },
+  editButton: {
+    position: 'absolute',
+    bottom: 20,
+    right: 20,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#FF6347',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#FF6347',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4.65,
+    elevation: 8,
+  },
+  imageModalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  fullScreenImage: {
+    width: Dimensions.get('window').width,
+    height: Dimensions.get('window').height - 100,
+  },
+  closeModalButton: {
+    position: 'absolute',
+    top: 40,
+    right: 20,
+    zIndex: 10,
+    padding: 10,
+  },
+  saveImageButton: {
+    position: 'absolute',
+    bottom: 40,
+    right: 20,
+    backgroundColor: 'rgba(255, 99, 71, 0.7)',
+    borderRadius: 30,
+    padding: 12,
+    zIndex: 10,
+  },
+  backButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#444',
+  },
+  backButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  quickActionsContainer: {
+    marginVertical: 16,
+    gap: 8,
+  },
+  quickActionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  actionSpacer: {
+    width: 8,
+  },
+  rejectionReasonContainer: {
+    marginTop: 8,
+    backgroundColor: 'rgba(255, 99, 71, 0.1)',
+    borderRadius: 8,
+    padding: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: '#FF6347',
+  },
+  smallActionButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    minHeight: 36,
+  },
+  smallActionButtonText: {
+    fontSize: 12,
   },
 });
 

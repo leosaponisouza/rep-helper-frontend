@@ -149,7 +149,8 @@ const Calendar: React.FC<CalendarProps> = ({
     Object.keys(eventsByDate).forEach(date => {
       markers[date] = { 
         marked: true,
-        dotColor: '#7B68EE'
+        dotColor: '#7B68EE',
+        activeOpacity: 0.8
       };
     });
     
@@ -160,6 +161,8 @@ const Calendar: React.FC<CalendarProps> = ({
         ...markers[selectedDateStr],
         selected: true,
         selectedColor: '#7B68EE',
+        selectedTextColor: '#ffffff',
+        selectedDotColor: '#ffffff'
       };
     }
     
@@ -193,7 +196,6 @@ const Calendar: React.FC<CalendarProps> = ({
         const currentDate = parseISO(selectedDay);
         const newDate = subMonths(currentDate, 1);
         const newDateString = format(newDate, 'yyyy-MM-dd');
-        setSelectedDay(newDateString);
         
         // Se o calendário tem uma referência, podemos usar seus métodos nativos
         if (calendarRef.current) {
@@ -212,7 +214,6 @@ const Calendar: React.FC<CalendarProps> = ({
         const currentDate = parseISO(selectedDay);
         const newDate = addMonths(currentDate, 1);
         const newDateString = format(newDate, 'yyyy-MM-dd');
-        setSelectedDay(newDateString);
         
         // Se o calendário tem uma referência, podemos usar seus métodos nativos
         if (calendarRef.current) {
@@ -225,109 +226,73 @@ const Calendar: React.FC<CalendarProps> = ({
   }, [selectedDay]);
 
   return (
-    <View style={[styles.container, { height: containerHeight }]}>
-      {/* Cabeçalho do mês com setas de navegação */}
-      <View style={styles.monthHeader}>
-        <TouchableOpacity 
-          onPress={goToPreviousMonth}
-          style={styles.monthNavButton}
-          hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
-        >
-          <Ionicons name="chevron-back" size={22} color="#7B68EE" />
-        </TouchableOpacity>
-        
-        <View style={styles.monthTextContainer}>
-          <Text style={styles.monthText}>{currentMonth}</Text>
-          <View style={styles.swipeIndicator}>
-            <View style={styles.swipeDot} />
-            <View style={styles.swipeDot} />
-            <View style={styles.swipeDot} />
+    <View style={styles.container}>
+      <View style={styles.calendarWrapper}>
+        <CalendarList
+          ref={calendarRef}
+          current={selectedDay}
+          onDayPress={handleDateSelect}
+          markedDates={markedDates}
+          pastScrollRange={12}
+          futureScrollRange={12}
+          scrollEnabled={true}
+          horizontal={true}
+          pagingEnabled={true}
+          theme={{
+            calendarBackground: '#333',
+            textSectionTitleColor: '#fff',
+            selectedDayBackgroundColor: '#7B68EE',
+            selectedDayTextColor: '#ffffff',
+            todayTextColor: '#7B68EE',
+            dayTextColor: '#fff',
+            textDisabledColor: '#666',
+            dotColor: '#7B68EE',
+            monthTextColor: '#fff',
+            arrowColor: '#7B68EE',
+            indicatorColor: '#7B68EE',
+          }}
+        />
+      </View>
+
+      <View style={styles.eventsSection}>
+        <View style={styles.eventsHeader}>
+          <View style={styles.eventsHeaderContent}>
+            <Text style={styles.eventsTitle}>
+              {format(parseISO(selectedDay), "dd 'de' MMMM", { locale: ptBR })}
+            </Text>
+            <View style={styles.eventsCountBadge}>
+              <Text style={styles.eventsCountText}>
+                {dayEvents.length} {dayEvents.length === 1 ? 'evento' : 'eventos'}
+              </Text>
+            </View>
           </View>
         </View>
-        
-        <TouchableOpacity 
-          onPress={goToNextMonth}
-          style={styles.monthNavButton}
-          hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
+
+        <Animated.View 
+          style={[
+            styles.eventsList,
+            {
+              transform: [{ translateY: slideAnim }],
+              opacity: opacityAnim
+            }
+          ]}
         >
-          <Ionicons name="chevron-forward" size={22} color="#7B68EE" />
-        </TouchableOpacity>
+          <FlatList
+            data={dayEvents}
+            renderItem={renderEventItem}
+            keyExtractor={(item) => item.id.toString()}
+            contentContainerStyle={styles.eventsListContent}
+            refreshControl={refreshControl}
+            showsVerticalScrollIndicator={false}
+            ListEmptyComponent={
+              <View style={styles.emptyContainer}>
+                <Ionicons name="calendar-outline" size={40} color="#666" />
+                <Text style={styles.emptyText}>Nenhum evento para este dia</Text>
+              </View>
+            }
+          />
+        </Animated.View>
       </View>
-      
-      {/* Calendário com scroll horizontal */}
-      <CalendarList
-        ref={calendarRef}
-        current={selectedDay}
-        onDayPress={handleDateSelect}
-        markedDates={markedDates}
-        pastScrollRange={6}
-        futureScrollRange={6}
-        scrollEnabled={true}
-        showScrollIndicator={false}
-        horizontal={true}
-        pagingEnabled={true}
-        calendarWidth={screenWidth}
-        hideExtraDays={true}
-        hideDayNames={false}
-        hideArrows={true}
-        displayLoadingIndicator={false}
-        renderHeader={() => null}
-        theme={{
-          calendarBackground: 'transparent',
-          textSectionTitleColor: '#b6c1cd',
-          selectedDayBackgroundColor: '#7B68EE',
-          selectedDayTextColor: '#ffffff',
-          todayTextColor: '#7B68EE',
-          dayTextColor: '#d9e1e8',
-          textDisabledColor: '#444',
-          dotColor: '#7B68EE',
-          selectedDotColor: '#ffffff',
-          arrowColor: '#7B68EE',
-          monthTextColor: '#d9e1e8',
-          indicatorColor: '#7B68EE',
-          textDayFontFamily: 'System',
-          textMonthFontFamily: 'System',
-          textDayHeaderFontFamily: 'System',
-          textDayFontWeight: '300',
-          textMonthFontWeight: 'bold',
-          textDayHeaderFontWeight: '500',
-          textDayFontSize: 16,
-          textMonthFontSize: 16,
-          textDayHeaderFontSize: 13
-        }}
-      />
-      
-      {/* Lista de eventos do dia selecionado */}
-      <Animated.View 
-        style={[
-          styles.eventsContainer,
-          {
-            transform: [{ translateY: slideAnim }],
-            opacity: opacityAnim
-          }
-        ]}
-      >
-        <Text style={styles.eventsHeader}>
-          {dayEvents.length === 0 ? 'Nenhum evento neste dia' : `${dayEvents.length} ${dayEvents.length === 1 ? 'evento' : 'eventos'} neste dia`}
-        </Text>
-        
-        {/* Lista de eventos */}
-        <FlatList
-          data={dayEvents}
-          renderItem={renderEventItem}
-          keyExtractor={(item) => item?.id?.toString() || Math.random().toString()}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.eventsList}
-          refreshControl={refreshControl}
-          ListEmptyComponent={() => (
-            <View style={styles.emptyContainer}>
-              <Ionicons name="calendar-outline" size={48} color="#444" />
-              <Text style={styles.emptyText}>Nenhum evento agendado</Text>
-              <Text style={styles.emptySubtext}>Selecione outro dia ou crie um novo evento</Text>
-            </View>
-          )}
-        />
-      </Animated.View>
     </View>
   );
 };
@@ -335,73 +300,61 @@ const Calendar: React.FC<CalendarProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#333',
+  },
+  calendarWrapper: {
+    backgroundColor: '#333',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#444',
+  },
+  eventsSection: {
+    flex: 1,
     backgroundColor: '#222',
   },
-  monthHeader: {
+  eventsHeader: {
+    backgroundColor: '#333',
+    borderBottomWidth: 1,
+    borderBottomColor: '#444',
+  },
+  eventsHeaderContent: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 10,
-    paddingHorizontal: 15,
-  },
-  monthNavButton: {
-    padding: 5,
-  },
-  monthTextContainer: {
     alignItems: 'center',
+    padding: 12,
   },
-  monthText: {
-    fontSize: 18,
+  eventsTitle: {
+    fontSize: 16,
     fontWeight: '600',
     color: '#fff',
-    textTransform: 'capitalize',
-    marginBottom: 5,
   },
-  swipeIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  swipeDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
+  eventsCountBadge: {
     backgroundColor: '#7B68EE',
-    marginHorizontal: 2,
-    opacity: 0.7,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
-  calendarContainer: {
-    position: 'relative',
-    width: '100%',
-  },
-  eventsContainer: {
-    flex: 1,
-  },
-  eventsHeader: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#333',
-    color: '#d9e1e8',
-    fontSize: 15,
+  eventsCountText: {
+    fontSize: 12,
+    color: '#fff',
     fontWeight: '500',
   },
   eventsList: {
-    paddingHorizontal: 16,
-    paddingBottom: 20,
+    flex: 1,
+  },
+  eventsListContent: {
+    padding: 12,
   },
   emptyContainer: {
     flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 24,
   },
   emptyText: {
-    color: '#aaa',
-    fontSize: 16,
-  },
-  emptySubtext: {
-    color: '#aaa',
     fontSize: 14,
+    color: '#666',
+    marginTop: 12,
   },
 });
 

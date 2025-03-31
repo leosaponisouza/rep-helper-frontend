@@ -98,7 +98,7 @@ const ReceiptSelector = ({
         <Image
           source={{ uri: receiptUrl }}
           style={styles.receiptImage}
-          resizeMode="cover"
+          resizeMode="contain"
         />
         
         <TouchableOpacity
@@ -301,43 +301,52 @@ const CreateExpenseScreen = () => {
   };
 
   const pickImage = async () => {
+    // Check permissions
     const hasPermission = await checkPermission('mediaLibrary');
     if (!hasPermission) return;
     
     try {
+      // Launch image library
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
-        aspect: [4, 3],
+        aspect: [3, 4], // Proporção vertical para recibos
         quality: 0.8,
       });
       
-      if (!result.canceled && result.assets[0].uri) {
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setUploadingImage(true);
         await uploadImage(result.assets[0].uri);
       }
     } catch (error) {
       console.error('Erro ao selecionar imagem:', error);
-      Alert.alert('Erro', 'Não foi possível selecionar a imagem.');
+      Alert.alert('Erro', 'Não foi possível selecionar a imagem. Tente novamente.');
+    } finally {
+      setUploadingImage(false);
     }
   };
 
   const takePhoto = async () => {
+    // Check permissions
     const hasPermission = await checkPermission('camera');
     if (!hasPermission) return;
     
     try {
+      // Launch camera
       const result = await ImagePicker.launchCameraAsync({
         allowsEditing: true,
-        aspect: [4, 3],
+        aspect: [3, 4], // Proporção vertical para recibos
         quality: 0.8,
       });
       
-      if (!result.canceled && result.assets[0].uri) {
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setUploadingImage(true);
         await uploadImage(result.assets[0].uri);
       }
     } catch (error) {
-      console.error('Erro ao tirar foto:', error);
-      Alert.alert('Erro', 'Não foi possível tirar a foto.');
+      console.error('Erro ao capturar foto:', error);
+      Alert.alert('Erro', 'Não foi possível capturar a foto. Tente novamente.');
+    } finally {
+      setUploadingImage(false);
     }
   };
 
@@ -723,26 +732,26 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   receiptContainer: {
-    position: 'relative',
+    backgroundColor: '#333',
     borderRadius: 8,
     overflow: 'hidden',
-    height: 200,
-    backgroundColor: '#333',
+    height: 240,
+    borderWidth: 1,
+    borderColor: '#444',
+    position: 'relative',
   },
   receiptImage: {
     width: '100%',
     height: '100%',
+    backgroundColor: '#222',
   },
   removeReceiptButton: {
     position: 'absolute',
-    top: 10,
-    right: 10,
+    top: 8,
+    right: 8,
     backgroundColor: 'rgba(255, 99, 71, 0.8)',
     borderRadius: 20,
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
+    padding: 8,
   },
   receiptActions: {
     flexDirection: 'row',

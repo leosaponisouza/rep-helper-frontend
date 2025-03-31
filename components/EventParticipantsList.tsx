@@ -5,11 +5,10 @@ import {
   Text, 
   StyleSheet, 
   Image,
-  FlatList, 
   TouchableOpacity 
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Event, InvitationStatus } from '../src/hooks/useEvents';
+import { Event } from '../src/hooks/useEvents';
 
 interface EventParticipantsListProps {
   event: Event;
@@ -76,7 +75,12 @@ const EventParticipantsList: React.FC<EventParticipantsListProps> = ({
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Participantes</Text>
+        <View style={styles.titleContainer}>
+          <Text style={styles.title}>Participantes</Text>
+          <Text style={styles.subtitle}>
+            {totalCount} {totalCount === 1 ? 'convidado' : 'convidados'} no total
+          </Text>
+        </View>
         {isCreator && !isFinished && onInvite && (
           <TouchableOpacity onPress={onInvite} style={styles.inviteButton}>
             <Ionicons name="person-add" size={16} color="#7B68EE" />
@@ -86,56 +90,65 @@ const EventParticipantsList: React.FC<EventParticipantsListProps> = ({
       </View>
       
       <View style={styles.statsContainer}>
-        <View style={styles.statItem}>
-          <Text style={styles.statNumber}>{confirmedCount}</Text>
-          <Text style={styles.statLabel}>Confirmados</Text>
+        <View style={[styles.statItem, { backgroundColor: '#4CAF5020' }]}>
+          <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
+          <Text style={[styles.statNumber, { color: '#4CAF50' }]}>{confirmedCount}</Text>
+          <Text style={[styles.statLabel, { color: '#4CAF50' }]}>Confirmados</Text>
         </View>
         
-        <View style={styles.statItem}>
-          <Text style={styles.statNumber}>{pendingCount}</Text>
-          <Text style={styles.statLabel}>Pendentes</Text>
+        <View style={[styles.statItem, { backgroundColor: '#FFC10720' }]}>
+          <Ionicons name="help-circle" size={20} color="#FFC107" />
+          <Text style={[styles.statNumber, { color: '#FFC107' }]}>{pendingCount}</Text>
+          <Text style={[styles.statLabel, { color: '#FFC107' }]}>Pendentes</Text>
         </View>
         
-        <View style={styles.statItem}>
-          <Text style={styles.statNumber}>{declinedCount}</Text>
-          <Text style={styles.statLabel}>Recusados</Text>
+        <View style={[styles.statItem, { backgroundColor: '#F4433620' }]}>
+          <Ionicons name="close-circle" size={20} color="#F44336" />
+          <Text style={[styles.statNumber, { color: '#F44336' }]}>{declinedCount}</Text>
+          <Text style={[styles.statLabel, { color: '#F44336' }]}>Recusados</Text>
         </View>
       </View>
       
       <View style={styles.divider} />
       
-      {totalCount > 0 ? (
-        <>
-          {/* Participantes confirmados */}
+      {event.invitations && event.invitations.length > 0 ? (
+        <View style={styles.participantsList}>
+          {/* Confirmados */}
           {confirmedParticipants.length > 0 && (
-            <View style={styles.participantsSection}>
-              <Text style={styles.sectionLabel}>Confirmados</Text>
-              {confirmedParticipants.map(participant => 
-                renderParticipant(participant, { color: '#4CAF50', label: 'Confirmado' })
+            <View style={styles.statusSection}>
+              <Text style={[styles.statusSectionTitle, { color: '#4CAF50' }]}>
+                Confirmados ({confirmedCount})
+              </Text>
+              {confirmedParticipants.map(invitation => 
+                renderParticipant(invitation, { color: '#4CAF50', label: 'Confirmado' })
               )}
             </View>
           )}
           
-          {/* Participantes pendentes */}
+          {/* Pendentes */}
           {pendingParticipants.length > 0 && (
-            <View style={styles.participantsSection}>
-              <Text style={styles.sectionLabel}>Pendentes</Text>
-              {pendingParticipants.map(participant => 
-                renderParticipant(participant, { color: '#FFC107', label: 'Pendente' })
+            <View style={styles.statusSection}>
+              <Text style={[styles.statusSectionTitle, { color: '#FFC107' }]}>
+                Pendentes ({pendingCount})
+              </Text>
+              {pendingParticipants.map(invitation => 
+                renderParticipant(invitation, { color: '#FFC107', label: 'Pendente' })
               )}
             </View>
           )}
           
-          {/* Participantes que recusaram */}
+          {/* Recusados */}
           {declinedParticipants.length > 0 && (
-            <View style={styles.participantsSection}>
-              <Text style={styles.sectionLabel}>Recusaram</Text>
-              {declinedParticipants.map(participant => 
-                renderParticipant(participant, { color: '#FF6347', label: 'Recusou' })
+            <View style={styles.statusSection}>
+              <Text style={[styles.statusSectionTitle, { color: '#F44336' }]}>
+                Recusados ({declinedCount})
+              </Text>
+              {declinedParticipants.map(invitation => 
+                renderParticipant(invitation, { color: '#F44336', label: 'Recusado' })
               )}
             </View>
           )}
-        </>
+        </View>
       ) : (
         <View style={styles.emptyContainer}>
           <Ionicons name="people" size={50} color="#7B68EE" style={{ opacity: 0.5 }} />
@@ -159,77 +172,93 @@ const EventParticipantsList: React.FC<EventParticipantsListProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#333',
+    backgroundColor: '#fff',
     borderRadius: 12,
-    overflow: 'hidden',
-    marginBottom: 16,
+    padding: 16,
+    marginVertical: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#444',
+    marginBottom: 16,
+  },
+  titleContainer: {
+    flex: 1,
   },
   title: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#7B68EE',
+    color: '#333',
+  },
+  subtitle: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 2,
   },
   inviteButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(123, 104, 238, 0.15)',
+    backgroundColor: '#7B68EE20',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 20,
   },
   inviteButtonText: {
     color: '#7B68EE',
+    marginLeft: 4,
     fontSize: 14,
     fontWeight: '500',
-    marginLeft: 6,
   },
   statsContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    padding: 16,
+    justifyContent: 'space-between',
+    marginBottom: 16,
   },
   statItem: {
+    flex: 1,
     alignItems: 'center',
+    padding: 12,
+    borderRadius: 8,
+    marginHorizontal: 4,
   },
   statNumber: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: 'bold',
-    color: '#7B68EE',
-    marginBottom: 4,
+    marginVertical: 4,
   },
   statLabel: {
-    fontSize: 14,
-    color: '#aaa',
+    fontSize: 12,
+    fontWeight: '500',
   },
   divider: {
     height: 1,
-    backgroundColor: '#444',
-    marginHorizontal: 16,
+    backgroundColor: '#eee',
+    marginVertical: 16,
   },
-  participantsSection: {
-    padding: 16,
+  participantsList: {
+    marginTop: 8,
   },
-  sectionLabel: {
+  statusSection: {
+    marginBottom: 16,
+  },
+  statusSectionTitle: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 12,
+    fontWeight: '600',
+    marginBottom: 8,
   },
   participantItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#444',
+    padding: 8,
+    backgroundColor: '#f8f8f8',
+    borderRadius: 8,
+    marginBottom: 8,
   },
   participantAvatar: {
     width: 40,
@@ -241,47 +270,46 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#555',
+    backgroundColor: '#7B68EE20',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
   },
   participantInitials: {
+    color: '#7B68EE',
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#fff',
   },
   participantInfo: {
     flex: 1,
   },
   participantName: {
     fontSize: 16,
-    color: '#fff',
     fontWeight: '500',
-    marginBottom: 2,
+    color: '#333',
   },
   participantEmail: {
-    fontSize: 12,
-    color: '#aaa',
+    fontSize: 14,
+    color: '#666',
   },
   statusBadge: {
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
+    marginLeft: 8,
   },
   statusText: {
     fontSize: 12,
-    fontWeight: 'bold',
+    fontWeight: '500',
   },
   emptyContainer: {
-    padding: 30,
     alignItems: 'center',
-    justifyContent: 'center',
+    padding: 24,
   },
   emptyText: {
-    color: '#aaa',
-    marginVertical: 16,
     fontSize: 16,
+    color: '#666',
+    marginTop: 12,
     textAlign: 'center',
   },
   invitePrimaryButton: {
@@ -289,17 +317,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#7B68EE',
     paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
-  invitePrimaryText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginTop: 16,
   },
   buttonIcon: {
     marginRight: 8,
-  }
+  },
+  invitePrimaryText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '500',
+  },
 });
 
 export default EventParticipantsList;

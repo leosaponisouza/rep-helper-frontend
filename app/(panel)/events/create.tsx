@@ -49,8 +49,10 @@ const CreateEventScreen: React.FC = () => {
   const [startDate, setStartDate] = useState(() => {
     if (params.date) {
       try {
-        // Se recebemos uma data do calendário, usamos ela como base
-        const baseDate = parseISO(params.date);
+        // Criar a data usando os componentes individuais para evitar problemas de fuso horário
+        const [year, month, day] = params.date.split('-').map(Number);
+        const baseDate = new Date(year, month - 1, day);
+        
         // Definir hora para o próximo horário redondo (ex: 10:00, 11:00)
         const now = new Date();
         const roundedHour = Math.ceil(now.getHours() / 1) * 1;

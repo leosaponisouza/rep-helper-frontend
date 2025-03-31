@@ -40,6 +40,10 @@ const EventDetailsScreen: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [showConfirmDelete, setShowConfirmDelete] = useState<boolean>(false);
+  const [expandedGroup, setExpandedGroup] = useState<'confirmed' | 'pending' | 'declined' | null>(null);
+  const confirmedHeight = useState(new Animated.Value(0))[0];
+  const pendingHeight = useState(new Animated.Value(0))[0];
+  const declinedHeight = useState(new Animated.Value(0))[0];
   // Animações
   const fadeAnim = useState(new Animated.Value(0))[0];
   const scaleAnim = useState(new Animated.Value(0.95))[0];
@@ -245,7 +249,7 @@ const EventDetailsScreen: React.FC = () => {
   }, [event]);
   
   // Calcular contagem de convidados
-  const invitedCount = useMemo(() => {
+  const pendingCount = useMemo(() => {
     if (!event || !event.invitations) return 0;
     return event.invitations.filter(inv => inv.status === 'INVITED').length;
   }, [event]);
@@ -254,6 +258,22 @@ const EventDetailsScreen: React.FC = () => {
   const declinedCount = useMemo(() => {
     if (!event || !event.invitations) return 0;
     return event.invitations.filter(inv => inv.status === 'DECLINED').length;
+  }, [event]);
+  
+  // Agrupamentos de participantes por status
+  const confirmedParticipants = useMemo(() => {
+    if (!event || !event.invitations) return [];
+    return event.invitations.filter(inv => inv.status === 'CONFIRMED');
+  }, [event]);
+
+  const pendingParticipants = useMemo(() => {
+    if (!event || !event.invitations) return [];
+    return event.invitations.filter(inv => inv.status === 'INVITED');
+  }, [event]);
+
+  const declinedParticipants = useMemo(() => {
+    if (!event || !event.invitations) return [];
+    return event.invitations.filter(inv => inv.status === 'DECLINED');
   }, [event]);
   
   // Verificar se o evento já aconteceu
@@ -295,6 +315,31 @@ const EventDetailsScreen: React.FC = () => {
     outputRange: [0, 60],
     extrapolate: 'clamp'
   });
+  
+  // Adicionar função para animar a expansão/retração
+  const animateGroup = useCallback((group: 'confirmed' | 'pending' | 'declined' | null) => {
+    const targetHeight = group === expandedGroup ? 0 : 1;
+    
+    Animated.parallel([
+      Animated.timing(confirmedHeight, {
+        toValue: group === 'confirmed' ? targetHeight : 0,
+        duration: 300,
+        useNativeDriver: false,
+      }),
+      Animated.timing(pendingHeight, {
+        toValue: group === 'pending' ? targetHeight : 0,
+        duration: 300,
+        useNativeDriver: false,
+      }),
+      Animated.timing(declinedHeight, {
+        toValue: group === 'declined' ? targetHeight : 0,
+        duration: 300,
+        useNativeDriver: false,
+      })
+    ]).start();
+    
+    setExpandedGroup(group);
+  }, [expandedGroup, confirmedHeight, pendingHeight, declinedHeight]);
   
   // Se estiver carregando, mostrar indicador
   if (loading && !event) {
@@ -375,13 +420,7 @@ const EventDetailsScreen: React.FC = () => {
           {isCreator && (
             <TouchableOpacity 
               style={styles.headerActionButton}
-              onPress={() => {
-                if (source === 'home') {
-                  router.navigate('/(panel)/home');
-                } else {
-                  router.back();
-                }
-              }}
+              onPress={() => router.push(`/(panel)/events/edit/${event.id}`)}
             >
               <Ionicons name="create-outline" size={24} color="#7B68EE" />
             </TouchableOpacity>
@@ -410,7 +449,7 @@ const EventDetailsScreen: React.FC = () => {
           
           <View style={styles.headerActions}>
             <TouchableOpacity 
-              style={styles.actionButton}
+              style={styles.headerActionIcon}
               onPress={handleShareEvent}
             >
               <Ionicons name="share-outline" size={24} color="#7B68EE" />
@@ -418,7 +457,7 @@ const EventDetailsScreen: React.FC = () => {
             
             {isCreator && (
               <TouchableOpacity 
-                style={styles.actionButton}
+                style={styles.headerActionIcon}
                 onPress={() => router.push(`/(panel)/events/edit/${event.id}`)}
               >
                 <Ionicons name="create-outline" size={24} color="#7B68EE" />
@@ -437,16 +476,51 @@ const EventDetailsScreen: React.FC = () => {
             }
           ]}
         >
-          {/* Status do evento */}
-          {eventHasPassed ? (
-            <View style={styles.eventStatusBadge}>
-              <Text style={styles.eventStatusText}>Compromisso finalizado</Text>
-            </View>
-          ) : eventIsHappening ? (
-            <View style={[styles.eventStatusBadge, styles.happeningNowBadge]}>
-              <Text style={[styles.eventStatusText, styles.happeningNowText]}>Acontecendo agora</Text>
-            </View>
-          ) : null}
+          {/* Status do evento e do usuário */}
+          <View style={styles.statusContainer}>
+            {eventHasPassed ? (
+              <View style={styles.eventStatusBadge}>
+                <Text style={styles.eventStatusText}>Compromisso finalizado</Text>
+              </View>
+            ) : eventIsHappening ? (
+              <View style={[styles.eventStatusBadge, styles.happeningNowBadge]}>
+                <Text style={[styles.eventStatusText, styles.happeningNowText]}>Acontecendo agora</Text>
+              </View>
+            ) : null}
+            
+            {userInvitation && (
+              <View style={[
+                styles.userStatusBadge,
+                userInvitation.status === 'CONFIRMED' ? styles.confirmedBadge :
+                userInvitation.status === 'INVITED' ? styles.invitedBadge :
+                styles.declinedBadge
+              ]}>
+                <Ionicons 
+                  name={
+                    userInvitation.status === 'CONFIRMED' ? 'checkmark-circle' :
+                    userInvitation.status === 'INVITED' ? 'help-circle' :
+                    'close-circle'
+                  } 
+                  size={16} 
+                  color={
+                    userInvitation.status === 'CONFIRMED' ? '#4CAF50' :
+                    userInvitation.status === 'INVITED' ? '#FFC107' :
+                    '#FF6347'
+                  } 
+                />
+                <Text style={[
+                  styles.userStatusText,
+                  userInvitation.status === 'CONFIRMED' ? styles.confirmedText :
+                  userInvitation.status === 'INVITED' ? styles.invitedText :
+                  styles.declinedText
+                ]}>
+                  {userInvitation.status === 'CONFIRMED' ? 'Você está confirmado' :
+                   userInvitation.status === 'INVITED' ? 'Você foi convidado' :
+                   'Você recusou o convite'}
+                </Text>
+              </View>
+            )}
+          </View>
           
           {/* Título */}
           <Text style={styles.eventTitle}>{event.title}</Text>
@@ -491,93 +565,211 @@ const EventDetailsScreen: React.FC = () => {
             </View>
           )}
           
-          {/* Estatísticas de participação */}
-          <View style={styles.statsContainer}>
-            <View style={styles.statItem}>
-              <View style={[styles.statIconContainer, styles.confirmedIconContainer]}>
-                <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
-              </View>
-              <Text style={styles.statCount}>{confirmedCount}</Text>
-              <Text style={styles.statLabel}>Confirmados</Text>
+          {/* Ações Rápidas do Organizador */}
+          {isCreator && (
+            <View style={styles.quickActionsContainer}>
+              <Text style={styles.quickActionsTitle}>Ações Rápidas</Text>
+              <TouchableOpacity 
+                style={styles.quickActionButton}
+                onPress={() => router.push(`/(panel)/events/invitations/${event.id}`)}
+              >
+                <Ionicons name="people" size={20} color="#7B68EE" style={styles.quickActionIcon} />
+                <Text style={styles.quickActionText}>Gerenciar Convidados</Text>
+              </TouchableOpacity>
             </View>
+          )}
+          
+          {/* Lista de Participantes */}
+          <View style={styles.participantsSection}>
+            <Text style={styles.sectionTitle}>Participantes</Text>
             
-            <View style={styles.statItem}>
-              <View style={[styles.statIconContainer, styles.invitedIconContainer]}>
-                <Ionicons name="help-circle" size={24} color="#FFC107" />
-              </View>
-              <Text style={styles.statCount}>{invitedCount}</Text>
-              <Text style={styles.statLabel}>Pendentes</Text>
-            </View>
             
-            <View style={styles.statItem}>
-              <View style={[styles.statIconContainer, styles.declinedIconContainer]}>
-                <Ionicons name="close-circle" size={24} color="#FF6347" />
+            {/* Confirmados */}
+            <TouchableOpacity 
+              style={styles.groupHeader}
+              onPress={() => animateGroup(expandedGroup === 'confirmed' ? null : 'confirmed')}
+            >
+              <View style={styles.groupHeaderContent}>
+                <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
+                <Text style={[styles.groupTitle, { color: '#4CAF50' }]}>
+                  Confirmados ({confirmedCount})
+                </Text>
               </View>
-              <Text style={styles.statCount}>{declinedCount}</Text>
-              <Text style={styles.statLabel}>Recusados</Text>
-            </View>
+              <Ionicons 
+                name={expandedGroup === 'confirmed' ? "chevron-up" : "chevron-down"} 
+                size={20} 
+                color="#4CAF50" 
+              />
+            </TouchableOpacity>
+            <Animated.View style={[
+              styles.participantsGroup,
+              {
+                maxHeight: confirmedHeight.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, 1000] // Valor alto o suficiente para acomodar todos os participantes
+                }),
+                opacity: confirmedHeight
+              }
+            ]}>
+              {confirmedParticipants.map(invitation => (
+                <View key={invitation.userId} style={styles.participantItem}>
+                  {invitation.profilePictureUrl ? (
+                    <Image 
+                      source={{ uri: invitation.profilePictureUrl }} 
+                      style={styles.participantAvatar}
+                    />
+                  ) : (
+                    <View style={styles.participantAvatarPlaceholder}>
+                      <Text style={styles.participantInitials}>
+                        {(invitation.nickName ?? invitation.userName).charAt(0).toUpperCase()}
+                      </Text>
+                    </View>
+                  )}
+                  <View style={styles.participantInfo}>
+                    <Text style={styles.participantName}>
+                      {invitation.nickName ?? invitation.userName}
+                      {invitation.userId === user?.uid && ' (Você)'}
+                    </Text>
+                    <Text style={styles.participantEmail}>{invitation.userEmail}</Text>
+                  </View>
+                </View>
+              ))}
+            </Animated.View>
+
+            {/* Pendentes */}
+            <TouchableOpacity 
+              style={styles.groupHeader}
+              onPress={() => animateGroup(expandedGroup === 'pending' ? null : 'pending')}
+            >
+              <View style={styles.groupHeaderContent}>
+                <Ionicons name="help-circle" size={20} color="#FFC107" />
+                <Text style={[styles.groupTitle, { color: '#FFC107' }]}>
+                  Pendentes ({pendingCount})
+                </Text>
+              </View>
+              <Ionicons 
+                name={expandedGroup === 'pending' ? "chevron-up" : "chevron-down"} 
+                size={20} 
+                color="#FFC107" 
+              />
+            </TouchableOpacity>
+            <Animated.View style={[
+              styles.participantsGroup,
+              {
+                maxHeight: pendingHeight.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, 1000]
+                }),
+                opacity: pendingHeight
+              }
+            ]}>
+              {pendingParticipants.map(invitation => (
+                <View key={invitation.userId} style={styles.participantItem}>
+                  {invitation.profilePictureUrl ? (
+                    <Image 
+                      source={{ uri: invitation.profilePictureUrl }} 
+                      style={styles.participantAvatar}
+                    />
+                  ) : (
+                    <View style={styles.participantAvatarPlaceholder}>
+                      <Text style={styles.participantInitials}>
+                        {(invitation.nickName ?? invitation.userName).charAt(0).toUpperCase()}
+                      </Text>
+                    </View>
+                  )}
+                  <View style={styles.participantInfo}>
+                    <Text style={styles.participantName}>
+                      {invitation.nickName ?? invitation.userName}
+                      {invitation.userId === user?.uid && ' (Você)'}
+                    </Text>
+                    <Text style={styles.participantEmail}>{invitation.userEmail}</Text>
+                  </View>
+                </View>
+              ))}
+            </Animated.View>
+
+            {/* Recusados */}
+            <TouchableOpacity 
+              style={styles.groupHeader}
+              onPress={() => animateGroup(expandedGroup === 'declined' ? null : 'declined')}
+            >
+              <View style={styles.groupHeaderContent}>
+                <Ionicons name="close-circle" size={20} color="#FF6347" />
+                <Text style={[styles.groupTitle, { color: '#FF6347' }]}>
+                  Recusados ({declinedCount})
+                </Text>
+              </View>
+              <Ionicons 
+                name={expandedGroup === 'declined' ? "chevron-up" : "chevron-down"} 
+                size={20} 
+                color="#FF6347" 
+              />
+            </TouchableOpacity>
+            <Animated.View style={[
+              styles.participantsGroup,
+              {
+                maxHeight: declinedHeight.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, 1000]
+                }),
+                opacity: declinedHeight
+              }
+            ]}>
+              {declinedParticipants.map(invitation => (
+                <View key={invitation.userId} style={styles.participantItem}>
+                  {invitation.profilePictureUrl ? (
+                    <Image 
+                      source={{ uri: invitation.profilePictureUrl }} 
+                      style={styles.participantAvatar}
+                    />
+                  ) : (
+                    <View style={styles.participantAvatarPlaceholder}>
+                      <Text style={styles.participantInitials}>
+                        {(invitation.nickName ?? invitation.userName).charAt(0).toUpperCase()}
+                      </Text>
+                    </View>
+                  )}
+                  <View style={styles.participantInfo}>
+                    <Text style={styles.participantName}>
+                      {invitation.nickName ?? invitation.userName}
+                      {invitation.userId === user?.uid && ' (Você)'}
+                    </Text>
+                    <Text style={styles.participantEmail}>{invitation.userEmail}</Text>
+                  </View>
+                </View>
+              ))}
+            </Animated.View>
+
+            {/* Estado vazio */}
+            {(!event.invitations || event.invitations.length === 0) && (
+              <View style={styles.emptyParticipantsContainer}>
+                <Ionicons name="people" size={40} color="#666" />
+                <Text style={styles.emptyParticipantsText}>
+                  Nenhum participante convidado ainda
+                </Text>
+              </View>
+            )}
           </View>
           
           {/* Ações do usuário */}
-          {!eventHasPassed && userInvitation && (
+          {!eventHasPassed && userInvitation && userInvitation.status === 'CONFIRMED' && (
             <View style={styles.userActionsContainer}>
               <Text style={styles.userActionsTitle}>Sua participação</Text>
               
-              <View style={styles.userStatusContainer}>
-                <Text style={styles.userStatusLabel}>Status atual:</Text>
-                <View style={[
-                  styles.userStatusBadge,
-                  userInvitation.status === 'CONFIRMED' ? styles.confirmedBadge :
-                  userInvitation.status === 'INVITED' ? styles.invitedBadge :
-                  styles.declinedBadge
-                ]}>
-                  <Text style={[
-                    styles.userStatusText,
-                    userInvitation.status === 'CONFIRMED' ? styles.confirmedText :
-                    userInvitation.status === 'INVITED' ? styles.invitedText :
-                    styles.declinedText
-                  ]}>
-                    {userInvitation.status === 'CONFIRMED' ? 'Confirmado' :
-                     userInvitation.status === 'INVITED' ? 'Convidado' : 'Recusado'}
-                  </Text>
-                </View>
-              </View>
-              
-              <View style={styles.actionButtonsContainer}>
-                {userInvitation.status !== 'CONFIRMED' && (
-                  <TouchableOpacity 
-                    style={[styles.participationButton, styles.confirmButton]}
-                    onPress={() => handleUpdateStatus('CONFIRMED')}
-                    disabled={refreshing}
-                  >
-                    {refreshing ? (
-                      <ActivityIndicator size="small" color="#fff" />
-                    ) : (
-                      <>
-                        <Ionicons name="checkmark" size={20} color="#fff" style={styles.buttonIcon} />
-                        <Text style={styles.confirmButtonText}>Confirmar presença</Text>
-                      </>
-                    )}
-                  </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.participationButton, styles.declineButton]}
+                onPress={() => handleUpdateStatus('DECLINED')}
+                disabled={refreshing}
+              >
+                {refreshing ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <>
+                    <Ionicons name="close" size={20} color="#fff" style={styles.buttonIcon} />
+                    <Text style={styles.declineButtonText}>Recusar participação</Text>
+                  </>
                 )}
-                
-                {userInvitation.status !== 'DECLINED' && (
-                  <TouchableOpacity 
-                    style={[styles.participationButton, styles.declineButton]}
-                    onPress={() => handleUpdateStatus('DECLINED')}
-                    disabled={refreshing}
-                  >
-                    {refreshing ? (
-                      <ActivityIndicator size="small" color="#fff" />
-                    ) : (
-                      <>
-                        <Ionicons name="close" size={20} color="#fff" style={styles.buttonIcon} />
-                        <Text style={styles.declineButtonText}>Recusar convite</Text>
-                      </>
-                    )}
-                  </TouchableOpacity>
-                )}
-              </View>
+              </TouchableOpacity>
             </View>
           )}
           
@@ -587,14 +779,6 @@ const EventDetailsScreen: React.FC = () => {
               <Text style={styles.creatorActionsTitle}>Ações do organizador</Text>
               
               <View style={styles.creatorButtonsContainer}>
-                <TouchableOpacity 
-                  style={styles.creatorButton}
-                  onPress={() => router.push(`/(panel)/events/invitations/${event.id}`)}
-                >
-                  <Ionicons name="people" size={20} color="#7B68EE" style={styles.buttonIcon} />
-                  <Text style={styles.creatorButtonText}>Gerenciar convidados</Text>
-                </TouchableOpacity>
-                
                 <TouchableOpacity 
                   style={[styles.creatorButton, styles.deleteButton]}
                   onPress={handleDeleteEvent}
@@ -721,7 +905,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   headerActionButton: {
-    padding: 8,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(123, 104, 238, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(123, 104, 238, 0.3)',
+    marginLeft: 8,
   },
   scrollView: {
     flex: 1,
@@ -740,8 +932,15 @@ const styles = StyleSheet.create({
   headerActions: {
     flexDirection: 'row',
   },
-  actionButton: {
-    padding: 8,
+  headerActionIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(123, 104, 238, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(123, 104, 238, 0.3)',
     marginLeft: 8,
   },
   eventContainer: {
@@ -835,45 +1034,84 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 24,
   },
-  statsContainer: {
+  participantsSection: {
+    marginTop: 24,
+    padding: 16,
+    backgroundColor: '#444',
+    borderRadius: 12,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 16,
+  },
+  groupHeader: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    marginVertical: 20,
-    paddingVertical: 16,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: '#444',
-  },
-  statItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  statIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
+    padding: 12,
+    backgroundColor: '#333',
+    borderRadius: 8,
     marginBottom: 8,
   },
-  confirmedIconContainer: {
-    backgroundColor: 'rgba(76, 175, 80, 0.2)',
+  groupHeaderContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  invitedIconContainer: {
-    backgroundColor: 'rgba(255, 193, 7, 0.2)',
+  participantsGroup: {
+    overflow: 'hidden',
+    marginBottom: 8,
   },
-  declinedIconContainer: {
-    backgroundColor: 'rgba(255, 99, 71, 0.2)',
+  participantItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 8,
+    backgroundColor: '#333',
+    borderRadius: 8,
+    marginBottom: 8,
   },
-  statCount: {
-    color: '#fff',
-    fontSize: 20,
+  participantAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginRight: 12,
+  },
+  participantAvatarPlaceholder: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#7B68EE20',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  participantInitials: {
+    color: '#7B68EE',
+    fontSize: 16,
     fontWeight: 'bold',
-    marginBottom: 4,
   },
-  statLabel: {
+  participantInfo: {
+    flex: 1,
+  },
+  participantName: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#fff',
+  },
+  participantEmail: {
+    fontSize: 14,
     color: '#aaa',
-    fontSize: 12,
+  },
+  emptyParticipantsContainer: {
+    alignItems: 'center',
+    padding: 24,
+  },
+  emptyParticipantsText: {
+    fontSize: 16,
+    color: '#666',
+    marginTop: 12,
+    textAlign: 'center',
   },
   userActionsContainer: {
     marginTop: 16,
@@ -898,9 +1136,12 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   userStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
+    gap: 4,
   },
   confirmedBadge: {
     backgroundColor: 'rgba(76, 175, 80, 0.2)',
@@ -936,20 +1177,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 12,
   },
-  confirmButton: {
-    backgroundColor: '#4CAF50',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#4CAF50',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.3,
-        shadowRadius: 3,
-      },
-      android: {
-        elevation: 4,
-      },
-    }),
-  },
   declineButton: {
     backgroundColor: '#FF6347',
     ...Platform.select({
@@ -966,11 +1193,6 @@ const styles = StyleSheet.create({
   },
   buttonIcon: {
     marginRight: 8,
-  },
-  confirmButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 16,
   },
   declineButtonText: {
     color: '#fff',
@@ -1043,6 +1265,75 @@ const styles = StyleSheet.create({
   },
   cancelButtonText: {
     color: '#aaa',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  groupTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  participantsSummary: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+    gap: 8,
+  },
+  summaryItem: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+    borderRadius: 8,
+  },
+  summaryCount: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginHorizontal: 4,
+  },
+  summaryLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  statusContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 16,
+  },
+  userAssignmentBanner: {
+    // ... existing code ...
+  },
+  quickActionsContainer: {
+    marginTop: 24,
+    padding: 16,
+    backgroundColor: '#444',
+    borderRadius: 12,
+  },
+  quickActionsTitle: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 16,
+  },
+  quickActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginBottom: 12,
+    backgroundColor: 'rgba(123, 104, 238, 0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(123, 104, 238, 0.3)',
+  },
+  quickActionIcon: {
+    marginRight: 8,
+  },
+  quickActionText: {
+    color: '#7B68EE',
     fontWeight: 'bold',
     fontSize: 16,
   },

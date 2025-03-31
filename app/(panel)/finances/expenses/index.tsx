@@ -82,7 +82,7 @@ const ExpensesScreen = ({ hideHeader = false }) => {
     if (loadingExpenses) {
       return (
         <View style={styles.emptyContainer}>
-          <ActivityIndicator size="large" color="#7B68EE" />
+          <ActivityIndicator size="large" color="#FF6347" />
           <Text style={styles.loadingText}>Carregando despesas...</Text>
         </View>
       );
@@ -108,7 +108,7 @@ const ExpensesScreen = ({ hideHeader = false }) => {
         <MaterialCommunityIcons 
           name="cash-remove" 
           size={64} 
-          color="#7B68EE" 
+          color="#FF6347" 
           style={{ opacity: 0.6 }} 
         />
         <Text style={styles.emptyText}>
@@ -270,7 +270,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   createButton: {
-    backgroundColor: '#7B68EE',
+    backgroundColor: '#FF6347',
     paddingVertical: 12,
     paddingHorizontal: 24,
     borderRadius: 8,

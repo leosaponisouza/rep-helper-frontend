@@ -250,15 +250,22 @@ const InvitationsScreen: React.FC = () => {
         ]}
         onPress={() => toggleMemberSelection(item.uid)}
         disabled={actionLoading}
+        activeOpacity={0.7}
       >
         <View style={eventsStyles.memberInfoContainer}>
           {item.profilePictureUrl ? (
             <Image 
               source={{ uri: item.profilePictureUrl }} 
-              style={eventsStyles.memberAvatar}
+              style={[
+                eventsStyles.memberAvatar,
+                isSelected && styles.selectedMemberAvatar
+              ]}
             />
           ) : (
-            <View style={eventsStyles.memberAvatarPlaceholder}>
+            <View style={[
+              eventsStyles.memberAvatarPlaceholder,
+              isSelected && styles.selectedMemberAvatar
+            ]}>
               <Text style={eventsStyles.memberInitials}>
                 {displayName.charAt(0).toUpperCase()}
               </Text>
@@ -266,7 +273,10 @@ const InvitationsScreen: React.FC = () => {
           )}
           
           <View style={eventsStyles.memberTextInfo}>
-            <Text style={eventsStyles.memberName}>
+            <Text style={[
+              eventsStyles.memberName,
+              isSelected && styles.selectedMemberText
+            ]}>
               {displayName}
               {item.uid === user?.uid ? ' (Você)' : ''}
             </Text>
@@ -354,7 +364,7 @@ const InvitationsScreen: React.FC = () => {
       return (
         <View style={sharedStyles.emptyContainer}>
           <ActivityIndicator size="large" color={colors.primary.main} />
-          <Text style={sharedStyles.loadingText}>Carregando...</Text>
+          <Text style={sharedStyles.loadingText}>Carregando membros...</Text>
         </View>
       );
     }
@@ -362,12 +372,12 @@ const InvitationsScreen: React.FC = () => {
     if (tab === 'invited' && invitedMembers.length === 0) {
       return (
         <View style={sharedStyles.emptyContainer}>
-          <Ionicons name="people" size={50} color={colors.primary.main} style={{ opacity: 0.5 }} />
-          <Text style={sharedStyles.emptyText}>
+          <Ionicons name="people" size={56} color={colors.primary.main} style={{ opacity: 0.6 }} />
+          <Text style={[sharedStyles.emptyText, { marginTop: 16 }]}>
             Nenhum membro convidado para este evento
           </Text>
           <TouchableOpacity 
-            style={[sharedStyles.button, { marginTop: 16 }]}
+            style={[sharedStyles.button, { marginTop: 24 }]}
             onPress={() => setTab('new')}
           >
             <Ionicons name="person-add" size={20} color={colors.text.primary} style={sharedStyles.buttonIcon} />
@@ -380,16 +390,44 @@ const InvitationsScreen: React.FC = () => {
     if (tab === 'new' && notInvitedMembers.length === 0) {
       return (
         <View style={sharedStyles.emptyContainer}>
-          <Ionicons name="checkmark-circle" size={50} color={colors.primary.main} style={{ opacity: 0.5 }} />
-          <Text style={sharedStyles.emptyText}>
-            Todos os membros já foram convidados
+          <Ionicons name="checkmark-circle" size={56} color="#4CAF50" style={{ opacity: 0.6 }} />
+          <Text style={[sharedStyles.emptyText, { marginTop: 16 }]}>
+            Todos os membros já foram convidados!
           </Text>
+          <Text style={{ color: '#aaa', fontSize: 14, textAlign: 'center', marginTop: 8 }}>
+            Você pode gerenciar os convites existentes na aba "Convidados".
+          </Text>
+          <TouchableOpacity 
+            style={[sharedStyles.button, { marginTop: 24 }]}
+            onPress={() => setTab('invited')}
+          >
+            <Ionicons name="people" size={20} color={colors.text.primary} style={sharedStyles.buttonIcon} />
+            <Text style={sharedStyles.buttonText}>Ver Convidados</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+    
+    if (searchQuery && filteredMembers.length === 0) {
+      return (
+        <View style={sharedStyles.emptyContainer}>
+          <Ionicons name="search" size={56} color={colors.primary.main} style={{ opacity: 0.6 }} />
+          <Text style={[sharedStyles.emptyText, { marginTop: 16 }]}>
+            Nenhum membro encontrado com "{searchQuery}"
+          </Text>
+          <TouchableOpacity 
+            style={[sharedStyles.button, { marginTop: 24 }]}
+            onPress={() => setSearchQuery('')}
+          >
+            <Ionicons name="close-circle" size={20} color={colors.text.primary} style={sharedStyles.buttonIcon} />
+            <Text style={sharedStyles.buttonText}>Limpar Busca</Text>
+          </TouchableOpacity>
         </View>
       );
     }
     
     return null;
-  }, [loading, tab, invitedMembers.length, notInvitedMembers.length]);
+  }, [loading, tab, invitedMembers.length, notInvitedMembers.length, searchQuery, filteredMembers.length]);
   
   if (loading && !event) {
     return (
@@ -408,7 +446,7 @@ const InvitationsScreen: React.FC = () => {
       <StatusBar barStyle="light-content" backgroundColor={colors.background.primary} />
       
       <View style={sharedStyles.container}>
-        {/* Apenas um header, semelhante ao que aparece na imagem */}
+        {/* Cabeçalho */}
         <View style={styles.header}>
           <TouchableOpacity 
             onPress={() => router.back()}
@@ -455,7 +493,7 @@ const InvitationsScreen: React.FC = () => {
             <Ionicons name="search" size={20} color={colors.primary.main} style={{ marginRight: 10 }} />
             <TextInput
               style={sharedStyles.searchInput}
-              placeholder="Buscar membro"
+              placeholder="Buscar membro por nome ou email"
               placeholderTextColor={colors.text.tertiary}
               value={searchQuery}
               onChangeText={setSearchQuery}
@@ -471,6 +509,27 @@ const InvitationsScreen: React.FC = () => {
               </TouchableOpacity>
             )}
           </View>
+          
+          {/* Contador de seleção (apenas na aba de convidar) */}
+          {tab === 'new' && notInvitedMembers.length > 0 && (
+            <View style={styles.selectionCountContainer}>
+              <Text style={styles.selectionCountText}>
+                {selectedMembersIds.filter(id => 
+                  !event?.invitations.some(inv => inv.userId === id)
+                ).length} membros selecionados
+              </Text>
+              {selectedMembersIds.filter(id => 
+                !event?.invitations.some(inv => inv.userId === id)
+              ).length > 0 && (
+                <TouchableOpacity
+                  style={styles.clearSelectionButton}
+                  onPress={() => setSelectedMembersIds([])}
+                >
+                  <Text style={styles.clearSelectionText}>Limpar seleção</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
         </Animated.View>
         
         {/* Lista de membros */}
@@ -488,7 +547,7 @@ const InvitationsScreen: React.FC = () => {
               data={notInvitedMembers}
               renderItem={renderNewMemberItem}
               keyExtractor={(item) => item.uid}
-              contentContainerStyle={{ padding: 16, paddingTop: 0, paddingBottom: 80 }}
+              contentContainerStyle={{ padding: 16, paddingTop: 0, paddingBottom: 150 }}
               ListEmptyComponent={renderEmptyState}
             />
             
@@ -496,10 +555,10 @@ const InvitationsScreen: React.FC = () => {
               <View style={styles.bottomButtonContainer}>
                 <TouchableOpacity 
                   style={[
-                    sharedStyles.button,
+                    styles.inviteButton,
                     (actionLoading || selectedMembersIds.filter(id => 
                       !event?.invitations.some(inv => inv.userId === id)
-                    ).length === 0) && sharedStyles.buttonDisabled
+                    ).length === 0) && styles.inviteButtonDisabled
                   ]}
                   onPress={handleInviteMembers}
                   disabled={actionLoading || selectedMembersIds.filter(id => 
@@ -507,11 +566,17 @@ const InvitationsScreen: React.FC = () => {
                   ).length === 0}
                 >
                   {actionLoading ? (
-                    <ActivityIndicator size="small" color={colors.text.primary} />
+                    <ActivityIndicator size="small" color="#fff" />
                   ) : (
                     <>
-                      <Ionicons name="mail" size={20} color={colors.text.primary} style={sharedStyles.buttonIcon} />
-                      <Text style={sharedStyles.buttonText}>Convidar Selecionados</Text>
+                      <Ionicons name="mail" size={22} color="#fff" style={{ marginRight: 10 }} />
+                      <Text style={styles.inviteButtonText}>
+                        Convidar {selectedMembersIds.filter(id => 
+                          !event?.invitations.some(inv => inv.userId === id)
+                        ).length} {selectedMembersIds.filter(id => 
+                          !event?.invitations.some(inv => inv.userId === id)
+                        ).length === 1 ? 'Membro' : 'Membros'}
+                      </Text>
                     </>
                   )}
                 </TouchableOpacity>
@@ -570,10 +635,75 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     padding: 16,
-    backgroundColor: colors.background.primary,
+    paddingBottom: 30,
+    backgroundColor: 'rgba(34, 34, 34, 0.95)',
     borderTopWidth: 1,
-    borderTopColor: colors.background.tertiary,
-  }
+    borderTopColor: '#444',
+    elevation: 10,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: -4,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    zIndex: 1000
+  },
+  selectionCountContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 8,
+    marginBottom: 4,
+    paddingHorizontal: 4,
+  },
+  selectionCountText: {
+    color: colors.text.secondary,
+    fontSize: 14,
+  },
+  clearSelectionButton: {
+    padding: 4,
+  },
+  clearSelectionText: {
+    color: colors.primary.main,
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  selectedMemberAvatar: {
+    borderWidth: 2,
+    borderColor: colors.primary.main,
+  },
+  selectedMemberText: {
+    color: colors.primary.main,
+    fontWeight: 'bold',
+  },
+  inviteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#7B68EE',
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    shadowColor: '#7B68EE',
+    shadowOffset: {
+      width: 0,
+      height: 3,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 6,
+  },
+  inviteButtonDisabled: {
+    backgroundColor: 'rgba(123, 104, 238, 0.5)',
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  inviteButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
 });
 
 export default InvitationsScreen;

@@ -19,6 +19,7 @@ export interface TaskFilterRequest {
   // Filtros de usuário
   assignedUserId?: string;
   unassigned?: boolean;
+  createdBy?: string; // ID do usuário que criou a tarefa
   
   // Filtros de texto
   searchTerm?: string; // Busca no título e descrição

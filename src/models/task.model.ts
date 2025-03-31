@@ -17,6 +17,7 @@ export interface Task {
   updated_at?: string;
   assignedUsers?: User[];  // UIDs dos usuários atribuídos
   completed_at?: string;
+  createdBy?: User;  // Usuário que criou a tarefa
   // Campos para recorrência
   recurring?: boolean;
   recurrenceType?: RecurrenceType;

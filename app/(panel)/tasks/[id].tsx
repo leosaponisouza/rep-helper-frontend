@@ -54,6 +54,11 @@ const TaskDetailsScreen: React.FC = () => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isStoppingRecurrence, setIsStoppingRecurrence] = useState(false);
 
+  // Verificar permissões
+  const isCreator = task?.createdBy?.uid === user?.uid;
+  const isAssigned = task?.assignedUsers?.some(u => u.uid === user?.uid);
+  const canChangeStatus = isCreator || isAssigned;
+
   // Animações
   const fadeAnim = useState(new Animated.Value(0))[0];
   const scaleAnim = useState(new Animated.Value(0.95))[0];
@@ -165,77 +170,32 @@ const TaskDetailsScreen: React.FC = () => {
       createdAt: task.createdAt,
       updatedAt: task.updated_at,
       republicId: task.republic_id,
+      createdBy: task.createdBy,
     };
   }, [task]);
 
   // Handler para alternar status da tarefa
   const handleToggleStatus = async () => {
-    if (!task || isStatusChanging) return;
+    if (!task || !canChangeStatus) {
+      Alert.alert(
+        'Acesso Negado',
+        'Apenas o criador da tarefa ou os usuários responsáveis podem alterar seu status.'
+      );
+      return;
+    }
 
     try {
       setIsStatusChanging(true);
-
-      // Determinamos o novo status com base no status atual
-      let newStatus: "PENDING" | "IN_PROGRESS" | "COMPLETED" | "OVERDUE" | "CANCELLED";
-
-      if (task.status === 'COMPLETED') {
-        newStatus = 'PENDING';
-      } else if (task.status === 'PENDING') {
-        newStatus = 'IN_PROGRESS';
-      } else if (task.status === 'IN_PROGRESS') {
-        newStatus = 'COMPLETED';
-      } else {
-        newStatus = task.status; // Mantém o status atual se for um dos outros tipos
+      if (task.status === 'IN_PROGRESS') {
+        await completeTask(task.id);
+      } else if (task.status === 'PENDING' || task.status === 'OVERDUE') {
+        await updateTask(task.id, { status: 'IN_PROGRESS' });
       }
-
-      const completedDate = new Date();
-      const newCompletedAt = newStatus === 'COMPLETED' ? formatToBackendDateTime(completedDate) : null;
-
-      // Atualiza o estado local imediatamente
-      setTask(prev => {
-        if (!prev) return null;
-        return {
-          ...prev,
-          status: newStatus,
-          completedAt: newCompletedAt
-        };
-      });
-
-      // Requisição ao backend
-      if (task.status === 'COMPLETED') {
-        await updateTask(task.id, { ...task, status: 'PENDING' });
-      } else if (task.status === 'PENDING') {
-        await updateTask(task.id, { ...task, status: 'IN_PROGRESS' });
-      } else if (task.status === 'IN_PROGRESS') {
-        // Se a tarefa for recorrente, alertar o usuário sobre isso
-        if (task.recurring) {
-          const result = await completeTask(task.id);
-          
-          // Se o backend retornou a próxima instância, mostre uma mensagem informativa
-          if (result && result.nextRecurringTaskId) {
-            setTimeout(() => {
-              Alert.alert(
-                "Tarefa Recorrente",
-                "Esta tarefa foi concluída com sucesso e uma nova instância foi criada automaticamente.",
-                [{ text: "OK" }]
-              );
-            }, 500);
-          }
-        } else {
-          await completeTask(task.id);
-        }
-      }
+      await loadTaskDetails();
     } catch (error) {
-      // Se falhar, reverte a mudança
+      console.error('Error toggling task status:', error);
       ErrorHandler.handle(error);
-      setTask(prev => {
-        if (!prev) return null;
-        return {
-          ...prev,
-          status: task.status,
-          completedAt: task.completed_at
-        };
-      });
+      Alert.alert('Erro', 'Não foi possível alterar o status da tarefa');
     } finally {
       setIsStatusChanging(false);
     }
@@ -243,19 +203,22 @@ const TaskDetailsScreen: React.FC = () => {
 
   // Handler para cancelar tarefa
   const handleCancelTask = async () => {
-    if (!task || isCancelling) return;
+    if (!task || !canChangeStatus) {
+      Alert.alert(
+        'Acesso Negado',
+        'Apenas o criador da tarefa ou os usuários responsáveis podem cancelá-la.'
+      );
+      return;
+    }
 
     try {
       setIsCancelling(true);
-
-      // Atualização otimista
-      setTask(prev => prev ? { ...prev, status: 'CANCELLED' } : null);
-
-      // Requisição ao backend
       await cancelTask(task.id);
+      await loadTaskDetails();
     } catch (error) {
+      console.error('Error cancelling task:', error);
       ErrorHandler.handle(error);
-      setTask(prev => prev ? { ...prev, status: task.status } : null);
+      Alert.alert('Erro', 'Não foi possível cancelar a tarefa');
     } finally {
       setIsCancelling(false);
     }
@@ -263,57 +226,23 @@ const TaskDetailsScreen: React.FC = () => {
 
   // Handler para parar recorrência
   const handleStopRecurrence = async () => {
-    if (!task || !task.recurring || isStoppingRecurrence) return;
+    if (!task || !canChangeStatus) {
+      Alert.alert(
+        'Acesso Negado',
+        'Apenas o criador da tarefa ou os usuários responsáveis podem parar a recorrência.'
+      );
+      return;
+    }
 
     try {
       setIsStoppingRecurrence(true);
-
-      // Confirmar com o usuário
-      Alert.alert(
-        "Interromper Recorrência",
-        "Deseja interromper a recorrência desta tarefa? As próximas instâncias não serão mais criadas automaticamente.",
-        [
-          { text: "Cancelar", style: "cancel", onPress: () => setIsStoppingRecurrence(false) },
-          { 
-            text: "Interromper", 
-            style: "destructive",
-            onPress: async () => {
-              try {
-                // Atualização otimista
-                setTask(prev => {
-                  if (!prev) return null;
-                  return {
-                    ...prev,
-                    recurring: false
-                  };
-                });
-                
-                // Requisição ao backend
-                await stopRecurrence(task.id);
-                
-                Alert.alert(
-                  "Recorrência Interrompida",
-                  "A tarefa não será mais recriada automaticamente após a conclusão."
-                );
-              } catch (error) {
-                ErrorHandler.handle(error);
-                // Reverter atualização otimista
-                setTask(prev => {
-                  if (!prev) return null;
-                  return {
-                    ...prev,
-                    recurring: true
-                  };
-                });
-              } finally {
-                setIsStoppingRecurrence(false);
-              }
-            }
-          }
-        ]
-      );
+      await stopRecurrence(task.id);
+      await loadTaskDetails();
     } catch (error) {
+      console.error('Error stopping task recurrence:', error);
       ErrorHandler.handle(error);
+      Alert.alert('Erro', 'Não foi possível parar a recorrência da tarefa');
+    } finally {
       setIsStoppingRecurrence(false);
     }
   };
@@ -325,43 +254,23 @@ const TaskDetailsScreen: React.FC = () => {
 
   // Handler para excluir tarefa
   const handleDeleteTask = async () => {
-    if (!task || isDeleting) return;
-
-    if (!showConfirmDelete) {
-      setShowConfirmDelete(true);
+    if (!task || !isCreator) {
+      Alert.alert(
+        'Acesso Negado',
+        'Apenas o criador da tarefa pode excluí-la.'
+      );
       return;
     }
 
     try {
       setIsDeleting(true);
-
-      // Animação de saída
-      Animated.parallel([
-        Animated.timing(fadeAnim, {
-          toValue: 0,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-        Animated.timing(scaleAnim, {
-          toValue: 0.95,
-          duration: 200,
-          useNativeDriver: true,
-        })
-      ]).start(async () => {
-        await deleteTask(task.id);
-
-        Alert.alert(
-          'Sucesso',
-          'Tarefa excluída com sucesso!',
-          [{
-            text: 'OK',
-            onPress: () => router.back()
-          }]
-        );
-      });
+      await deleteTask(task.id);
+      router.back();
     } catch (error) {
+      console.error('Error deleting task:', error);
       ErrorHandler.handle(error);
-      setShowConfirmDelete(false);
+      Alert.alert('Erro', 'Não foi possível excluir a tarefa');
+    } finally {
       setIsDeleting(false);
     }
   };
@@ -632,7 +541,7 @@ const TaskDetailsScreen: React.FC = () => {
 
           <View style={styles.headerActions}>
             <TouchableOpacity
-              style={styles.actionButton}
+              style={styles.headerActionIcon}
               onPress={handleShareTask}
             >
               <Ionicons name="share-outline" size={24} color="#7B68EE" />
@@ -640,7 +549,7 @@ const TaskDetailsScreen: React.FC = () => {
 
             {canModifyTask && (
               <TouchableOpacity
-                style={styles.actionButton}
+                style={styles.headerActionIcon}
                 onPress={() => router.push(`/(panel)/tasks/edit?id=${task.id}`)}
               >
                 <Ionicons name="create-outline" size={24} color="#7B68EE" />
@@ -808,7 +717,7 @@ const TaskDetailsScreen: React.FC = () => {
                     isStatusChanging && styles.actionButtonDisabled
                   ]}
                   onPress={handleToggleStatus}
-                  disabled={isStatusChanging}
+                  disabled={!canChangeStatus || isStatusChanging}
                 >
                   {isStatusChanging ? (
                     <ActivityIndicator size="small" color="#fff" />
@@ -829,7 +738,7 @@ const TaskDetailsScreen: React.FC = () => {
                     isStatusChanging && styles.actionButtonDisabled
                   ]}
                   onPress={handleToggleStatus}
-                  disabled={isStatusChanging}
+                  disabled={!canChangeStatus || isStatusChanging}
                 >
                   {isStatusChanging ? (
                     <ActivityIndicator size="small" color="#fff" />
@@ -863,7 +772,7 @@ const TaskDetailsScreen: React.FC = () => {
                     ]
                   );
                 }}
-                disabled={isCancelling}
+                disabled={!canChangeStatus || isCancelling}
               >
                 {isCancelling ? (
                   <ActivityIndicator size="small" color="#fff" />
@@ -871,30 +780,6 @@ const TaskDetailsScreen: React.FC = () => {
                   <>
                     <Ionicons name="close-circle" size={18} color="#fff" />
                     <Text style={styles.secondaryButtonText}>Cancelar</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {/* Botão para reabrir tarefas concluídas */}
-          {adaptedTask.status === 'COMPLETED' && !adaptedTask.recurring && canModifyTask && (
-            <View style={styles.actionButtonsContainer}>
-              <TouchableOpacity
-                style={[
-                  styles.actionButton,
-                  styles.secondaryButton,
-                  isStatusChanging && styles.actionButtonDisabled
-                ]}
-                onPress={handleToggleStatus}
-                disabled={isStatusChanging}
-              >
-                {isStatusChanging ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <>
-                    <Ionicons name="refresh-circle" size={18} color="#fff" />
-                    <Text style={styles.secondaryButtonText}>Reabrir Tarefa</Text>
                   </>
                 )}
               </TouchableOpacity>
@@ -923,6 +808,18 @@ const TaskDetailsScreen: React.FC = () => {
                 <Text style={styles.detailLabel}>Data de Criação</Text>
                 <Text style={styles.detailValue}>
                   {formatDateWithTime(adaptedTask.createdAt)}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.detailRow}>
+              <View style={styles.detailIcon}>
+                <Ionicons name="person-outline" size={20} color="#7B68EE" />
+              </View>
+              <View style={styles.detailContent}>
+                <Text style={styles.detailLabel}>Criado por</Text>
+                <Text style={styles.detailValue}>
+                  {adaptedTask.createdBy?.nickname || adaptedTask.createdBy?.name || 'Desconhecido'}
                 </Text>
               </View>
             </View>
@@ -1420,7 +1317,7 @@ const styles = StyleSheet.create({
     width: 12,
   },
   actionButtonDisabled: {
-    opacity: 0.7,
+    opacity: 0.5,
   },
   primaryButtonText: {
     color: '#fff',
@@ -1659,6 +1556,37 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 4.65,
     elevation: 8,
+  },
+  infoContainer: {
+    marginTop: 20,
+    padding: 16,
+    backgroundColor: '#444',
+    borderRadius: 12,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  infoLabel: {
+    color: '#aaa',
+    fontSize: 14,
+    marginRight: 8,
+  },
+  infoValue: {
+    color: '#fff',
+    fontSize: 16,
+  },
+  headerActionIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(123, 104, 238, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(123, 104, 238, 0.3)',
+    marginLeft: 8,
   },
 });
 

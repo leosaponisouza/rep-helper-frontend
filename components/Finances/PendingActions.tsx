@@ -5,7 +5,6 @@ import {
   Text, 
   StyleSheet, 
   TouchableOpacity, 
-  FlatList,
   Image,
   ActivityIndicator,
   Alert
@@ -25,6 +24,7 @@ interface PendingActionsProps {
   onPressViewAll: () => void;
   onApprove?: (id: number) => Promise<void>;
   onReject?: (id: number) => Promise<void>;
+  maxItems?: number;
 }
 
 const PendingActionItem: React.FC<{ 
@@ -125,13 +125,19 @@ const PendingActions: React.FC<PendingActionsProps> = ({
   onPressAction,
   onPressViewAll,
   onApprove,
-  onReject
+  onReject,
+  maxItems = 3 // Limitando a 3 itens por padrão
 }) => {
   // Make sure actions is always an array
   const safeActions = Array.isArray(actions) ? actions : [];
   
-  // Filter to include only PENDING status items
-  const pendingActions = safeActions.filter(action => action.status === 'PENDING');
+  // Filter to include only PENDING status items and limit number of items
+  const pendingActions = safeActions
+    .filter(action => action.status === 'PENDING')
+    .slice(0, maxItems);
+
+  // Log for debugging
+  console.log(`Rendering ${pendingActions.length} pending actions (from ${safeActions.length} total)`);
 
   if (loading) {
     return (
@@ -174,6 +180,9 @@ const PendingActions: React.FC<PendingActionsProps> = ({
     return null;
   }
 
+  // Calculate total pending actions not shown in this view
+  const remainingCount = safeActions.filter(action => action.status === 'PENDING').length - pendingActions.length;
+
   return (
     <View style={styles.container}>
       <View style={styles.headerRow}>
@@ -188,21 +197,29 @@ const PendingActions: React.FC<PendingActionsProps> = ({
         </TouchableOpacity>
       </View>
       
-      <FlatList
-        data={pendingActions}
-        keyExtractor={(item) => `pending-${item.id}`}
-        renderItem={({ item }) => (
+      <View style={styles.actionsList}>
+        {pendingActions.map(item => (
           <PendingActionItem 
+            key={`pending-${item.id}`}
             item={item} 
             onPress={onPressAction}
             onApprove={onApprove}
             onReject={onReject}
           />
+        ))}
+        
+        {remainingCount > 0 && (
+          <TouchableOpacity 
+            style={styles.viewMoreButton}
+            onPress={onPressViewAll}
+          >
+            <Text style={styles.viewMoreText}>
+              Ver mais {remainingCount} ações pendentes
+            </Text>
+            <Ionicons name="chevron-down" size={16} color="#7B68EE" />
+          </TouchableOpacity>
         )}
-        style={styles.actionsList}
-        contentContainerStyle={styles.actionsListContent}
-        showsVerticalScrollIndicator={false}
-      />
+      </View>
     </View>
   );
 };
@@ -277,10 +294,10 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   actionsList: {
-    maxHeight: 300,
+    // Removendo a propriedade maxHeight, pois não estamos mais usando FlatList
   },
   actionsListContent: {
-    paddingBottom: 8,
+    // Isso pode ser removido, pois não estamos mais usando FlatList
   },
   pendingItemWrapper: {
     marginBottom: 12,
@@ -310,7 +327,20 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: 'bold',
     marginLeft: 4,
-  }
+  },
+  viewMoreButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#444',
+  },
+  viewMoreText: {
+    color: '#7B68EE',
+    fontSize: 14,
+    marginRight: 4,
+  },
 });
 
 export default PendingActions;
