@@ -1,7 +1,7 @@
 import Constants from 'expo-constants';
 
 // Determine the current environment
-const ENV = Constants.manifest?.extra?.environment?.[
+const ENV = Constants.expoConfig?.extra?.environment?.[
   process.env.APP_ENV || 'development'
 ] || {};
 

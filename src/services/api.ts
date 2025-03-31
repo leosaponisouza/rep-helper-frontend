@@ -9,12 +9,6 @@ import { Platform } from 'react-native';
 const extra = Constants.expoConfig?.extra || {};
 let API_BASE_URL = extra.apiBaseUrl || process.env.EXPO_PUBLIC_API_BASE_URL ;
 
-// Garantir que a URL base NÃO termina com /api/v1
-if (API_BASE_URL.endsWith('/api/v1')) {
-  API_BASE_URL = API_BASE_URL.substring(0, API_BASE_URL.length - 7);
-} else if (API_BASE_URL.endsWith('/api/v1/')) {
-  API_BASE_URL = API_BASE_URL.substring(0, API_BASE_URL.length - 8);
-}
 
 // Log para debug - será removido depois
 console.log('API_BASE_URL configurada como:', API_BASE_URL);
