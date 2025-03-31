@@ -51,15 +51,15 @@ module.exports = {
   // Aqui definimos as variáveis de ambiente usando os valores do env.js
   extra: {
     // Firebase config
-    firebaseApiKey: env.FIREBASE_API_KEY,
-    firebaseAuthDomain: env.FIREBASE_AUTH_DOMAIN,
-    firebaseProjectId: env.FIREBASE_PROJECT_ID,
-    firebaseStorageBucket: env.FIREBASE_STORAGE_BUCKET,
-    firebaseMessagingSenderId: env.FIREBASE_MESSAGING_SENDER_ID,
-    firebaseAppId: env.FIREBASE_APP_ID,
+    firebaseApiKey: env.EXPO_PUBLIC_FIREBASE_API_KEY,
+    firebaseAuthDomain: env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
+    firebaseProjectId: env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
+    firebaseStorageBucket: env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,
+    firebaseMessagingSenderId: env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+    firebaseAppId: env.EXPO_PUBLIC_FIREBASE_APP_ID,
     
     // API config
-    apiBaseUrl: env.API_BASE_URL,
+    apiBaseUrl: env.EXPO_PUBLIC_API_BASE_URL,
     
     // Supabase config
     supabaseUrl: env.EXPO_PUBLIC_SUPABASE_URL,

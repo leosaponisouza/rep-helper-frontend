@@ -7,8 +7,7 @@ import { Platform } from 'react-native';
 
 // Obter a URL base da API do Expo Constants
 const extra = Constants.expoConfig?.extra || {};
-let API_BASE_URL = extra.apiBaseUrl || process.env.EXPO_PUBLIC_API_BASE_URL ;
-
+const API_BASE_URL = extra.apiBaseUrl || process.env.EXPO_PUBLIC_API_BASE_URL;
 
 // Log para debug - será removido depois
 console.log('API_BASE_URL configurada como:', API_BASE_URL);
