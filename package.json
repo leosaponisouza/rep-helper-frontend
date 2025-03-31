@@ -11,8 +11,16 @@
     "test": "jest --watchAll",
     "prebuild:dev": "cross-env EXPO_PUBLIC_ENV=development eas build --profile development --platform android",
     "prebuild:ios:dev": "cross-env EXPO_PUBLIC_ENV=development eas build --profile development --platform ios",
+    "build:apk": "cross-env EXPO_PUBLIC_ENV=production eas build --profile apk --platform android",
+    "build:aab": "cross-env EXPO_PUBLIC_ENV=production eas build --profile aab --platform android",
+    "build:apk:local": "cross-env EXPO_PUBLIC_ENV=production eas build --profile apk --platform android --local",
+    "build:apk:cloud": "cross-env EXPO_PUBLIC_ENV=production eas build --profile apk --platform android",
+    "build:apk:gradle": "cd android && .\\gradlew assembleRelease && cd ..",
+    "build:apk:expo": "cross-env EXPO_PUBLIC_ENV=production npx expo run:android --variant release",
+    "build:apk:windows": "npx expo prebuild -p android --clean && cd android && .\\gradlew assembleRelease --no-daemon --max-workers 2 && cd ..",
     "clean:start": "npx expo-doctor && npx expo start --clear",
-    "clean:full": "npx expo-doctor && npm cache clean --force && rmdir /s /q node_modules\\.cache && npx expo start --clear"
+    "clean:full": "npx expo-doctor && npm cache clean --force && rmdir /s /q node_modules\\.cache && npx expo start --clear",
+    "clean:build": "cd android && .\\gradlew clean && cd .."
   },
   "jest": {
     "preset": "jest-expo"
@@ -86,7 +94,9 @@
   "expo": {
     "doctor": {
       "reactNativeDirectoryCheck": {
-        "exclude": ["react-native-chart-kit"],
+        "exclude": [
+          "react-native-chart-kit"
+        ],
         "listUnknownPackages": false
       }
     }

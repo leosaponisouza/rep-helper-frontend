@@ -1,6 +1,8 @@
 {
   "cli": {
-    "version": ">= 5.9.3"
+    "version": ">= 5.9.3",
+    "requireCommit": false,
+    "appVersionSource": "remote"
   },
   "build": {
     "development": {
@@ -26,7 +28,9 @@
     },
     "apk": {
       "android": {
-        "buildType": "apk"
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleRelease",
+        "image": "ubuntu-18.04-jdk-11-ndk-r19c"
       },
       "channel": "production",
       "env": {
