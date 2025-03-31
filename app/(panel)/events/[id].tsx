@@ -773,6 +773,67 @@ const EventDetailsScreen: React.FC = () => {
             </View>
           )}
           
+          {/* Opção para aceitar convite após recusar */}
+          {!eventHasPassed && userInvitation && userInvitation.status === 'DECLINED' && (
+            <View style={styles.userActionsContainer}>
+              <Text style={styles.userActionsTitle}>Sua participação</Text>
+              
+              <TouchableOpacity 
+                style={[styles.participationButton, styles.confirmButton]}
+                onPress={() => handleUpdateStatus('CONFIRMED')}
+                disabled={refreshing}
+              >
+                {refreshing ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <>
+                    <Ionicons name="checkmark" size={20} color="#fff" style={styles.buttonIcon} />
+                    <Text style={styles.confirmButtonText}>Confirmar participação</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
+          
+          {/* Ações para convidados pendentes */}
+          {!eventHasPassed && userInvitation && userInvitation.status === 'INVITED' && (
+            <View style={styles.userActionsContainer}>
+              <Text style={styles.userActionsTitle}>Sua participação</Text>
+              
+              <TouchableOpacity 
+                style={[styles.participationButton, styles.confirmButton]}
+                onPress={() => handleUpdateStatus('CONFIRMED')}
+                disabled={refreshing}
+                accessibilityLabel="Confirmar participação"
+              >
+                {refreshing ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <>
+                    <Ionicons name="checkmark" size={20} color="#fff" style={styles.buttonIcon} />
+                    <Text style={styles.confirmButtonText}>Confirmar participação</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[styles.participationButton, styles.declineButton]}
+                onPress={() => handleUpdateStatus('DECLINED')}
+                disabled={refreshing}
+                accessibilityLabel="Recusar participação"
+              >
+                {refreshing ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <>
+                    <Ionicons name="close" size={20} color="#fff" style={styles.buttonIcon} />
+                    <Text style={styles.declineButtonText}>Recusar participação</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
+          
           {/* Ações do criador */}
           {isCreator && (
             <View style={styles.creatorActionsContainer}>
@@ -1334,6 +1395,25 @@ const styles = StyleSheet.create({
   },
   quickActionText: {
     color: '#7B68EE',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  confirmButton: {
+    backgroundColor: '#4CAF50',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#4CAF50',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 3,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
+  },
+  confirmButtonText: {
+    color: '#fff',
     fontWeight: 'bold',
     fontSize: 16,
   },

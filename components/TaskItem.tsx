@@ -98,7 +98,8 @@ const TaskItem = memo(({
               style={[
                 styles.checkbox,
                 isCompleted && styles.checkboxCompleted,
-                !canChangeStatus && styles.checkboxDisabled
+                !canChangeStatus && !isCompleted && styles.checkboxDisabled,
+                !canChangeStatus && isCompleted && styles.checkboxCompletedDisabled
               ]}
               onPress={() => canChangeStatus && onToggleStatus(item)}
               disabled={!canChangeStatus}
@@ -411,6 +412,9 @@ const styles = StyleSheet.create({
     borderColor: '#4CAF50',
   },
   checkboxDisabled: {
+    opacity: 0.5,
+  },
+  checkboxCompletedDisabled: {
     opacity: 0.5,
     backgroundColor: '#4CAF50',
     borderColor: '#4CAF50',
