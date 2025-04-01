@@ -14,7 +14,8 @@ import {
   Dimensions,
   Platform,
   Animated,
-  Share
+  Share,
+  Modal
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
@@ -23,7 +24,10 @@ import { Event } from '../../../src/services/events';
 import { useAuth } from '../../../src/context/AuthContext';
 import { format, parseISO, isToday, isTomorrow, isPast, isAfter, differenceInMinutes } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { LinearGradient } from 'expo-linear-gradient';
+import { useCalendarSync } from '../../../src/hooks/useCalendarSync';
+import { CalendarPicker } from '../../../components/CalendarPicker';
+import { SyncCalendarButton } from '../../../components/SyncCalendarButton';
+
 
 const { width } = Dimensions.get('window');
 
@@ -33,6 +37,13 @@ const EventDetailsScreen: React.FC = () => {
   const { id, source } = useLocalSearchParams<{ id: string, source?: string }>();
   const { user } = useAuth();
   const { getEventById, updateInvitationStatus, deleteEvent } = useEvents();
+  const { 
+    syncing, 
+    syncEventWithCalendar, 
+    isCalendarPickerVisible,
+    setIsCalendarPickerVisible,
+    selectCalendar 
+  } = useCalendarSync();
   
   // Estados
   const [event, setEvent] = useState<Event | null>(null);
@@ -522,8 +533,24 @@ const EventDetailsScreen: React.FC = () => {
             )}
           </View>
           
-          {/* Título */}
-          <Text style={styles.eventTitle}>{event.title}</Text>
+          {/* Título e botão de sincronização */}
+          <View style={styles.titleRow}>
+            <Text style={styles.eventTitle}>{event.title}</Text>
+            <TouchableOpacity 
+              style={styles.syncButton}
+              onPress={() => setIsCalendarPickerVisible(true)}
+              disabled={syncing}
+            >
+              {syncing ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <>
+                  <Ionicons name="calendar-outline" size={16} color="#fff" style={styles.syncButtonIcon} />
+                  <Text style={styles.syncButtonText}>Sincronizar</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
           
           {/* Data e hora */}
           <View style={styles.eventInfoRow}>
@@ -875,7 +902,60 @@ const EventDetailsScreen: React.FC = () => {
           )}
         </Animated.View>
       </Animated.ScrollView>
+      
+      {/* Calendar Picker Modal */}
+      <CalendarPicker
+        isVisible={isCalendarPickerVisible}
+        onClose={() => setIsCalendarPickerVisible(false)}
+        onSelect={(calendarId, calendarSource) => {
+          selectCalendar(calendarId, calendarSource);
+          if (event) {
+            syncEventWithCalendar(event);
+          }
+        }}
+      />
     </SafeAreaView>
+  );
+};
+
+// Componente para o ícone de calendário/exportação
+const ExportCalendarButton = ({ event }: { event: Event }) => {
+  const { 
+    syncEventWithCalendar, 
+    isLoading, 
+    isCalendarPickerVisible, 
+    setIsCalendarPickerVisible,
+    selectCalendar 
+  } = useCalendarSync();
+
+  const handleSync = async () => {
+    await syncEventWithCalendar(event);
+  };
+
+  return (
+    <>
+      <TouchableOpacity
+        onPress={handleSync}
+        disabled={isLoading}
+        style={styles.exportButton}
+        activeOpacity={0.8}
+      >
+        {isLoading ? (
+          <ActivityIndicator size="small" color="#fff" />
+        ) : (
+          <>
+            <Ionicons name="calendar" size={18} color="#fff" style={styles.exportIcon} />
+            <Text style={styles.exportText}>Exportar para Calendário</Text>
+          </>
+        )}
+      </TouchableOpacity>
+
+      <CalendarPicker
+        isVisible={isCalendarPickerVisible}
+        onClose={() => setIsCalendarPickerVisible(false)}
+        onSelect={selectCalendar}
+      />
+    </>
   );
 };
 
@@ -1416,6 +1496,57 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: 'bold',
     fontSize: 16,
+  },
+  exportButton: {
+    position: 'absolute',
+    bottom: 20,
+    right: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#7B68EE',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 30,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+  exportIcon: {
+    marginRight: 8,
+  },
+  exportText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  syncButton: {
+    backgroundColor: '#7B68EE',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    marginLeft: 10,
+  },
+  syncButtonIcon: {
+    marginRight: 4,
+  },
+  syncButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  titleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  contentSyncButton: {
+    marginLeft: 10,
   },
 });
 

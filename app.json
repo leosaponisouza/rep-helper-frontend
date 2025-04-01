@@ -1,0 +1,36 @@
+{
+  "expo": {
+    "name": "Rep Helper",
+    "slug": "rep-helper",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#222222"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.anonymous.rephelper"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#222222"
+      },
+      "package": "com.anonymous.rephelper"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "scheme": "rephelper",
+    "plugins": [
+      "expo-router"
+    ]
+  }
+} 

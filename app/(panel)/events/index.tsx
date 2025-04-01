@@ -23,12 +23,16 @@ import { LinearGradient } from 'expo-linear-gradient';
 // Importar componentes
 import CalendarSkeleton from '@/components/Event/CalendarSkeleton';
 import Calendar from '@/components/Event/Calendar';
+import { SyncCalendarButton } from '@/components/SyncCalendarButton';
+import { useCalendarSync } from '@/src/hooks/useCalendarSync';
+import { CalendarPicker } from '@/components/CalendarPicker';
 
 // Tela principal de eventos (otimizada)
 const EventsScreen: React.FC = () => {
   const router = useRouter();
   const { user } = useAuth();
   const { events, loading, refreshEvents } = useEvents();
+  const { setIsCalendarPickerVisible, isCalendarPickerVisible, selectCalendar, syncConfirmedEvents } = useCalendarSync();
   
   // Estados
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
@@ -234,7 +238,12 @@ const EventsScreen: React.FC = () => {
       return preparedEvent;
     });
   }, [eventsData]);
-  
+
+  // Função para abrir o seletor de calendário
+  const handleOpenCalendarPicker = useCallback(() => {
+    setIsCalendarPickerVisible(true);
+  }, [setIsCalendarPickerVisible]);
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#222" />
@@ -242,30 +251,59 @@ const EventsScreen: React.FC = () => {
       {/* Header com título e botão de adicionar */}
       <View style={styles.headerContainer}>
         <View style={styles.headerContent}>
-          <View>
+          <View style={styles.titleContainer}>
             <Text style={styles.headerTitle}>Agenda</Text>
             {lastUpdateText && (
               <Text style={styles.lastUpdateText}>{lastUpdateText}</Text>
             )}
           </View>
-          <TouchableOpacity 
-            style={styles.addButtonContainer} 
-            onPress={handleAddEvent}
-            activeOpacity={0.9}
-          >
+          
+          <View style={styles.actionsContainer}>
             <LinearGradient
               colors={['#9370DB', '#7B68EE', '#6A5ACD']}
-              style={styles.addButton}
+              style={styles.syncButtonContainer}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
             >
-              <Ionicons name="add" size={22} color="white" style={styles.buttonIcon} />
-              <Text style={styles.buttonText}>Novo</Text>
+              <TouchableOpacity 
+                onPress={handleOpenCalendarPicker}
+                activeOpacity={0.9}
+                style={styles.syncButtonContent}
+              >
+                <Ionicons name="calendar" size={22} color="white" style={styles.buttonIcon} />
+                <Text style={styles.buttonText}>Sincronizar</Text>
+              </TouchableOpacity>
             </LinearGradient>
-          </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={styles.addButtonContainer} 
+              onPress={handleAddEvent}
+              activeOpacity={0.9}
+            >
+              <LinearGradient
+                colors={['#9370DB', '#7B68EE', '#6A5ACD']}
+                style={styles.addButton}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+              >
+                <Ionicons name="add" size={22} color="white" style={styles.buttonIcon} />
+                <Text style={styles.buttonText}>Novo</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
       
+      {/* Componente CalendarPicker que será usado pelo botão de sincronização */}
+      <CalendarPicker
+        isVisible={isCalendarPickerVisible}
+        onClose={() => setIsCalendarPickerVisible(false)}
+        onSelect={(calendarId: string, calendarSource?: string) => {
+          selectCalendar(calendarId, calendarSource);
+          syncConfirmedEvents();
+        }}
+      />
+
       {calendarLoading ? (
         <CalendarSkeleton />
       ) : (
@@ -312,6 +350,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 12,
+  },
+  titleContainer: {
+    flex: 1,
   },
   headerTitle: {
     fontSize: 28,
@@ -323,15 +365,34 @@ const styles = StyleSheet.create({
     color: '#aaa',
     marginTop: 2,
   },
-  calendarContainer: {
-    flex: 1,
-    backgroundColor: '#222',
+  actionsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
-  calendarSection: {
-    flex: 1,
-    backgroundColor: '#333',
-    borderTopWidth: 1,
-    borderTopColor: '#444',
+  syncButtonContainer: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    height: 40,
+    width: 120,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#7B68EE',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.4,
+        shadowRadius: 10,
+      },
+      android: {
+        elevation: 10,
+      },
+    }),
+  },
+  syncButtonContent: {
+    width: '100%',
+    height: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   addButtonContainer: {
     borderRadius: 12,
@@ -349,8 +410,8 @@ const styles = StyleSheet.create({
     }),
   },
   addButton: {
-    width: 100,
     height: 40,
+    paddingHorizontal: 20,
     borderRadius: 12,
     flexDirection: 'row',
     justifyContent: 'center',
@@ -363,6 +424,16 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: '600',
     fontSize: 16,
+  },
+  calendarContainer: {
+    flex: 1,
+    backgroundColor: '#222',
+  },
+  calendarSection: {
+    flex: 1,
+    backgroundColor: '#333',
+    borderTopWidth: 1,
+    borderTopColor: '#444',
   },
 });
 

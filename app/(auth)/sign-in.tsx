@@ -25,6 +25,9 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { loginSchema, LoginFormData } from '../../src/validation/authSchemas';
 import { clearAuthData } from '../../src/utils/storage';
 import api from '../../src/services/api';
+import * as WebBrowser from 'expo-web-browser';
+import * as Google from 'expo-auth-session/providers/google';
+import { Auth, GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
 
 const LoginScreen = () => {
     const [showPassword, setShowPassword] = useState(false);
@@ -34,11 +37,12 @@ const LoginScreen = () => {
     const [loadingMessage, setLoadingMessage] = useState('Autenticando...');
     const [localLoading, setLocalLoading] = useState(false);
     const [localError, setLocalError] = useState<string | null>(null);
+    const [googleLoading, setGoogleLoading] = useState(false);
     
     // Referência para controlar o cancelamento do login
     const cancelLoginRef = useRef(false);
 
-    const { loginWithCredentials, loading, error, clearError } = useAuth();
+    const { loginWithCredentials, loading, error, clearError, loginWithFirebaseToken } = useAuth();
     const router = useRouter();
     
     // Configuração do React Hook Form com Zod
@@ -48,6 +52,13 @@ const LoginScreen = () => {
             email: '',
             password: ''
         }
+    });
+
+    // Configuração do Google Auth para funcionar em Expo Go e builds nativas
+    const [request, response, promptAsync] = Google.useAuthRequest({
+        androidClientId: process.env.EXPO_PUBLIC_ANDROID_CLIENT_ID,
+        iosClientId: process.env.EXPO_PUBLIC_IOS_CLIENT_ID,
+        webClientId: process.env.EXPO_PUBLIC_WEB_CLIENT_ID,
     });
 
     // Sincronizar os estados de loading e erro do AuthContext com os locais
@@ -68,6 +79,28 @@ const LoginScreen = () => {
             cancelLoginRef.current = false;
         };
     }, [loading]);
+
+    // Efeito para lidar com a resposta do Google
+    useEffect(() => {
+        if (response?.type === 'success') {
+            // Tentar acessar os tokens de forma segura
+            const accessToken = response.authentication?.accessToken;
+            const idToken = response.authentication?.idToken;
+            
+            // Usar idToken quando disponível (fluxo web/Expo Go)
+            if (idToken) {
+                handleGoogleIdTokenLogin(idToken);
+            } 
+            // Fallback para accessToken (fluxos nativos)
+            else if (accessToken) {
+                handleGoogleAccessTokenLogin(accessToken);
+            } 
+            // Nenhum token disponível
+            else {
+                setLocalError('Falha ao obter token do Google');
+            }
+        }
+    }, [response]);
 
     const handleLogin = async (data: LoginFormData) => {
         Keyboard.dismiss();
@@ -135,6 +168,68 @@ const LoginScreen = () => {
     const handleFieldFocus = () => {
         clearError();
         setLocalError(null);
+    };
+
+    // Função para lidar com o login do Google usando ID Token (usado pelo Expo Go)
+    const handleGoogleIdTokenLogin = async (idToken: string) => {
+        try {
+            setGoogleLoading(true);
+            setLocalError(null);
+
+            // Obter credencial do Google usando o ID token
+            const credential = GoogleAuthProvider.credential(idToken);
+            
+            // Fazer login no Firebase
+            const userCredential = await signInWithCredential(auth as Auth, credential);
+            const firebaseToken = await userCredential.user.getIdToken();
+
+            // Fazer login na API
+            await loginWithFirebaseToken(firebaseToken);
+        } catch (error) {
+            console.error('Erro no login com Google (ID Token):', error);
+            const parsedError = await ErrorHandler.parseError(error);
+            setLocalError(parsedError.message);
+            ErrorHandler.logError(parsedError);
+        } finally {
+            setGoogleLoading(false);
+        }
+    };
+
+    // Função para lidar com o login do Google usando Access Token (fallback)
+    const handleGoogleAccessTokenLogin = async (accessToken: string) => {
+        try {
+            setGoogleLoading(true);
+            setLocalError(null);
+
+            // Obter credencial do Google usando o access token
+            const credential = GoogleAuthProvider.credential(null, accessToken);
+            
+            // Fazer login no Firebase
+            const userCredential = await signInWithCredential(auth as Auth, credential);
+            const firebaseToken = await userCredential.user.getIdToken();
+
+            // Fazer login na API
+            await loginWithFirebaseToken(firebaseToken);
+        } catch (error) {
+            console.error('Erro no login com Google (Access Token):', error);
+            const parsedError = await ErrorHandler.parseError(error);
+            setLocalError(parsedError.message);
+            ErrorHandler.logError(parsedError);
+        } finally {
+            setGoogleLoading(false);
+        }
+    };
+
+    // Função para iniciar o login com Google
+    const handleGoogleSignIn = async () => {
+        try {
+            setGoogleLoading(true);
+            await promptAsync();
+        } catch (error) {
+            setLocalError('Erro ao iniciar login com Google');
+        } finally {
+            setGoogleLoading(false);
+        }
     };
 
     return (
@@ -269,6 +364,22 @@ const LoginScreen = () => {
                                     </View>
                                 ) : (
                                     <Text style={styles.buttonText}>Entrar</Text>
+                                )}
+                            </TouchableOpacity>
+
+                            {/* Botão de Login com Google */}
+                            <TouchableOpacity
+                                style={[styles.googleButton, googleLoading && styles.buttonDisabled]}
+                                onPress={handleGoogleSignIn}
+                                disabled={googleLoading}
+                            >
+                                {googleLoading ? (
+                                    <ActivityIndicator size="small" color="#fff" />
+                                ) : (
+                                    <>
+                                        <MaterialCommunityIcons name="google" size={24} color="#fff" />
+                                        <Text style={styles.googleButtonText}>Entrar com Google</Text>
+                                    </>
                                 )}
                             </TouchableOpacity>
 
@@ -456,6 +567,29 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: 'bold',
         marginLeft: 10,
+    },
+    googleButton: {
+        backgroundColor: '#DB4437',
+        height: 56,
+        borderRadius: 12,
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginVertical: 16,
+        shadowColor: "#DB4437",
+        shadowOffset: {
+            width: 0,
+            height: 4,
+        },
+        shadowOpacity: 0.3,
+        shadowRadius: 4.65,
+        elevation: 8,
+    },
+    googleButtonText: {
+        color: '#fff',
+        fontSize: 18,
+        fontWeight: 'bold',
+        marginLeft: 12,
     },
 });
 
