@@ -24,7 +24,6 @@ import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Event, EventInvitation } from '@/src/services/events/eventsTypes';
 import { colors, createShadow } from '@/src/styles/sharedStyles';
-import { LinearGradient } from 'expo-linear-gradient';
 
 interface EventItemProps {
   event: any;
@@ -199,16 +198,14 @@ const EventItem: React.FC<EventItemProps> = ({ event, onPress, currentUserId }) 
 
   return (
     <TouchableOpacity 
-      style={styles.container}
+      style={[
+        styles.container,
+        { borderLeftWidth: 4, borderLeftColor: statusInfo.color }
+      ]}
       activeOpacity={0.7}
       onPress={onPress}
     >
-      <LinearGradient
-        colors={['#2A2A2A', '#333']}
-        style={styles.gradient}
-        start={{x: 0, y: 0}}
-        end={{x: 1, y: 0}}
-      >
+      <View style={styles.cardContent}>
         <View style={styles.mainContent}>
           <View style={styles.leftContent}>
             <View style={[
@@ -296,9 +293,9 @@ const EventItem: React.FC<EventItemProps> = ({ event, onPress, currentUserId }) 
         </View>
         
         <View style={styles.footer}>
-          <View style={styles.timeContainer}>
-            <Ionicons name="time-outline" size={14} color="#aaa" />
-            <Text style={styles.timeText}>
+          <View style={styles.footerItem}>
+            <Ionicons name="time-outline" size={14} color="#ADB5BD" />
+            <Text style={styles.footerText}>
               {formatEventTime(event.startDate)} - {formatEventTime(event.endDate)}
             </Text>
           </View>
@@ -353,7 +350,7 @@ const EventItem: React.FC<EventItemProps> = ({ event, onPress, currentUserId }) 
             </View>
           )}
         </View>
-      </LinearGradient>
+      </View>
     </TouchableOpacity>
   );
 };
@@ -361,28 +358,29 @@ const EventItem: React.FC<EventItemProps> = ({ event, onPress, currentUserId }) 
 const styles = StyleSheet.create({
   container: {
     width: '100%',
-    borderRadius: 20,
+    backgroundColor: '#2A2A2A',
+    borderRadius: 12,
     overflow: 'hidden',
-    marginBottom: 16,
+    marginBottom: 12,
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
+        shadowColor: 'rgba(0,0,0,0.3)',
+        shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.3,
-        shadowRadius: 8,
+        shadowRadius: 4,
       },
       android: {
-        elevation: 6,
+        elevation: 3,
       },
     }),
   },
-  gradient: {
+  cardContent: {
     padding: 16,
-    minHeight: 150,
   },
   mainContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'flex-start',
   },
   leftContent: {
     flex: 1,
@@ -398,13 +396,13 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#fff',
+    fontWeight: '600',
+    color: '#FFFFFF',
     marginBottom: 4,
   },
   description: {
     fontSize: 13,
-    color: '#aaa',
+    color: '#CED4DA',
     lineHeight: 18,
   },
   statusBadge: {
@@ -459,12 +457,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.1)',
+    flexWrap: 'wrap',
+    marginTop: 16,
+    gap: 8,
   },
-  timeContainer: {
+  footerItem: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
@@ -472,9 +469,9 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 12,
   },
-  timeText: {
+  footerText: {
     fontSize: 12,
-    color: '#bbb',
+    color: '#ADB5BD',
     marginLeft: 4,
     fontWeight: '500',
   },
@@ -482,7 +479,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: 'rgba(120, 120, 120, 0.1)',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     paddingVertical: 4,
     paddingHorizontal: 8,
     borderRadius: 12,
@@ -506,7 +503,7 @@ const styles = StyleSheet.create({
   participantsText: {
     fontSize: 12,
     fontWeight: '500',
-    color: '#bbb',
+    color: '#ADB5BD',
   },
   activeStatusText: {
     color: '#fff',
@@ -519,30 +516,19 @@ const styles = StyleSheet.create({
     marginRight: 4,
   },
   emptyText: {
-    color: '#666',
+    color: '#6C757D',
     fontStyle: 'italic',
   },
   iconContainer: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 22,
+    height: 22,
+    borderRadius: 4,
     borderWidth: 2,
     backgroundColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
     marginTop: 2,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.2,
-        shadowRadius: 4,
-      },
-      android: {
-        elevation: 3,
-      },
-    }),
   },
 });
 

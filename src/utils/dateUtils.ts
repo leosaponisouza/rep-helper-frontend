@@ -1,5 +1,5 @@
 // src/utils/dateUtils.ts
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, formatDistance } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 /**
@@ -39,6 +39,20 @@ export const formatLocalDate = (
 ): string => {
   const dateObj = typeof date === 'string' ? parseISO(date) : date;
   return format(dateObj, formatString, { locale: ptBR });
+};
+
+/**
+ * Retorna um texto de tempo relativo (ex: "há 5 minutos", "há 2 horas")
+ * 
+ * @param date Data para calcular o tempo relativo até agora
+ * @returns String formatada com o tempo relativo
+ */
+export const getRelativeTime = (date: Date | string): string => {
+  const dateObj = typeof date === 'string' ? parseISO(date) : date;
+  return formatDistance(dateObj, new Date(), { 
+    addSuffix: true,
+    locale: ptBR 
+  });
 };
 
 /**

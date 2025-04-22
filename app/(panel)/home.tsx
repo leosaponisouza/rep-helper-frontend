@@ -77,7 +77,7 @@ const SimpleEventCard = ({
           {formatTime(eventDate)}
         </Text>
       </View>
-      <Ionicons name="chevron-forward" size={20} color={colors.text.tertiary} />
+      <Ionicons name="chevron-forward" size={20} color="#ADB5BD" />
     </TouchableOpacity>
   );
 };
@@ -90,38 +90,12 @@ const HomeScreen = () => {
   // Estado local para armazenar a URL da imagem de perfil
   const [profileImageUrl, setProfileImageUrl] = useState<string | null>(user?.profilePictureUrl || null);
   
-  // Estado para armazenar o nome da república
-  const [republicName, setRepublicName] = useState<string>('Sua República');
-  const [loadingRepublic, setLoadingRepublic] = useState<boolean>(false);
-
   // Atualiza a URL da imagem de perfil quando o usuário ou sua URL muda
   useEffect(() => {
     if (user?.profilePictureUrl) {
       setProfileImageUrl(user.profilePictureUrl);
     }
   }, [user, user?.profilePictureUrl]);
-  
-  // Buscar dados da república
-  const fetchRepublicData = useCallback(async () => {
-    if (!user?.currentRepublicId) return;
-
-    try {
-      setLoadingRepublic(true);
-      const response = await api.get(`/api/v1/republics/${user.currentRepublicId}`);
-      if (response.data && response.data.name) {
-        setRepublicName(response.data.name);
-      }
-    } catch (error) {
-      console.error('Erro ao buscar dados da república:', error);
-    } finally {
-      setLoadingRepublic(false);
-    }
-  }, [user?.currentRepublicId]);
-  
-  // Buscar dados da república quando o componente for montado ou o ID da república mudar
-  useEffect(() => {
-    fetchRepublicData();
-  }, [fetchRepublicData]);
   
   // Usar o hook useHome para centralizar a lógica
   const { 
@@ -158,15 +132,8 @@ const HomeScreen = () => {
   // Calcula a altura do header baseado no scroll
   const headerHeight = scrollY.interpolate({
     inputRange: [0, 100],
-    outputRange: [Platform.OS === 'ios' ? 150 : 140, Platform.OS === 'ios' ? 100 : 90],
+    outputRange: [Platform.OS === 'ios' ? 120 : 110, Platform.OS === 'ios' ? 100 : 90],
     extrapolate: 'clamp',
-  });
-  
-  // Animar opacidade do conteúdo do cabeçalho
-  const headerContentOpacity = scrollY.interpolate({
-    inputRange: [0, 60, 100],
-    outputRange: [1, 0.5, 0],
-    extrapolate: 'clamp'
   });
   
   // Função para lidar com o pull-to-refresh
@@ -176,9 +143,6 @@ const HomeScreen = () => {
     try {
       // Atualizar os dados da home
       await refreshHomeData();
-      
-      // Buscar dados da república
-      await fetchRepublicData();
       
       // Atualizar dados financeiros
       await fetchDashboardData();
@@ -196,7 +160,7 @@ const HomeScreen = () => {
     } finally {
       setRefreshing(false);
     }
-  }, [refreshHomeData, fetchDashboardData, fetchNotifications, refreshEvents, fetchRepublicData]);
+  }, [refreshHomeData, fetchDashboardData, fetchNotifications, refreshEvents]);
   
   // Função para navegar para os detalhes das tarefas
   const handleTaskPress = useCallback((taskId: number) => {
@@ -295,7 +259,7 @@ const HomeScreen = () => {
             style={styles.notificationButton}
             onPress={toggleNotifications}
           >
-            <Ionicons name="notifications" size={24} color={colors.primary.main} />
+            <Ionicons name="notifications" size={24} color="#7B68EE" />
             {unreadCount > 0 && (
               <View style={styles.notificationBadge}>
                 <Text style={styles.notificationCount}>
@@ -305,24 +269,6 @@ const HomeScreen = () => {
             )}
           </TouchableOpacity>
         </View>
-        
-        {user?.currentRepublicId && (
-          <Animated.View style={[styles.republicInfoContainer, { opacity: headerContentOpacity }]}>
-            {loadingRepublic ? (
-              <ActivityIndicator size="small" color={colors.primary.main} />
-            ) : (
-              <LinearGradient
-                colors={['rgba(123, 104, 238, 0.95)', 'rgba(123, 104, 238, 1)']}
-                style={styles.republicBar}
-                start={{x: 0, y: 0}}
-                end={{x: 1, y: 0}}
-              >
-                <MaterialCommunityIcons name="home-group" size={16} color="#fff" />
-                <Text style={styles.republicName}>{republicName}</Text>
-              </LinearGradient>
-            )}
-          </Animated.View>
-        )}
       </Animated.View>
       
       {/* Conteúdo Principal - ScrollView animada */}
@@ -348,34 +294,34 @@ const HomeScreen = () => {
         {/* Cards de Resumo */}
         <View style={styles.summaryCardsContainer}>
           <TouchableOpacity 
-            style={[styles.summaryCard, styles.primaryCard]}
+            style={[styles.summaryCard, {borderLeftColor: '#7B68EE'}]}
             onPress={() => navigateWithTimeout('/(panel)/tasks')}
+            activeOpacity={0.7}
           >
             <View style={styles.summaryCardContent}>
-              <View style={styles.summaryIconContainer}>
-                <Ionicons name="checkmark-circle-outline" size={28} color="#fff" />
+              <View style={[styles.summaryIconContainer, {backgroundColor: 'rgba(123, 104, 238, 0.1)'}]}>
+                <MaterialCommunityIcons name="checkbox-marked-outline" size={18} color="#7B68EE" />
               </View>
-              <Text style={styles.summaryTitle}>Tarefas</Text>
-              <Text style={styles.summaryValue}>
-                {userTasks?.length || 0}
-              </Text>
-              <Text style={styles.summaryLabel}>pendentes</Text>
+              <View style={styles.summaryTextContainer}>
+                <Text style={styles.summaryCount}>{userTasks?.length || 0}</Text>
+                <Text style={styles.summaryLabel}>Tarefas pendentes</Text>
+              </View>
             </View>
           </TouchableOpacity>
           
           <TouchableOpacity 
-            style={[styles.summaryCard, styles.secondaryCard]}
+            style={[styles.summaryCard, {borderLeftColor: '#4A90E2'}]}
             onPress={() => navigateWithTimeout('/(panel)/events')}
+            activeOpacity={0.7}
           >
             <View style={styles.summaryCardContent}>
-              <View style={styles.summaryIconContainer}>
-                <Ionicons name="calendar-outline" size={28} color="#fff" />
+              <View style={[styles.summaryIconContainer, {backgroundColor: 'rgba(74, 144, 226, 0.1)'}]}>
+                <Ionicons name="calendar" size={18} color="#4A90E2" />
               </View>
-              <Text style={styles.summaryTitle}>Agenda</Text>
-              <Text style={styles.summaryValue}>
-                {filteredEvents.length}
-              </Text>
-              <Text style={styles.summaryLabel}>próximos</Text>
+              <View style={styles.summaryTextContainer}>
+                <Text style={styles.summaryCount}>{filteredEvents.length}</Text>
+                <Text style={styles.summaryLabel}>Próximos eventos</Text>
+              </View>
             </View>
           </TouchableOpacity>
         </View>
@@ -383,7 +329,7 @@ const HomeScreen = () => {
         {/* Resumo Financeiro */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Resumo Financeiro mensal</Text>
+            <Text style={styles.sectionTitle}>Resumo Financeiro</Text>
             <TouchableOpacity onPress={() => navigateWithTimeout('/(panel)/finances')}>
               <Text style={styles.sectionAction}>Ver detalhes</Text>
             </TouchableOpacity>
@@ -396,8 +342,8 @@ const HomeScreen = () => {
                 <Text style={styles.loadingSectionText}>Carregando resumo...</Text>
               </View>
             ) : dashboardSummary ? (
-              <>
-                <View style={styles.balanceRow}>
+              <View style={styles.financeSummaryContent}>
+                <View>
                   <Text style={styles.balanceLabel}>Saldo Atual</Text>
                   <Text style={[
                     styles.balanceValue,
@@ -411,39 +357,28 @@ const HomeScreen = () => {
                 
                 <View style={styles.financeStatsRow}>
                   <View style={styles.financeStatItem}>
-                    <Text style={styles.financeStatValue}>
-                      {formatCurrency(dashboardSummary.totalExpensesCurrentMonth || 0)}
-                    </Text>
-                    <Text style={styles.financeStatLabel}>Despesas</Text>
+                    <View style={styles.financeIconContainerRed}>
+                      <Ionicons name="arrow-up" size={14} color="#fff" />
+                    </View>
+                    <Text style={styles.financeStatText}>Despesas</Text>
                   </View>
-                  
-                  <View style={styles.financeStatItem}>
-                    <Text style={styles.financeStatValue}>
-                      {formatCurrency(dashboardSummary.totalIncomesCurrentMonth || 0)}
-                    </Text>
-                    <Text style={styles.financeStatLabel}>Receitas</Text>
-                  </View>
-                  
-                  <View style={styles.financeStatItem}>
-                    <Text style={styles.financeStatValue}>
-                      {formatCurrency(dashboardSummary.pendingExpensesAmount || 0)}
-                    </Text>
-                    <Text style={styles.financeStatLabel}>Pendentes</Text>
-                  </View>
+                  <Text style={[styles.financeStatValue, styles.expenseValue]}>
+                    {formatCurrency(dashboardSummary.totalExpensesCurrentMonth || 0)}
+                  </Text>
                 </View>
                 
-                {pendingActions && pendingActions.length > 0 && (
-                  <TouchableOpacity
-                    style={styles.pendingActionsButton}
-                    onPress={() => navigateWithTimeout('/(panel)/finances')}
-                  >
-                    <Ionicons name="alert-circle-outline" size={18} color={colors.warning.main} />
-                    <Text style={styles.pendingActionsText}>
-                      {pendingActions.length} ação(ões) pendente(s)
-                    </Text>
-                  </TouchableOpacity>
-                )}
-              </>
+                <View style={[styles.financeStatsRow, {marginTop: 10}]}>
+                  <View style={styles.financeStatItem}>
+                    <View style={styles.financeIconContainerGreen}>
+                      <Ionicons name="arrow-down" size={14} color="#fff" />
+                    </View>
+                    <Text style={styles.financeStatText}>Receitas</Text>
+                  </View>
+                  <Text style={[styles.financeStatValue, styles.incomeValue]}>
+                    {formatCurrency(dashboardSummary.totalIncomesCurrentMonth || 0)}
+                  </Text>
+                </View>
+              </View>
             ) : (
               <View style={styles.emptyState}>
                 <Ionicons name="wallet-outline" size={36} color={colors.primary.light} />
@@ -493,7 +428,7 @@ const HomeScreen = () => {
                   style={styles.createButton}
                   onPress={() => navigateWithTimeout('/(panel)/tasks', '/(panel)/tasks/new')}
                 >
-                  <Text style={styles.createButtonText}>Criar Tarefa</Text>
+                  <Text style={styles.createButtonText}>Nova Tarefa</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -503,7 +438,7 @@ const HomeScreen = () => {
         {/* Seção de Eventos (simplificada) */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Próximos Compromissos</Text>
+            <Text style={styles.sectionTitle}>Agenda</Text>
             <TouchableOpacity onPress={() => navigateWithTimeout('/(panel)/events')}>
               <Text style={styles.sectionAction}>Ver todos</Text>
             </TouchableOpacity>
@@ -516,14 +451,16 @@ const HomeScreen = () => {
                 <Text style={styles.loadingSectionText}>Carregando eventos...</Text>
               </View>
             ) : filteredEvents && filteredEvents.length > 0 ? (
-              filteredEvents.map(event => (
-                <SimpleEventCard
-                  key={`event-${event.id}`}
-                  title={event.title}
-                  date={event.startDate}
-                  onPress={() => navigateWithTimeout('/(panel)/events', `/(panel)/events/${event.id}`)}
-                />
-              ))
+              <>
+                {filteredEvents.map(event => (
+                  <SimpleEventCard
+                    key={`event-${event.id}`}
+                    title={event.title}
+                    date={event.startDate}
+                    onPress={() => navigateWithTimeout('/(panel)/events', `/(panel)/events/${event.id}`)}
+                  />
+                ))}
+              </>
             ) : (
               <View style={styles.emptyState}>
                 <Ionicons name="calendar" size={48} color={colors.primary.light} />
@@ -534,27 +471,12 @@ const HomeScreen = () => {
                   style={styles.createButton}
                   onPress={() => navigateWithTimeout('/(panel)/events', '/(panel)/events/new')}
                 >
-                  <Text style={styles.createButtonText}>Criar Evento</Text>
+                  <Text style={styles.createButtonText}>Novo Evento</Text>
                 </TouchableOpacity>
               </View>
             )}
           </View>
         </View>
-        
-        {/* Dicas e Informações */}
-        <View style={styles.tipsContainer}>
-          <View style={styles.tipHeader}>
-            <Ionicons name="bulb-outline" size={20} color={colors.primary.main} />
-            <Text style={styles.tipTitle}>Dica rápida</Text>
-          </View>
-          <Text style={styles.tipText}>
-            Atribua tarefas para outros moradores utilizando o botão de 
-            "Atribuir usuário" ao criar ou editar uma tarefa.
-          </Text>
-        </View>
-        
-        {/* Espaço extra no final para scroll */}
-        <View style={styles.bottomSpacing} />
       </Animated.ScrollView>
       
       {/* Centro de Notificações */}
@@ -579,16 +501,24 @@ const HomeScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background.primary,
+    backgroundColor: '#222', // Fundo escuro como na imagem
   },
   header: {
-    backgroundColor: colors.background.secondary,
+    backgroundColor: '#2A2A2A',
     paddingTop: Platform.OS === 'ios' ? 50 : StatusBar.currentHeight || 20,
     paddingHorizontal: 20,
     paddingBottom: 0,
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-    ...createShadow(5),
+    ...Platform.select({
+      ios: {
+        shadowColor: 'rgba(0,0,0,0.3)',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
     zIndex: 10,
     overflow: 'hidden',
   },
@@ -604,18 +534,18 @@ const styles = StyleSheet.create({
   },
   greeting: {
     fontSize: 14,
-    color: colors.text.secondary,
+    color: 'rgba(255, 255, 255, 0.7)',
   },
   userName: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: colors.text.primary,
+    color: '#fff',
   },
   notificationButton: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: colors.background.tertiary,
+    backgroundColor: 'rgba(123, 104, 238, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -630,7 +560,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: colors.background.tertiary,
+    borderColor: '#444',
   },
   notificationCount: {
     color: '#fff',
@@ -661,33 +591,6 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: 'bold',
   },
-  republicInfoContainer: {
-    width: '120%',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 0,
-    position: 'absolute',
-    bottom: 0,
-    left: -10,
-    right: -10,
-    zIndex: 20,
-    overflow: 'visible',
-  },
-  republicBar: {
-    height: 34,
-    width: '100%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-  },
-  republicName: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#fff',
-    marginLeft: 6,
-  },
   scrollContent: {
     paddingTop: 20,
     paddingBottom: 100,
@@ -695,61 +598,76 @@ const styles = StyleSheet.create({
   loadingSectionContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 30,
-    backgroundColor: colors.background.secondary,
-    borderRadius: 16,
+    padding: 20,
+    backgroundColor: '#2A2A2A',
+    borderRadius: 12,
+    marginHorizontal: 16,
+    ...Platform.select({
+      ios: {
+        shadowColor: 'rgba(0,0,0,0.3)',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
   },
   loadingSectionText: {
-    color: colors.text.secondary,
+    color: '#CED4DA',
     marginTop: 10,
     fontSize: 14,
   },
   summaryCardsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    flexWrap: 'wrap',
     paddingHorizontal: 16,
     marginBottom: 20,
   },
   summaryCard: {
     width: '48%',
-    minHeight: 140,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 10,
+    backgroundColor: '#2A2A2A',
+    borderRadius: 12,
     overflow: 'hidden',
-    ...createShadow(4),
-  },
-  primaryCard: {
-    backgroundColor: colors.primary.main,
-  },
-  secondaryCard: {
-    backgroundColor: '#4A90E2', // Azul
-  },
-  tertiaryCard: {
-    backgroundColor: '#50C878', // Verde
+    borderLeftWidth: 4,
+    ...Platform.select({
+      ios: {
+        shadowColor: 'rgba(0,0,0,0.3)',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
   },
   summaryCardContent: {
-    flex: 1,
-    justifyContent: 'space-between',
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
   },
   summaryIconContainer: {
-    marginBottom: 8,
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
   },
-  summaryTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 8,
+  summaryTextContainer: {
+    flex: 1,
   },
-  summaryValue: {
-    fontSize: 20,
+  summaryCount: {
+    fontSize: 24,
     fontWeight: 'bold',
-    color: '#fff',
+    color: '#FFFFFF',
+    marginBottom: 2,
   },
   summaryLabel: {
-    fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: 14,
+    color: '#CED4DA',
   },
   section: {
     marginBottom: 24,
@@ -764,7 +682,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: colors.text.primary,
+    color: '#fff',
   },
   sectionAction: {
     fontSize: 14,
@@ -776,24 +694,44 @@ const styles = StyleSheet.create({
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 40,
-    backgroundColor: colors.background.secondary,
-    borderRadius: 16,
+    padding: 30,
+    backgroundColor: '#2A2A2A',
+    borderRadius: 12,
     marginHorizontal: 16,
-    ...createShadow(2),
+    ...Platform.select({
+      ios: {
+        shadowColor: 'rgba(0,0,0,0.3)',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
   },
   emptyStateText: {
-    color: colors.text.secondary,
+    color: '#CED4DA',
     fontSize: 16,
     marginVertical: 16,
     textAlign: 'center',
   },
   createButton: {
-    backgroundColor: colors.primary.main,
+    backgroundColor: '#7B68EE',
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 8,
-    ...createShadow(2),
+    ...Platform.select({
+      ios: {
+        shadowColor: 'rgba(123, 104, 238, 0.3)',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
   },
   createButtonText: {
     color: '#fff',
@@ -803,68 +741,87 @@ const styles = StyleSheet.create({
   
   // Resumo financeiro
   financeSummaryCard: {
-    backgroundColor: colors.background.secondary,
-    borderRadius: 16,
+    backgroundColor: '#2A2A2A',
+    borderRadius: 12,
     marginHorizontal: 16,
-    padding: 16,
-    ...createShadow(2),
+    overflow: 'hidden',
+    borderLeftWidth: 4,
+    borderLeftColor: '#7B68EE',
+    ...Platform.select({
+      ios: {
+        shadowColor: 'rgba(0,0,0,0.3)',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
   },
-  balanceRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
+  financeSummaryContent: {
+    padding: 16,
   },
   balanceLabel: {
-    fontSize: 16,
-    color: colors.text.secondary,
+    fontSize: 14,
+    color: '#CED4DA',
+    marginBottom: 4,
   },
   balanceValue: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: 'bold',
   },
   positiveBalance: {
-    color: colors.success.main,
+    color: '#4CAF50',
   },
   negativeBalance: {
-    color: colors.error.main,
+    color: '#FF6347',
   },
   divider: {
     height: 1,
-    backgroundColor: colors.background.tertiary,
-    marginBottom: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    marginVertical: 16,
   },
   financeStatsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    alignItems: 'center',
   },
   financeStatItem: {
+    flexDirection: 'row',
     alignItems: 'center',
-    flex: 1,
+  },
+  financeIconContainerRed: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#FF6347',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  financeIconContainerGreen: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#4CAF50',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  financeStatText: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.7)',
   },
   financeStatValue: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: colors.text.primary,
-    marginBottom: 4,
   },
-  financeStatLabel: {
-    fontSize: 12,
-    color: colors.text.tertiary,
+  expenseValue: {
+    color: colors.error.main,
   },
-  pendingActionsButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 10,
-    backgroundColor: 'rgba(255, 193, 7, 0.1)',
-    borderRadius: 8,
-  },
-  pendingActionsText: {
-    marginLeft: 8,
-    color: colors.warning.main,
-    fontWeight: '500',
+  incomeValue: {
+    color: colors.success.main,
   },
   
   // Eventos simplificados
@@ -874,29 +831,41 @@ const styles = StyleSheet.create({
   simpleEventCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.background.secondary,
+    backgroundColor: '#2A2A2A',
     borderRadius: 12,
-    padding: 12,
-    marginBottom: 10,
-    ...createShadow(2),
+    padding: 16,
+    marginBottom: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: '#4A90E2',
+    ...Platform.select({
+      ios: {
+        shadowColor: 'rgba(0,0,0,0.3)',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
   },
   eventDateBadge: {
-    width: 50,
-    height: 50,
+    width: 45,
+    height: 45,
     borderRadius: 8,
-    backgroundColor: colors.primary.light,
+    backgroundColor: 'rgba(74, 144, 226, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: 16,
   },
   eventDateText: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: colors.primary.main,
+    color: '#4A90E2',
   },
   eventMonthText: {
     fontSize: 12,
-    color: colors.primary.main,
+    color: '#4A90E2',
     textTransform: 'uppercase',
   },
   eventDetails: {
@@ -904,69 +873,35 @@ const styles = StyleSheet.create({
   },
   eventTitle: {
     fontSize: 16,
-    fontWeight: '500',
-    color: colors.text.primary,
+    fontWeight: '600',
+    color: '#FFFFFF',
     marginBottom: 4,
   },
   eventTime: {
-    fontSize: 12,
-    color: colors.text.tertiary,
-  },
-  createEventButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.primary.light,
-    borderRadius: 12,
-    padding: 14,
-    marginTop: 6,
-  },
-  createEventButtonText: {
-    color: colors.primary.main,
-    fontWeight: '500',
-    marginLeft: 8,
-  },
-  
-  // Dicas
-  tipsContainer: {
-    backgroundColor: colors.primary.light,
-    borderRadius: 12,
-    padding: 16,
-    marginHorizontal: 16,
-    marginVertical: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(123, 104, 238, 0.2)',
-  },
-  tipHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  tipTitle: {
-    color: colors.primary.main,
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginLeft: 8,
-  },
-  tipText: {
-    color: colors.text.secondary,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  bottomSpacing: {
-    height: 40,
+    fontSize: 13,
+    color: '#CED4DA',
   },
   fab: {
     position: 'absolute',
     bottom: 20,
     right: 20,
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: colors.primary.main,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#7B68EE',
     justifyContent: 'center',
     alignItems: 'center',
-    ...createShadow(8, colors.primary.main),
+    ...Platform.select({
+      ios: {
+        shadowColor: 'rgba(123, 104, 238, 0.5)',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.5,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 6,
+      },
+    }),
   },
   tasksList: {
     marginHorizontal: 16,

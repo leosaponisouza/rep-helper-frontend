@@ -11,8 +11,6 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Task } from '../src/models/task.model';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
 interface TaskItemProps {
@@ -59,17 +57,17 @@ const TaskItem = memo(({
   const getStatusInfo = (): StatusInfo => {
     switch (item.status) {
       case 'PENDING':
-        return { text: 'Pendente', color: '#FFC107', icon: 'clock-outline' };
+        return { text: 'Pendente', color: '#FFB74D', icon: 'clock-outline' };
       case 'IN_PROGRESS':
-        return { text: 'Em andamento', color: '#2196F3', icon: 'play-circle' };
+        return { text: 'Em andamento', color: '#64B5F6', icon: 'play-circle' };
       case 'COMPLETED':
-        return { text: 'Concluída', color: '#4CAF50', icon: 'check-circle' };
+        return { text: 'Concluída', color: '#81C784', icon: 'check-circle' };
       case 'OVERDUE':
-        return { text: 'Atrasada', color: '#F44336', icon: 'alert-circle' };
+        return { text: 'Atrasada', color: '#E57373', icon: 'alert-circle' };
       case 'CANCELLED':
-        return { text: 'Cancelada', color: '#9E9E9E', icon: 'close-circle' };
+        return { text: 'Cancelada', color: '#B0BEC5', icon: 'close-circle' };
       default:
-        return { text: 'Desconhecido', color: '#9E9E9E', icon: 'help-circle' };
+        return { text: 'Desconhecido', color: '#B0BEC5', icon: 'help-circle' };
     }
   };
 
@@ -80,24 +78,19 @@ const TaskItem = memo(({
       style={[
         styles.container,
         isCompleted && styles.completedContainer,
-        item.status === 'OVERDUE' && styles.overdueContainer,
-        item.status === 'CANCELLED' && styles.cancelledContainer
+        { borderLeftWidth: 4, borderLeftColor: statusInfo.color },
       ]}
       onPress={() => router.push(`/(panel)/tasks/${item.id}`)}
       activeOpacity={0.7}
     >
-      <LinearGradient
-        colors={['#2A2A2A', '#333']}
-        style={styles.gradient}
-        start={{x: 0, y: 0}}
-        end={{x: 1, y: 0}}
-      >
+      <View style={styles.cardContent}>
         <View style={styles.mainContent}>
           <View style={styles.leftContent}>
             <TouchableOpacity 
               style={[
                 styles.checkbox,
-                isCompleted && styles.checkboxCompleted,
+                { borderColor: statusInfo.color },
+                isCompleted && [styles.checkboxCompleted, { backgroundColor: statusInfo.color, borderColor: statusInfo.color }],
                 !canChangeStatus && !isCompleted && styles.checkboxDisabled,
                 !canChangeStatus && isCompleted && styles.checkboxCompletedDisabled
               ]}
@@ -105,7 +98,7 @@ const TaskItem = memo(({
               disabled={!canChangeStatus}
             >
               {isCompleted ? (
-                <Ionicons name="checkmark" size={20} color="#fff" />
+                <MaterialCommunityIcons name="check" size={16} color="#fff" />
               ) : null}
             </TouchableOpacity>
             <View style={styles.titleSection}>
@@ -134,69 +127,56 @@ const TaskItem = memo(({
             </View>
           </View>
 
-          <View style={styles.rightContent}>
-            <View style={styles.badgesContainer}>
-              <TouchableOpacity 
-                style={[
-                  styles.statusBadge, 
-                  { backgroundColor: `${statusInfo.color}20` },
-                  !canChangeStatus && styles.statusBadgeDisabled
-                ]}
-                onPress={() => canChangeStatus && onToggleStatus(item)}
-                disabled={!canChangeStatus}
-              >
-                <MaterialCommunityIcons 
-                  name={statusInfo.icon as any} 
-                  size={12} 
-                  color={statusInfo.color} 
-                />
-                <Text style={[
-                  styles.statusText, 
-                  { color: statusInfo.color }
-                ]}>
-                  {statusInfo.text}
-                </Text>
-              </TouchableOpacity>
-
-              <View style={[
-                styles.categoryBadge,
-                { backgroundColor: '#7B68EE20' }
+          <View style={styles.badgesContainer}>
+            <View style={[
+              styles.statusBadge, 
+              { backgroundColor: `${statusInfo.color}20` }
+            ]}>
+              <MaterialCommunityIcons 
+                name={statusInfo.icon as any} 
+                size={12} 
+                color={statusInfo.color} 
+              />
+              <Text style={[
+                styles.statusText, 
+                { color: statusInfo.color }
               ]}>
+                {statusInfo.text}
+              </Text>
+            </View>
+
+            {item.category && (
+              <View style={styles.categoryBadge}>
                 <MaterialCommunityIcons 
                   name="tag-outline" 
                   size={12} 
-                  color="#7B68EE" 
+                  color="#ADB5BD" 
                 />
-                <Text style={[styles.categoryText, { color: '#7B68EE' }]}>
-                  {item.category || 'Sem categoria'}
+                <Text style={styles.categoryText}>
+                  {item.category}
                 </Text>
               </View>
+            )}
 
-              {item.recurring && (
-                <View style={styles.recurringBadge}>
-                  <MaterialCommunityIcons name="repeat" size={12} color="#9C27B0" />
-                  <Text style={styles.recurringText}>Recorrente</Text>
-                </View>
-              )}
-            </View>
+            {item.recurring && (
+              <View style={styles.recurringBadge}>
+                <MaterialCommunityIcons name="repeat" size={12} color="#ADB5BD" />
+                <Text style={styles.recurringText}>Recorrente</Text>
+              </View>
+            )}
           </View>
         </View>
 
         <View style={styles.footer}>
           {dueDate ? (
-            <View style={styles.dateContainer}>
-              <MaterialCommunityIcons name="calendar" size={14} color="#aaa" />
-              <Text style={styles.dateText}>Prazo: {dueDate}</Text>
+            <View style={styles.footerItem}>
+              <MaterialCommunityIcons name="calendar" size={14} color="#ADB5BD" />
+              <Text style={styles.footerText}>{dueDate}</Text>
             </View>
-          ) : (
-            <View style={[styles.dateContainer, styles.emptyContainer]}>
-              <MaterialCommunityIcons name="calendar-outline" size={14} color="#666" />
-              <Text style={[styles.dateText, styles.emptyText]}>Sem prazo</Text>
-            </View>
-          )}
+          ) : null}
 
           {assignedUser ? (
-            <View style={styles.userContainer}>
+            <View style={styles.footerItem}>
               {userProfilePic ? (
                 <Image 
                   source={{ uri: userProfilePic }} 
@@ -209,18 +189,13 @@ const TaskItem = memo(({
                   </Text>
                 </View>
               )}
-              <Text style={styles.userName} numberOfLines={1}>
+              <Text style={styles.footerText} numberOfLines={1}>
                 {userName}
               </Text>
             </View>
-          ) : (
-            <View style={[styles.userContainer, styles.emptyContainer]}>
-              <MaterialCommunityIcons name="account-outline" size={14} color="#666" />
-              <Text style={[styles.userName, styles.emptyText]}>Sem responsável</Text>
-            </View>
-          )}
+          ) : null}
         </View>
-      </LinearGradient>
+      </View>
     </TouchableOpacity>
   );
 });
@@ -228,55 +203,51 @@ const TaskItem = memo(({
 const styles = StyleSheet.create({
   container: {
     width: '100%',
-    borderRadius: 20,
+    backgroundColor: '#2A2A2A',
+    borderRadius: 12,
     overflow: 'hidden',
-    marginBottom: 16,
+    marginBottom: 12,
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
+        shadowColor: 'rgba(0,0,0,0.3)',
+        shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.3,
-        shadowRadius: 8,
+        shadowRadius: 4,
       },
       android: {
-        elevation: 6,
+        elevation: 3,
       },
     }),
   },
-  gradient: {
-    padding: 20,
-    paddingLeft: 16,
-    minHeight: 150,
+  cardContent: {
+    padding: 16,
   },
   mainContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'flex-start',
   },
   leftContent: {
     flex: 1,
     flexDirection: 'row',
     marginRight: 12,
   },
-  rightContent: {
-    alignItems: 'flex-end',
-  },
   titleSection: {
     flex: 1,
   },
   title: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#fff',
+    fontWeight: '600',
+    color: '#FFFFFF',
     marginBottom: 4,
   },
   description: {
     fontSize: 13,
-    color: '#aaa',
+    color: '#CED4DA',
     lineHeight: 18,
   },
   badgesContainer: {
     alignItems: 'flex-end',
-    marginBottom: 12,
     gap: 4,
   },
   statusBadge: {
@@ -293,6 +264,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     marginBottom: 4,
   },
   recurringBadge: {
@@ -301,18 +273,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
-    backgroundColor: 'rgba(156, 39, 176, 0.2)',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
   },
   footer: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.1)',
+    flexWrap: 'wrap',
+    marginTop: 16,
+    gap: 8,
   },
-  dateContainer: {
+  footerItem: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
@@ -320,126 +290,86 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 12,
   },
-  dateText: {
+  footerText: {
     fontSize: 12,
-    color: '#aaa',
+    color: '#ADB5BD',
     marginLeft: 4,
   },
-  userContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
   userAvatar: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    marginRight: 6,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    marginRight: 4,
   },
   userAvatarPlaceholder: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: '#555',
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#495057',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 6,
+    marginRight: 4,
   },
   userInitials: {
-    color: '#fff',
-    fontSize: 10,
+    color: '#FFFFFF',
+    fontSize: 8,
     fontWeight: 'bold',
   },
-  userName: {
-    fontSize: 12,
-    color: '#ddd',
-  },
-  stopRecurrenceButton: {
-    padding: 4,
-  },
-  completedText: {
-    textDecorationLine: 'line-through',
-    opacity: 0.7,
-  },
-  completedContainer: {
-    opacity: 0.85,
-  },
-  statusBadgeDisabled: {
-    opacity: 0.7,
-  },
-  overdueContainer: {
-    backgroundColor: '#F44336',
-    opacity: 0.85,
-  },
-  cancelledContainer: {
-    backgroundColor: '#9E9E9E',
-    opacity: 0.85,
-  },
-  infoContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 8,
-  },
   checkbox: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 22,
+    height: 22,
+    borderRadius: 4,
     borderWidth: 2,
-    borderColor: '#7B68EE',
     backgroundColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
     marginTop: 2,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.2,
-        shadowRadius: 4,
-      },
-      android: {
-        elevation: 3,
-      },
-    }),
   },
   checkboxCompleted: {
-    backgroundColor: '#4CAF50',
-    borderColor: '#4CAF50',
+    backgroundColor: '#81C784',
+    borderColor: '#81C784',
   },
   checkboxDisabled: {
     opacity: 0.5,
   },
   checkboxCompletedDisabled: {
     opacity: 0.5,
-    backgroundColor: '#4CAF50',
-    borderColor: '#4CAF50',
   },
   statusText: {
     fontSize: 12,
-    fontWeight: 'bold',
+    fontWeight: '500',
     marginLeft: 4,
   },
   recurringText: {
     fontSize: 12,
-    color: '#9C27B0',
+    color: '#ADB5BD',
     marginLeft: 4,
-    fontWeight: 'bold',
+    fontWeight: '500',
   },
   categoryText: {
     fontSize: 12,
+    color: '#ADB5BD',
     marginLeft: 4,
   },
   emptyText: {
-    color: '#666',
+    color: '#6C757D',
     fontStyle: 'italic',
   },
-  emptyContainer: {
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+  completedText: {
+    textDecorationLine: 'line-through',
+    opacity: 0.6,
+  },
+  completedContainer: {
+    opacity: 0.8,
+  },
+  overdueContainer: {
+    borderLeftWidth: 4,
+    borderLeftColor: '#E57373',
+  },
+  cancelledContainer: {
+    borderLeftWidth: 4,
+    borderLeftColor: '#B0BEC5',
   },
 });
 

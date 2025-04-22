@@ -10,11 +10,13 @@ import {
   TouchableOpacity,
   Animated,
   Dimensions,
-  Platform
+  Platform,
+  Easing
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors, createShadow } from '@/src/styles/sharedStyles';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 
 // Tipos de notificações toast
 export type NotificationType = 'success' | 'error' | 'warning' | 'info';
@@ -39,8 +41,10 @@ const NotificationToast: React.FC<NotificationToastProps> = ({
   notification,
   onDismiss
 }) => {
-  const slideAnim = useRef(new Animated.Value(-100)).current;
+  const slideAnim = useRef(new Animated.Value(-120)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.9)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const insets = useSafeAreaInsets();
   
@@ -49,28 +53,32 @@ const NotificationToast: React.FC<NotificationToastProps> = ({
     switch (type) {
       case 'success':
         return {
-          icon: 'checkmark-circle',
+          icon: 'check-circle-outline' as const,
           color: '#4CAF50', // Verde
-          background: 'rgba(76, 175, 80, 0.1)'
+          background: 'rgba(76, 175, 80, 0.1)',
+          gradientColors: ['rgba(76, 175, 80, 0.2)', 'rgba(76, 175, 80, 0.05)'] as [string, string]
         };
       case 'error':
         return {
-          icon: 'alert-circle',
-          color: '#FF6347', // Vermelho
-          background: 'rgba(255, 99, 71, 0.1)'
+          icon: 'alert-circle-outline' as const,
+          color: '#FF5252', // Vermelho
+          background: 'rgba(255, 82, 82, 0.1)',
+          gradientColors: ['rgba(255, 82, 82, 0.2)', 'rgba(255, 82, 82, 0.05)'] as [string, string]
         };
       case 'warning':
         return {
-          icon: 'warning',
+          icon: 'alert-outline' as const,
           color: '#FFC107', // Amarelo
-          background: 'rgba(255, 193, 7, 0.1)'
+          background: 'rgba(255, 193, 7, 0.1)',
+          gradientColors: ['rgba(255, 193, 7, 0.2)', 'rgba(255, 193, 7, 0.05)'] as [string, string]
         };
       case 'info':
       default:
         return {
-          icon: 'information-circle',
+          icon: 'information-outline' as const,
           color: '#7B68EE', // Roxo (cor primária)
-          background: 'rgba(123, 104, 238, 0.1)'
+          background: 'rgba(123, 104, 238, 0.1)',
+          gradientColors: ['rgba(123, 104, 238, 0.2)', 'rgba(123, 104, 238, 0.05)'] as [string, string]
         };
     }
   };
@@ -80,16 +88,44 @@ const NotificationToast: React.FC<NotificationToastProps> = ({
   // Mostrar a notificação com animação
   const showNotification = () => {
     Animated.parallel([
-      Animated.timing(slideAnim, {
+      Animated.spring(slideAnim, {
         toValue: 0,
-        duration: 300,
+        friction: 6,
+        tension: 40,
         useNativeDriver: true,
       }),
       Animated.timing(opacityAnim, {
         toValue: 1,
-        duration: 300,
+        duration: 250,
         useNativeDriver: true,
       }),
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        friction: 6,
+        tension: 40,
+        useNativeDriver: true,
+      })
+    ]).start();
+    
+    // Adicionar animação de pulso para chamar atenção
+    startPulseAnimation();
+  };
+  
+  // Animação de pulso sutil para chamar atenção
+  const startPulseAnimation = () => {
+    Animated.sequence([
+      Animated.timing(pulseAnim, {
+        toValue: 1.03,
+        duration: 300,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: true,
+      }),
+      Animated.timing(pulseAnim, {
+        toValue: 1,
+        duration: 300,
+        easing: Easing.in(Easing.ease),
+        useNativeDriver: true,
+      })
     ]).start();
   };
   
@@ -97,8 +133,9 @@ const NotificationToast: React.FC<NotificationToastProps> = ({
   const hideNotification = () => {
     Animated.parallel([
       Animated.timing(slideAnim, {
-        toValue: -100,
-        duration: 200,
+        toValue: -120,
+        duration: 250,
+        easing: Easing.out(Easing.ease),
         useNativeDriver: true,
       }),
       Animated.timing(opacityAnim, {
@@ -106,6 +143,11 @@ const NotificationToast: React.FC<NotificationToastProps> = ({
         duration: 200,
         useNativeDriver: true,
       }),
+      Animated.timing(scaleAnim, {
+        toValue: 0.9,
+        duration: 250,
+        useNativeDriver: true,
+      })
     ]).start(() => {
       onDismiss(notification.id);
     });
@@ -118,7 +160,7 @@ const NotificationToast: React.FC<NotificationToastProps> = ({
     if (notification.autoHide !== false) {
       timeoutRef.current = setTimeout(() => {
         hideNotification();
-      }, notification.duration || 3000);
+      }, notification.duration || 3500);
     }
     
     return () => {
@@ -136,40 +178,57 @@ const NotificationToast: React.FC<NotificationToastProps> = ({
     hideNotification();
   };
   
+  // Calcular a largura da tela com margem
+  const screenWidth = Dimensions.get('window').width;
+  const toastWidth = screenWidth * 0.92;
+  
   return (
     <Animated.View
       style={[
         styles.container,
         {
-          backgroundColor: typeConfig.background,
-          borderLeftColor: typeConfig.color,
-          transform: [{ translateY: slideAnim }],
+          transform: [
+            { translateY: slideAnim },
+            { scale: scaleAnim },
+            { perspective: 1000 }
+          ],
           opacity: opacityAnim,
-          marginTop: insets.top + 10
+          marginTop: insets.top + 12,
+          width: toastWidth,
+          borderColor: typeConfig.color
         },
       ]}
     >
-      <TouchableOpacity 
-        style={styles.content}
-        onPress={handlePress}
-        activeOpacity={0.8}
-      >
-        <View style={[styles.iconContainer, { backgroundColor: typeConfig.color }]}>
-          <Ionicons name={typeConfig.icon as any} size={22} color="#fff" />
-        </View>
-        
-        <View style={styles.textContainer}>
-          <Text style={styles.title} numberOfLines={1}>{notification.title}</Text>
-          <Text style={styles.message} numberOfLines={2}>{notification.message}</Text>
-        </View>
-        
-        <TouchableOpacity 
-          style={styles.closeButton} 
-          onPress={() => hideNotification()}
+      <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
+        <LinearGradient
+          colors={typeConfig.gradientColors}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.gradientBackground}
         >
-          <Ionicons name="close" size={18} color={colors.text.tertiary} />
-        </TouchableOpacity>
-      </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.content}
+            onPress={handlePress}
+            activeOpacity={0.8}
+          >
+            <View style={[styles.iconContainer, { backgroundColor: typeConfig.color }]}>
+              <MaterialCommunityIcons name={typeConfig.icon} size={22} color="#fff" />
+            </View>
+            
+            <View style={styles.textContainer}>
+              <Text style={styles.title} numberOfLines={1}>{notification.title}</Text>
+              <Text style={styles.message} numberOfLines={2}>{notification.message}</Text>
+            </View>
+            
+            <TouchableOpacity 
+              style={styles.closeButton} 
+              onPress={() => hideNotification()}
+            >
+              <MaterialCommunityIcons name="close" size={18} color={colors.text.tertiary} />
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </LinearGradient>
+      </Animated.View>
     </Animated.View>
   );
 };
@@ -177,45 +236,53 @@ const NotificationToast: React.FC<NotificationToastProps> = ({
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    width: '92%',
     alignSelf: 'center',
-    borderRadius: 12,
+    borderRadius: 16,
     borderLeftWidth: 4,
     overflow: 'hidden',
     zIndex: 9999,
-    ...createShadow(5),
+    ...createShadow(8),
+    elevation: 10,
+  },
+  gradientBackground: {
+    borderRadius: 16,
+    overflow: 'hidden',
   },
   content: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 14,
     paddingHorizontal: 16,
+    backgroundColor: 'rgba(30, 30, 30, 0.95)',
   },
   iconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
+    ...createShadow(3),
   },
   textContainer: {
     flex: 1,
     marginRight: 12,
   },
   title: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: 'bold',
-    color: colors.text.primary,
-    marginBottom: 2,
+    color: '#fff',
+    marginBottom: 4,
   },
   message: {
-    fontSize: 13,
-    color: colors.text.secondary,
-    lineHeight: 18,
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.8)',
+    lineHeight: 20,
   },
   closeButton: {
-    padding: 6,
+    padding: 8,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
   },
 });
 

@@ -14,15 +14,18 @@ import {
   StatusBar,
   Platform,
   ActivityIndicator,
-  ScrollView
+  ScrollView,
+  RefreshControl
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { colors, createShadow } from '@/src/styles/sharedStyles';
-import { formatLocalDate } from '@/src/utils/dateUtils';
+import { formatLocalDate, getRelativeTime } from '@/src/utils/dateUtils';
 import { useNotifications, Notification, NotificationType } from '@/src/hooks/useNotifications';
 import { LinearGradient } from 'expo-linear-gradient';
 import { AnimatedView, Animated } from '@/src/utils/animationCompat';
+import Swipeable from 'react-native-gesture-handler/Swipeable';
+import { RectButton } from 'react-native-gesture-handler';
 
 // Para compatibilidade com tipos adicionais vindos da API
 type NotificationWithRawType = Omit<Notification, 'type'> & {
@@ -45,8 +48,11 @@ const NotificationItem = ({
   onPress: (notification: NotificationWithRawType) => void,
   onMarkAsRead: (id: string) => void
 }) => {
+  const swipeableRef = useRef<Swipeable>(null);
+  
   // Formatar data da notificação
   const formattedDate = formatLocalDate(notification.timestamp, "dd MMM, HH:mm");
+  const relativeTime = getRelativeTime(notification.timestamp);
   
   // Obter ícone com base no tipo
   const getTypeIcon = () => {
@@ -119,118 +125,146 @@ const NotificationItem = ({
     }
   };
   
+  const renderRightActions = () => {
+    return (
+      <RectButton
+        style={[styles.swipeAction, { backgroundColor: colors.primary.main }]}
+        onPress={() => {
+          onMarkAsRead(notification.id);
+          if (swipeableRef.current) {
+            swipeableRef.current.close();
+          }
+        }}
+      >
+        <MaterialCommunityIcons name="check" size={28} color="#fff" />
+        <Text style={styles.swipeActionText}>Lida</Text>
+      </RectButton>
+    );
+  };
+  
   const typeColor = getTypeColor();
   const destinationText = getDestinationText();
   
   return (
-    <AnimatedView
-      style={[
-        styles.notificationItem,
-        !notification.read && styles.unreadNotification
-      ]}
+    <Swipeable
+      ref={swipeableRef}
+      enabled={!notification.read}
+      renderRightActions={!notification.read ? renderRightActions : undefined}
+      friction={2}
+      overshootRight={false}
     >
-      <TouchableOpacity
-        activeOpacity={0.7}
-        onPress={() => onPress(notification)}
-        disabled={!notification.entityId}
+      <AnimatedView
+        style={[
+          styles.notificationItem,
+          !notification.read && styles.unreadNotification
+        ]}
       >
-        <LinearGradient
-          colors={!notification.read ? 
-            ['rgba(123, 104, 238, 0.05)', 'rgba(123, 104, 238, 0.08)'] : 
-            ['#252525', '#222']}
-          start={{x: 0, y: 0}}
-          end={{x: 1, y: 0}}
-          style={styles.notificationGradient}
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={() => onPress(notification)}
+          disabled={!notification.entityId}
         >
-          <View style={styles.notificationContent}>
-            <View style={styles.notificationHeader}>
-              <View style={styles.titleRow}>
-                <View style={[
-                  styles.iconContainer,
-                  { backgroundColor: `${typeColor}20` }
-                ]}>
-                  <MaterialCommunityIcons 
-                    name={getTypeIcon()} 
-                    size={22} 
-                    color={typeColor} 
-                  />
+          <LinearGradient
+            colors={!notification.read ? 
+              ['rgba(123, 104, 238, 0.05)', 'rgba(123, 104, 238, 0.08)'] : 
+              ['#252525', '#222']}
+            start={{x: 0, y: 0}}
+            end={{x: 1, y: 0}}
+            style={styles.notificationGradient}
+          >
+            <View style={styles.notificationContent}>
+              <View style={styles.notificationHeader}>
+                <View style={styles.titleRow}>
+                  <View style={[
+                    styles.iconContainer,
+                    { backgroundColor: `${typeColor}20` }
+                  ]}>
+                    <MaterialCommunityIcons 
+                      name={getTypeIcon()} 
+                      size={22} 
+                      color={typeColor} 
+                    />
+                  </View>
+                  
+                  <Text 
+                    style={[
+                      styles.notificationTitle,
+                      !notification.read && styles.unreadTitle
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {notification.title}
+                  </Text>
                 </View>
                 
-                <Text 
-                  style={[
-                    styles.notificationTitle,
-                    !notification.read && styles.unreadTitle
-                  ]}
-                  numberOfLines={1}
-                >
-                  {notification.title}
+                <View style={styles.timeRow}>
+                  <Text style={styles.notificationTime}>{relativeTime}</Text>
+                  {!notification.read && (
+                    <View style={styles.unreadDot} />
+                  )}
+                </View>
+              </View>
+              
+              <View style={styles.typeContainer}>
+                <Text style={[styles.typeText, { color: typeColor }]}>
+                  {getFriendlyTypeName()}
                 </Text>
               </View>
               
-              <View style={styles.timeRow}>
-                <Text style={styles.notificationTime}>{formattedDate}</Text>
-                {!notification.read && (
-                  <View style={styles.unreadDot} />
+              <Text 
+                style={styles.notificationMessage} 
+                numberOfLines={2}
+              >
+                {notification.message}
+              </Text>
+              
+              <View style={styles.actionRow}>
+                {notification.entityId && (
+                  <View style={styles.entityIdContainer}>
+                    <Text style={styles.entityIdText}>
+                      ID: {notification.entityId}
+                    </Text>
+                  </View>
                 )}
+                
+                <View style={styles.buttonsContainer}>
+                  {destinationText && (
+                    <TouchableOpacity 
+                      style={[styles.viewButton, { backgroundColor: `${typeColor}15` }]}
+                      onPress={() => onPress(notification)}
+                    >
+                      <Text style={[styles.viewButtonText, { color: typeColor }]}>
+                        {destinationText}
+                      </Text>
+                      <MaterialCommunityIcons name="arrow-right" size={16} color={typeColor} />
+                    </TouchableOpacity>
+                  )}
+                  
+                  {!notification.read && (
+                    <TouchableOpacity 
+                      style={styles.readButton}
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        onMarkAsRead(notification.id);
+                      }}
+                    >
+                      <MaterialCommunityIcons name="check-circle-outline" size={20} color={colors.text.secondary} />
+                      <Text style={styles.readButtonText}>Marcar como lida</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
               </View>
             </View>
-            
-            <View style={styles.typeContainer}>
-              <Text style={[styles.typeText, { color: typeColor }]}>
-                {getFriendlyTypeName()}
-              </Text>
-            </View>
-            
-            <Text 
-              style={styles.notificationMessage} 
-              numberOfLines={2}
-            >
-              {notification.message}
-            </Text>
-            
-            <View style={styles.actionRow}>
-              {notification.entityId && (
-                <View style={styles.entityIdContainer}>
-                  <Text style={styles.entityIdText}>
-                    ID: {notification.entityId}
-                  </Text>
-                </View>
-              )}
-              
-              {destinationText && (
-                <TouchableOpacity 
-                  style={[styles.viewButton, { backgroundColor: `${typeColor}20` }]}
-                  onPress={() => onPress(notification)}
-                >
-                  <Text style={[styles.viewButtonText, { color: typeColor }]}>
-                    {destinationText}
-                  </Text>
-                  <MaterialCommunityIcons name="arrow-right" size={16} color={typeColor} />
-                </TouchableOpacity>
-              )}
-              
-              {!notification.read && (
-                <TouchableOpacity 
-                  style={styles.readButton}
-                  onPress={(e) => {
-                    e.stopPropagation();
-                    onMarkAsRead(notification.id);
-                  }}
-                >
-                  <MaterialCommunityIcons name="check-circle-outline" size={20} color={colors.text.secondary} />
-                  <Text style={styles.readButtonText}>Marcar como lida</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          </View>
-        </LinearGradient>
-      </TouchableOpacity>
-    </AnimatedView>
+          </LinearGradient>
+        </TouchableOpacity>
+      </AnimatedView>
+    </Swipeable>
   );
 };
 
 const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClose }) => {
   const [activeTab, setActiveTab] = useState<NotificationType>('unread');
+  const [refreshing, setRefreshing] = useState(false);
   const slideAnim = useRef(new Animated.Value(Dimensions.get('window').width)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
   const router = useRouter();
@@ -350,9 +384,16 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
     });
   };
   
+  // Função para atualizar
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchNotifications(activeTab);
+    setRefreshing(false);
+  };
+  
   // Renderizar conteúdo vazio
   const renderEmptyContent = () => {
-    if (loading) {
+    if (loading && !refreshing) {
       return (
         <View style={styles.emptyContainer}>
           <ActivityIndicator size="large" color={colors.primary.main} />
@@ -363,7 +404,11 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
     
     return (
       <View style={styles.emptyContainer}>
-        <MaterialCommunityIcons name="bell-off-outline" size={64} color={colors.text.tertiary} />
+        <MaterialCommunityIcons 
+          name={activeTab === 'unread' ? "bell-check-outline" : "bell-off-outline"} 
+          size={64} 
+          color={colors.text.tertiary} 
+        />
         <Text style={styles.emptyTitle}>
           {activeTab === 'unread' ? 'Sem notificações não lidas' : 'Nenhuma notificação'}
         </Text>
@@ -372,6 +417,15 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
             ? 'Você não tem notificações não lidas'
             : 'Você não tem notificações para visualizar'}
         </Text>
+        
+        {activeTab === 'unread' && (
+          <TouchableOpacity 
+            style={styles.emptyActionButton}
+            onPress={() => setActiveTab('all')}
+          >
+            <Text style={styles.emptyActionButtonText}>Ver todas as notificações</Text>
+          </TouchableOpacity>
+        )}
       </View>
     );
   };
@@ -414,15 +468,16 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
             <View style={styles.headerContent}>
               <Text style={styles.headerTitle}>Notificações</Text>
               <TouchableOpacity style={styles.closeButton} onPress={handleClose}>
-                <MaterialCommunityIcons name="close-circle" size={28} color="#fff" />
+                <MaterialCommunityIcons name="close" size={28} color="#fff" />
               </TouchableOpacity>
             </View>
             
             {/* Contador de não lidas */}
             {unreadCount > 0 && (
               <View style={styles.unreadCountContainer}>
+                <MaterialCommunityIcons name="bell-badge" size={16} color={colors.primary.main} />
                 <Text style={styles.unreadCountText}>
-                  {unreadCount} {unreadCount === 1 ? 'não lida' : 'não lidas'}
+                  {unreadCount} {unreadCount === 1 ? 'notificação não lida' : 'notificações não lidas'}
                 </Text>
               </View>
             )}
@@ -441,6 +496,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
                 >
                   Não lidas
                 </Text>
+                {activeTab === 'unread' && <View style={styles.activeTabIndicator} />}
               </TouchableOpacity>
               
               <TouchableOpacity 
@@ -455,6 +511,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
                 >
                   Todas
                 </Text>
+                {activeTab === 'all' && <View style={styles.activeTabIndicator} />}
               </TouchableOpacity>
             </View>
           </LinearGradient>
@@ -485,6 +542,16 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
             <ScrollView
               contentContainerStyle={styles.listContent}
               showsVerticalScrollIndicator={false}
+              refreshControl={
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={onRefresh}
+                  colors={[colors.primary.main]}
+                  tintColor={colors.primary.main}
+                  title="Atualizando..."
+                  titleColor={colors.text.secondary}
+                />
+              }
             >
               {(notifications as NotificationWithRawType[]).map(item => (
                 <NotificationItem
@@ -494,6 +561,14 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ visible, onClos
                   onMarkAsRead={handleMarkAsRead}
                 />
               ))}
+              
+              {notifications.length > 0 && (
+                <Text style={styles.endOfListText}>
+                  {activeTab === 'unread' 
+                    ? 'Sem mais notificações não lidas' 
+                    : 'Fim das notificações'}
+                </Text>
+              )}
             </ScrollView>
           )}
         </Animated.View>
@@ -521,15 +596,18 @@ const styles = StyleSheet.create({
     bottom: 0,
     right: 0,
     width: '90%',
-    backgroundColor: '#222',
-    borderTopLeftRadius: 20,
-    borderBottomLeftRadius: 20,
+    maxWidth: 450,
+    backgroundColor: '#1a1a1a',
+    borderTopLeftRadius: 24,
+    borderBottomLeftRadius: 24,
     overflow: 'hidden',
-    ...createShadow(10),
+    ...createShadow(15),
   },
   header: {
     paddingTop: Platform.OS === 'ios' ? 50 : StatusBar.currentHeight,
     paddingBottom: 0,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.1)',
   },
   headerContent: {
     flexDirection: 'row',
@@ -544,37 +622,50 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   closeButton: {
-    padding: 5,
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.1)',
   },
   unreadCountContainer: {
     marginHorizontal: 20,
     marginBottom: 16,
     backgroundColor: 'rgba(123, 104, 238, 0.15)',
-    padding: 8,
+    padding: 10,
     borderRadius: 12,
     alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   unreadCountText: {
     color: colors.primary.main,
     fontWeight: '500',
     fontSize: 14,
+    marginLeft: 8,
   },
   tabs: {
     flexDirection: 'row',
-    paddingHorizontal: 10,
+    paddingHorizontal: 20,
   },
   tab: {
     flex: 1,
     paddingVertical: 15,
     alignItems: 'center',
-    marginHorizontal: 4,
-    borderRadius: 12,
+    position: 'relative',
   },
   activeTab: {
-    backgroundColor: 'rgba(123, 104, 238, 0.15)',
+    backgroundColor: 'transparent',
+  },
+  activeTabIndicator: {
+    position: 'absolute',
+    bottom: 0,
+    left: '25%',
+    right: '25%',
+    height: 3,
+    backgroundColor: colors.primary.main,
+    borderRadius: 1.5,
   },
   tabText: {
-    fontSize: 14,
+    fontSize: 15,
     color: '#aaa',
     fontWeight: '500',
   },
@@ -586,12 +677,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'flex-end',
     padding: 15,
-    backgroundColor: 'rgba(34, 34, 34, 0.8)',
+    backgroundColor: 'rgba(26, 26, 26, 0.95)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.05)',
   },
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 8,
+    padding: 10,
     backgroundColor: 'rgba(123, 104, 238, 0.1)',
     borderRadius: 20,
     paddingHorizontal: 16,
@@ -606,21 +699,21 @@ const styles = StyleSheet.create({
     color: '#666',
   },
   listContent: {
-    paddingVertical: 10,
+    paddingVertical: 16,
     paddingHorizontal: 16,
   },
   notificationItem: {
     borderRadius: 16,
-    marginBottom: 12,
+    marginBottom: 16,
     overflow: 'hidden',
-    ...createShadow(3),
+    ...createShadow(5),
   },
   notificationGradient: {
     borderRadius: 16,
     overflow: 'hidden',
   },
   unreadNotification: {
-    borderLeftWidth: 3,
+    borderLeftWidth: 4,
     borderLeftColor: colors.primary.main,
   },
   notificationContent: {
@@ -636,7 +729,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 8,
+    marginBottom: 10,
   },
   timeRow: {
     flexDirection: 'row',
@@ -650,12 +743,12 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   iconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 10,
+    marginRight: 12,
   },
   notificationTitle: {
     fontSize: 16,
@@ -674,20 +767,25 @@ const styles = StyleSheet.create({
   notificationMessage: {
     fontSize: 14,
     color: '#aaa',
-    lineHeight: 20,
-    marginBottom: 12,
+    lineHeight: 21,
+    marginBottom: 14,
   },
   actionRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  buttonsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   viewButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     borderRadius: 16,
+    marginRight: 8,
   },
   viewButtonText: {
     fontSize: 13,
@@ -697,7 +795,7 @@ const styles = StyleSheet.create({
   readButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 6,
+    padding: 8,
   },
   readButtonText: {
     fontSize: 13,
@@ -709,7 +807,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 40,
-    marginTop: 40,
+    marginTop: 60,
   },
   emptyTitle: {
     fontSize: 18,
@@ -723,22 +821,57 @@ const styles = StyleSheet.create({
     color: '#999',
     textAlign: 'center',
     lineHeight: 20,
+    marginBottom: 16,
+  },
+  emptyActionButton: {
+    marginTop: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    backgroundColor: 'rgba(123, 104, 238, 0.15)',
+    borderRadius: 20,
+  },
+  emptyActionButtonText: {
+    color: colors.primary.main,
+    fontWeight: '600',
+    fontSize: 14,
   },
   entityIdContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginRight: 10,
+    padding: 6,
+    paddingHorizontal: 10,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 12,
   },
   entityIdText: {
     fontSize: 12,
-    color: '#888',
+    color: '#aaa',
   },
   typeContainer: {
-    marginBottom: 8,
+    marginBottom: 10,
   },
   typeText: {
-    fontSize: 12,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  swipeAction: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 100,
+    backgroundColor: colors.primary.main,
+  },
+  swipeActionText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 14,
+    marginTop: 4,
+  },
+  endOfListText: {
+    textAlign: 'center',
     color: '#888',
+    fontSize: 13,
+    marginTop: 10,
+    marginBottom: 20,
+    fontStyle: 'italic',
   },
 });
 
